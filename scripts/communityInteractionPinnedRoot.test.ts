@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CommunityInteractionRootBundle } from "../shared/cloudCommunityInteractionsGateway";
 import {
   communityInteractionRootHasRichContent,
+  formatThreadReplyDividerLabel,
   resolveSelectedCommunityInteractionRoot,
 } from "../apps/web/src/components/WebCommunityInteractionProjection";
 
@@ -69,5 +70,12 @@ describe("pinned community root selection", () => {
     expect(communityInteractionRootHasRichContent(attachment)).toBe(true);
     expect(communityInteractionRootHasRichContent(youtube)).toBe(true);
     expect(communityInteractionRootHasRichContent(genericLink)).toBe(false);
+  });
+
+  it("formats the thread reply divider using the full thread reply count when loaded replies are capped", () => {
+    expect(formatThreadReplyDividerLabel(1, 1)).toBe("1 reply");
+    expect(formatThreadReplyDividerLabel(4, 4)).toBe("4 replies");
+    expect(formatThreadReplyDividerLabel(80, 125)).toBe("125 replies");
+    expect(formatThreadReplyDividerLabel(5, 4)).toBe("5 replies");
   });
 });

@@ -2342,9 +2342,11 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
-/* The thread root's add-reaction button is left-aligned, so its popover must open
-   rightward (the default right:0 runs it off the left edge of the panel). */
-.community-interaction-thread-anchor-actions .community-interaction-emoji-popover {
+/* The thread root and reply add-reaction buttons are left-aligned, so their
+   popovers must open rightward (the default right:0 runs them off the left
+   edge of the panel). */
+.community-interaction-thread-anchor-actions .community-interaction-emoji-popover,
+.community-interaction-reply-reactions .community-interaction-emoji-popover {
   right: auto;
   left: 0;
 }
