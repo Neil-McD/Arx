@@ -107,3 +107,81 @@ export function CourseCatalogSkeleton(props: { label?: string | null; cards?: nu
     </SkeletonShell>
   );
 }
+
+const EVENT_ROW_PATTERNS: ReadonlyArray<{ titleW: string; subW: string }> = [
+  { titleW: "56%", subW: "38%" },
+  { titleW: "68%", subW: "44%" },
+  { titleW: "48%", subW: "34%" },
+];
+
+export function EventListSkeleton(props: { label?: string | null; rows?: number }) {
+  const rows = EVENT_ROW_PATTERNS.slice(0, props.rows ?? 3);
+  return (
+    <SkeletonShell
+      className="web-skeleton-event-list"
+      label={props.label === undefined ? "Loading events…" : props.label}
+    >
+      {rows.map((row, index) => (
+        <div className="web-skeleton-event-row" key={index} aria-hidden="true">
+          <span className="web-skeleton-event-date web-skeleton-block" />
+          <div className="web-skeleton-event-body">
+            <span className="web-skeleton-pill web-skeleton-line-title" style={{ width: row.titleW }} />
+            <span className="web-skeleton-pill web-skeleton-line-sm" style={{ width: row.subW }} />
+          </div>
+        </div>
+      ))}
+    </SkeletonShell>
+  );
+}
+
+export function PodGridSkeleton(props: { label?: string | null; cards?: number }) {
+  const count = props.cards ?? 3;
+  return (
+    <SkeletonShell
+      className="web-skeleton-pod-grid"
+      label={props.label === undefined ? "Loading pods…" : props.label}
+    >
+      {Array.from({ length: count }).map((_, index) => (
+        <div className="web-skeleton-pod-card" key={index} aria-hidden="true">
+          <div className="web-skeleton-message-meta">
+            <span className="web-skeleton-pod-icon web-skeleton-block" />
+            <span className="web-skeleton-pill web-skeleton-line-title" style={{ width: index === 1 ? "58%" : "68%" }} />
+          </div>
+          <span className="web-skeleton-pill web-skeleton-line-sm" style={{ width: index === 2 ? "84%" : "92%" }} />
+          <span className="web-skeleton-pill web-skeleton-line-sm" style={{ width: "62%" }} />
+          <span className="web-skeleton-pill web-skeleton-line-xs web-skeleton-pod-meta" style={{ width: "48%" }} />
+        </div>
+      ))}
+    </SkeletonShell>
+  );
+}
+
+const PANEL_BLOCK_PATTERNS: ReadonlyArray<{ labelW: string; line1W: string; line2W?: string }> = [
+  { labelW: "78px", line1W: "86%", line2W: "58%" },
+  { labelW: "96px", line1W: "74%" },
+  { labelW: "68px", line1W: "80%", line2W: "46%" },
+];
+
+export function PanelBlockSkeleton(props: {
+  label?: string | null;
+  rows?: number;
+  compact?: boolean;
+}) {
+  const rows = PANEL_BLOCK_PATTERNS.slice(0, props.rows ?? 3);
+  return (
+    <SkeletonShell
+      className={`web-skeleton-panel${props.compact ? " is-compact" : ""}`}
+      label={props.label === undefined ? "Loading…" : props.label}
+    >
+      {rows.map((row, index) => (
+        <div className="web-skeleton-panel-section" key={index} aria-hidden="true">
+          <span className="web-skeleton-pill web-skeleton-line-xs" style={{ width: row.labelW }} />
+          <span className="web-skeleton-pill web-skeleton-line" style={{ width: row.line1W }} />
+          {row.line2W ? (
+            <span className="web-skeleton-pill web-skeleton-line-sm" style={{ width: row.line2W }} />
+          ) : null}
+        </div>
+      ))}
+    </SkeletonShell>
+  );
+}

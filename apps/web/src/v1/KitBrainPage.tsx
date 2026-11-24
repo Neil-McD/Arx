@@ -10,6 +10,7 @@ import { fetchBrainNote, moveBrainNote, type BrainNoteView } from "../../../../s
 import { deleteCommunityNote, fetchNoteSources, updateCommunityNote, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { askGuide } from "../components/guideSearch";
 import { Btn, cx, KitApp, useMinWidth } from "./kit";
+import { PanelBlockSkeleton } from "../components/WebLoadingSkeleton";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { learnedWhen, useBrainMap } from "./KitBrain";
 import { PanelAction, PanelLine, PanelPart } from "./KitPanel";
@@ -232,7 +233,7 @@ export function KitBrainPage(props: PageProps) {
   const { map, failed } = useBrainMap(props.session, props.communityId, null);
   return (
     <KitBrainPageFrame canManage={props.canManage} fill={!!map && map.points.length >= BRAIN_MAP_MIN_POINTS}>
-      {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} version={version} onChanged={() => setVersion((last) => last + 1)} /> : null}
+      {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} version={version} onChanged={() => setVersion((last) => last + 1)} /> : <PanelBlockSkeleton label="Loading community brain…" />}
     </KitBrainPageFrame>
   );
 }

@@ -11,6 +11,7 @@ import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import { PanelLine, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
+import { PanelBlockSkeleton } from "../components/WebLoadingSkeleton";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
 
@@ -67,7 +68,7 @@ export function KitPodLanding(props: {
       <div className={cx("joinbar")}>
         <Btn go onClick={props.onOpen}>Open the pod</Btn>
       </div>
-      </> : null}
+      </> : <PanelBlockSkeleton label="Loading pod…" compact />}
     </div>
   );
 }

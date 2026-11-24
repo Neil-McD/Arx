@@ -39,6 +39,7 @@ import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx } from "../v1/kit"
 import type { HomeTags } from "../../../../shared/communityHomeTags";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { PanelBlockSkeleton } from "./WebLoadingSkeleton";
 
 export type WebCommunityHomeSectionProps = {
   communityId: string;
@@ -338,6 +339,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     <KitHomeRail session={props.session} communityId={props.communityId} snapshot={snapshot}
       presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
       onOpenKnowledge={props.onOpenKnowledge} />
+  ) : !failed ? (
+    <PanelBlockSkeleton label={null} rows={2} compact />
   ) : null;
   const rail = panel ? (
     <KitApp view="home" host={isHost} part="rail">
@@ -352,6 +355,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         onPointerLeave={() => setHeldTags(null)}>
         <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
         <Hello greeting={greeting} line={!ready ? (failed ? "" : " ") : brief ? "" : homeSentenceFor(snapshot!, props.audience, needs, homeTagsTotal(shownTags))} />
+        {!ready && !failed ? <PanelBlockSkeleton label="Loading home…" rows={2} compact /> : null}
         {ready && brief ? (
           <div className={cx("hbrief")}>
             <p>{brief.summary}</p>
