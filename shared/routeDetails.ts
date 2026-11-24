@@ -180,11 +180,15 @@ export function goToCourseLesson(courseId: string, lessonId: string): void {
 // Members, or one member's record there (memberKey: "owner" or their
 // membership), for the community in the address bar. Another page, so the
 // address changes and the app follows it on popstate, as it does for Pods.
-export function goToMembersPage(memberKey: string | null = null): void {
+// `communitySlug`: another community's Members (a profile opened from a
+// conversation that started there); by default, the one in the address bar.
+export function goToMembersPage(memberKey: string | null = null, communitySlug: string | null = null): void {
   if (typeof window === "undefined") return;
   const match = window.location.pathname.match(/^(\/m)?\/c\/([^/]+)/);
-  if (!match) return;
+  const prefix = match?.[1] ?? (window.location.pathname.startsWith("/m/") ? "/m" : "");
+  const slug = communitySlug ? encodeURIComponent(communitySlug) : match?.[2];
+  if (!slug) return;
   const key = readRouteId(memberKey);
-  window.history.pushState({}, "", `${match[1] ?? ""}/c/${match[2]}/members${key ? `/${encodeURIComponent(key)}` : ""}`);
+  window.history.pushState({}, "", `${prefix}/c/${slug}/members${key ? `/${encodeURIComponent(key)}` : ""}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

@@ -749,6 +749,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               <CommunityChannelSessionContext.Provider value={{ session: props.session, communityId: profileCommunityId! }}>
                 <KitProfileFor target={{ userId: peer?.user_id ?? "" }}
                   communityName={props.conversation.created_from_community?.name ?? null}
+                  communitySlug={props.conversation.created_from_community?.slug ?? null}
                   fallback={<p className={cx("sub")}>{peerLabel} is no longer in {communityName}, so there is no profile to show.</p>}
                   getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
               </CommunityChannelSessionContext.Provider>
