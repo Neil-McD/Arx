@@ -13,6 +13,7 @@ import {
   InteractionContent,
   MemberArrivalsRow,
   MessageActions,
+  PendingMessageStatus,
   ProfileHoverCard,
   actorLabel,
   agentBadgeLabel,
@@ -241,15 +242,12 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
                         {root.via_ai && index > 0 ? <span className="community-interaction-edited" title="Posted through their own AI">via AI</span> : null}
                       </>
                     )}
-                    {bundle.pending === "sending" ? (
-                      <span className="community-interaction-sending-spinner" role="status" aria-label="Sending message" />
-                    ) : bundle.pending === "failed" ? (
-                      <div className="community-interaction-pending-status is-failed">
-                        <span>Failed to send.</span>
-                        <button type="button" onClick={() => props.onRetrySend?.(root.idempotency_key)}>Retry</button>
-                        <button type="button" onClick={() => props.onDiscardPending?.(root.idempotency_key)}>Discard</button>
-                      </div>
-                    ) : null}
+                    <PendingMessageStatus
+                      pending={bundle.pending}
+                      idempotencyKey={root.idempotency_key}
+                      onRetrySend={props.onRetrySend}
+                      onDiscardPending={props.onDiscardPending}
+                    />
                     {showFooter ? (
                       <div className={cx("rx")}>
                         <KitReactions rows={root.reaction_summary} viewerEmojis={root.viewer_emojis} onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)} />

@@ -1478,14 +1478,16 @@
   background: linear-gradient(90deg, var(--header-line-glow, var(--header-hairline, var(--border-default))), transparent);
 }
 
-/* The guide's replies carry a thin purple edge, so the AI reads apart from
-   people at a glance without switching font family or size. */
+/* The guide's replies and mobile channel messages carry a thin purple edge, so
+   the AI reads apart from people at a glance without switching font family or size. */
 :root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply[data-actor-type="community_agent"],
-:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"] {
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"],
+:root[data-design="v1"] .community-chat .community-interaction-group[data-actor-type="community_agent"] {
   position: relative;
 }
 :root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply[data-actor-type="community_agent"]::before,
-:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"]::before {
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"]::before,
+:root[data-design="v1"] .community-chat .community-interaction-group[data-actor-type="community_agent"]::before {
   content: "";
   position: absolute;
   top: 10px;
@@ -1498,6 +1500,15 @@
 }
 :root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"]::before {
   left: -10px;
+}
+
+:root[data-design="v1"]:where([data-layout="phone"]) .community-interaction-guide-avatar {
+  width: 34px;
+  height: 34px;
+}
+
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-chat .community-interaction-thread-page .community-interaction-drawer-scroll {
+  padding-bottom: calc(var(--mobile-community-composer-height, 76px) + env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height, 0px) + 24px);
 }
 
 :root[data-design="v1"] .community-interaction-reply-reactions {

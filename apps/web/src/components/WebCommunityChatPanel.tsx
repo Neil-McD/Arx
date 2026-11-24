@@ -1419,7 +1419,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             isAuthRecoveringSignedIn ||
             !hasSession ||
             !activeCommunity ||
-            !canUseComposer ||
+            !canUseCommunityAttachments ||
             isSendingCommunityMessage
           }
           onAttach={() => drawerReplyFileInputRef.current?.click()}

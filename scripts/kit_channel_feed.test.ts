@@ -11,6 +11,7 @@ const { renderToStaticMarkup } = await import("react-dom/server");
 const has = (html: string, ...names: string[]) =>
   new RegExp(`class="${names.map((name) => `_${name}_[^ "]*`).join(" ")}"`).test(html);
 const { KitChannelFeed } = await import("../apps/web/src/v1/KitChannelFeed");
+const { CommunityInteractionFeedList } = await import("../apps/web/src/components/communityInteractionFeed");
 
 const now = Date.now();
 function bundle(id: string, who: string, minutesAgo: number, text: string, extra: Record<string, unknown> = {}) {
@@ -74,4 +75,25 @@ test("a run by one author shows the name once, and the guide wears its spark", (
 test("the host's own post carries the host tag, and an empty channel keeps its empty state", () => {
   expect(render([bundle("n", "neil", 5, "This is the play.")])).toContain(">host<");
   expect(render([])).toContain("No messages yet");
+});
+
+test("phone channel feed matches desktop parity: guide spark avatar, via AI badge, and quick add-reaction", () => {
+  const noop = () => {};
+  const html = renderToStaticMarkup(React.createElement(CommunityInteractionFeedList, {
+    roots: [
+      bundle("g1", "guide", 10, "Check the Events page."),
+      bundle("j1", "jon", 8, "First via AI", { via_ai: true, reaction_summary: [{ emoji: "🔥", count: 2 }], viewer_emojis: [] }),
+      bundle("j2", "jon", 7, "Second via AI", { via_ai: true }),
+    ],
+    activityEvents: [], selectedRootId: null, chatLastSeenAt: null, error: null, isLoadingRoots: false,
+    currentUserId: "neil", communityOwnerId: "neil", activeCommunityName: "Polynet",
+    profilesByUserId: {}, displayName: (id: string) => ({ jon: "Jon", neil: "Neil" } as Record<string, string>)[id] ?? id,
+    getAvatarColor: () => "#555", getInitials: (name: string) => name.slice(0, 1),
+    formatChatTime: () => "8:40 am", renderTextWithLinks: (text: string) => text,
+    onSelectRoot: noop, onRetryRoots: noop, onToggleReaction: noop,
+    editing: null, editText: "", onStartEdit: noop, onEditTextChange: noop, onSaveEdit: noop, onCancelEdit: noop,
+  } as any));
+  expect(html).toContain("community-interaction-guide-avatar");
+  expect((html.match(/>via AI</g) ?? []).length).toBe(2);
+  expect(html).toContain('aria-label="Add reaction"');
 });
