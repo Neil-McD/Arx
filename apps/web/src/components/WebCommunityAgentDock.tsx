@@ -147,6 +147,7 @@ export type WebCommunityAgentDockProps = {
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   finalizeVoiceInputForSubmit?: () => Promise<string>;
   onStartBuilder?: () => void;
+  onOpenSoulAndMemory?: () => void;
   // Design system v1: the owner's Home above the conversation (page mode only).
   home?: Omit<WebCommunityHomeSectionProps, "session" | "ensureSession"> | null;
 };
@@ -1267,11 +1268,26 @@ function WebCommunityAgentDock(props, ref) {
           {/* In the conversation the top row stays put and is the way back to Home. */}
           {/* While the guide is answering or waiting on you, the conversation stays open: the arrow waits too. */}
           {kitTalking || conversationNeedsYou ? (
-            <Top titleView={0} title={
-              <button type="button" className="kit-home-back" onClick={closeTalk} disabled={conversationNeedsYou} aria-label="Back to Home" title={conversationNeedsYou ? "Your guide is still on this" : "Back to Home"}>
-                <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />Home
-              </button>
-            } />
+            <Top
+              titleView={0}
+              title={
+                <button type="button" className="kit-home-back" onClick={closeTalk} disabled={conversationNeedsYou} aria-label="Back to Home" title={conversationNeedsYou ? "Your guide is still on this" : "Back to Home"}>
+                  <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />Home
+                </button>
+              }
+              actions={
+                props.onOpenSoulAndMemory ? (
+                  <button
+                    type="button"
+                    className="kit-home-back"
+                    onClick={props.onOpenSoulAndMemory}
+                    title="View or edit your guide's Soul and Memory"
+                  >
+                    Soul &amp; Memory
+                  </button>
+                ) : null
+              }
+            />
           ) : null}
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
@@ -1430,7 +1446,20 @@ function WebCommunityAgentDock(props, ref) {
             </span>
           </div>}
           {/* Design system v1: one thread with the guide, so no "start fresh". */}
-          {guideWording ? null : <div className={props.pageMode ? "community-channel-header-actions" : "community-agent-dock-header-actions"}>
+          {guideWording ? (
+            agentOn && props.onOpenSoulAndMemory ? (
+              <div className={props.pageMode ? "community-channel-header-actions" : "community-agent-dock-header-actions"}>
+                <button
+                  type="button"
+                  className="kit-home-back"
+                  onClick={props.onOpenSoulAndMemory}
+                  title="View or edit your guide's Soul and Memory"
+                >
+                  Soul &amp; Memory
+                </button>
+              </div>
+            ) : null
+          ) : <div className={props.pageMode ? "community-channel-header-actions" : "community-agent-dock-header-actions"}>
             <button
               type="button"
               className={props.pageMode ? "community-channel-header-menu-trigger" : undefined}

@@ -1776,6 +1776,15 @@ export default function App() {
         finalizeVoiceInputForSubmit: () =>
           communityVoice.finishVoiceInputForSubmit("member_agent"),
         onStartBuilder: () => openNewCommunityPurchaseFlow(),
+        onOpenSoulAndMemory: activeCommunity
+          ? () => {
+              leavePhoneHome();
+              handleSelectCommunityTab("settings");
+              if (canManageCommunitySettings) {
+                handleSelectCommunitySettingsPane("agent");
+              }
+            }
+          : undefined,
       }}
       directMessagesHostProps={buildWebAppDirectMessagesHostProps({
         activeCommunityId: activeCommunity?.id ?? null,

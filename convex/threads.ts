@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { v, type ObjectType } from "convex/values";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity, COMMUNITY_CONVERSATION_PREFIX } from "../shared/communityConversationIdentity";
 import { resolveAuthenticatedSubject } from "./authIdentity";
+import { wakePausedCommunityHeartbeatIfNeeded } from "./communityHeartbeatWake";
 import {
   mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
@@ -1103,6 +1104,7 @@ async function addCloudThreadMessageHandler(ctx: MutationCtx, args: ObjectType<t
         if (channel) {
           await ctx.db.patch(channel._id, { updatedAt: nowMs });
         }
+        await wakePausedCommunityHeartbeatIfNeeded(ctx, normalizedCommunityId, nowMs);
       }
     }
 

@@ -340,4 +340,113 @@ describe("zero-AI system re-engagement & founder spend/win-back visibility (Slic
     expect(schedules).toHaveLength(1);
     expect(schedules[0]?.status).toBe("scheduled");
   });
+
+  test("wakes paused communities immediately on real activity, auto-enrolls older free communities for weekly digests, and uses exact operator-grant cycle totals", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const { utcMonthWindow } = await import("../shared/founderInference");
+    const month = utcMonthWindow(nowMs);
+
+    const fx = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", {
+        authSubject: "owner-polish",
+        displayName: "Owner",
+        email: "owner-polish@example.com",
+        emailVerifiedAt: nowMs - 30 * DAY_MS,
+        createdAt: nowMs - 30 * DAY_MS,
+        updatedAt: nowMs - 30 * DAY_MS,
+      });
+      const memberId = await ctx.db.insert("users", {
+        authSubject: "member-polish",
+        displayName: "Member",
+        email: "member-polish@example.com",
+        emailVerifiedAt: nowMs - 20 * DAY_MS,
+        createdAt: nowMs - 20 * DAY_MS,
+        updatedAt: nowMs - 20 * DAY_MS,
+      });
+      const freeCommunityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "free-polish",
+        name: "Free Polish",
+        visibility: "published",
+        entryPolicy: "open",
+        inferenceFundingPolicy: "managed_required",
+        createdAt: nowMs - 40 * DAY_MS,
+        updatedAt: nowMs - 40 * DAY_MS,
+      });
+      await ctx.db.insert("communityMemberships", {
+        communityId: freeCommunityId,
+        userId: memberId,
+        role: "member",
+        accessSource: "free_grant",
+        state: "active",
+        createdAt: nowMs - 20 * DAY_MS,
+        updatedAt: nowMs - 20 * DAY_MS,
+      });
+      const settingsId = await ctx.db.insert("communityMemberCoachSettings", {
+        communityId: freeCommunityId,
+        enabled: true,
+        autoReasons: [],
+        communityHeartbeatTier: "paused",
+        nextScanAt: nowMs + 72 * HOUR_MS,
+        createdAt: nowMs - 30 * DAY_MS,
+        updatedAt: nowMs - 20 * DAY_MS,
+      });
+      // Seed authoritative operator-grant cycle ledger (e.g., $7.50 settled).
+      await ctx.db.insert("operatorGrantUsageCycles", {
+        communityId: freeCommunityId,
+        cycleKey: `${String(freeCommunityId)}:${month.key}`,
+        cycleStartAt: month.startAt,
+        cycleEndAt: month.endAt,
+        includedCostMicros: 20_000_000,
+        reservedCostMicros: 0,
+        settledCostMicros: 7_500_000,
+        createdAt: month.startAt,
+        updatedAt: nowMs,
+      });
+      const threadId = await ctx.db.insert("threads", {
+        ownerId: memberId,
+        title: "Guide",
+        titleSource: "auto",
+        communityId: String(freeCommunityId),
+        createdAt: nowMs - 10 * DAY_MS,
+        updatedAt: nowMs - 10 * DAY_MS,
+      });
+      return { freeCommunityId, settingsId, memberId, threadId };
+    });
+
+    // 1. Pre-existing free community auto-enrolls in $0-AI weekly digest without manual intervention.
+    const enroll = await t.mutation(
+      internal.communityWeeklyDigestSchedule.enrollActiveCommunitiesForWeeklyDigestPageInternal,
+      { cursor: null, nowMs },
+    );
+    expect(enroll.enrolled).toBe(1);
+    const schedules = await t.run(async (ctx) => await ctx.db.query("communityWeeklyDigestSchedules").collect());
+    expect(schedules).toHaveLength(1);
+
+    // 2. A member's private Guide message wakes the paused community immediately (0-hour lag, not 72h).
+    const member = t.withIdentity({ subject: "member-polish", email: "member-polish@example.com" });
+    await member.mutation(api.threads.addCloudThreadMessage, {
+      threadId: fx.threadId,
+      messageKey: "wake-msg-1",
+      role: "user",
+      contentJson: { text: "I'm back!" },
+    });
+    const wokeRow = await t.run(async (ctx) => await ctx.db.get(fx.settingsId));
+    expect(wokeRow?.communityHeartbeatTier).toBe("active");
+    expect((wokeRow?.nextScanAt ?? Infinity) <= Date.now() + 5_000).toBe(true);
+
+    // 3. Operator-grant cycle uses exact authoritative settledCostMicros without truncation.
+    const owner = t.withIdentity({ subject: "owner-polish", email: "owner-polish@example.com" });
+    const settings = await owner.query(api.communityMemberCoach.getMemberCoachSettings, {
+      authSubject: "owner-polish",
+      communityId: fx.freeCommunityId,
+    });
+    expect(settings.impact).toMatchObject({
+      total_micros: 7_500_000,
+      allowance_micros: 20_000_000,
+      percent_used: 38,
+      spend_truncated: false,
+    });
+  });
 });

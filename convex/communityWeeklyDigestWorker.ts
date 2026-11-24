@@ -283,12 +283,61 @@ function buildAbsoluteAppUrl(origin: string, path: string): string {
   return new URL(path, `${origin.replace(/\/+$/, "")}/`).toString();
 }
 
+const MAX_COMMUNITY_ENROLLMENT_PAGES_PER_RUN = 10;
+const MAX_COMMUNITY_ENROLLMENT_CONTINUATION_ROUNDS = 20;
+
 export const processDueCommunityWeeklyDigestsInternal = internalAction({
   args: {
     nowMs: v.optional(v.number()),
+    enrollCursor: v.optional(v.union(v.string(), v.null())),
+    enrollOnly: v.optional(v.boolean()),
+    enrollRound: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
+    // Ensure pre-existing active communities (including free ones) have a schedule.
+    // If more than 500 communities exist, continue asynchronously with the exact
+    // pagination cursor so communities past the initial prefix are always reached.
+    let enrollCursor: string | null = args.enrollCursor ?? null;
+    let enrollDone = true;
+    const enrollRound = Math.max(0, Math.floor(Number(args.enrollRound ?? 0)));
+    for (let page = 0; page < MAX_COMMUNITY_ENROLLMENT_PAGES_PER_RUN; page += 1) {
+      const enrolled: { enrolled: number; isDone: boolean; continueCursor: string | null } =
+        await ctx.runMutation(
+          (internal as any).communityWeeklyDigestSchedule
+            .enrollActiveCommunitiesForWeeklyDigestPageInternal,
+          { cursor: enrollCursor, nowMs },
+        );
+      enrollDone = enrolled.isDone || !enrolled.continueCursor;
+      enrollCursor = enrolled.continueCursor;
+      if (enrollDone) break;
+    }
+    if (!enrollDone && enrollCursor && enrollRound < MAX_COMMUNITY_ENROLLMENT_CONTINUATION_ROUNDS) {
+      await ctx.scheduler.runAfter(
+        2_000,
+        (internal as any).communityWeeklyDigestWorker.processDueCommunityWeeklyDigestsInternal,
+        {
+          nowMs,
+          enrollCursor,
+          enrollOnly: true,
+          enrollRound: enrollRound + 1,
+        },
+      );
+    }
+    if (args.enrollOnly) {
+      return {
+        ok: true,
+        communities: 0,
+        recipients: 0,
+        enqueued: 0,
+        deduped: 0,
+        suppressed: 0,
+        continued: enrollDone ? 0 : 1,
+        completed: 0,
+        failed: 0,
+      };
+    }
+
     let communities = 0;
     let recipients = 0;
     let enqueued = 0;

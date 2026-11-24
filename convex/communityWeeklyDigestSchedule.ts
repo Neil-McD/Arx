@@ -132,6 +132,47 @@ export const ensureCommunityWeeklyDigestScheduleInternal = internalMutation({
   handler: syncCommunityWeeklyDigestScheduleForCommunity,
 });
 
+// Bounded page enrollment so pre-existing active communities (including free
+// ones created before weekly digests turned on) get scheduled automatically.
+export const enrollActiveCommunitiesForWeeklyDigestPageInternal = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    pageSize: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
+    const numItems = Math.max(1, Math.min(50, Math.floor(args.pageSize ?? 50)));
+    const page = await ctx.db
+      .query("communities")
+      .paginate({ numItems, cursor: args.cursor ?? null });
+    let enrolled = 0;
+    for (const community of page.page) {
+      if (!communityIsActive(community)) continue;
+      const existing = await ctx.db
+        .query("communityWeeklyDigestSchedules")
+        .withIndex("by_community", (q) => q.eq("communityId", community._id))
+        .unique();
+      if (existing) continue;
+      const coachSettings = await ctx.db
+        .query("communityMemberCoachSettings")
+        .withIndex("by_community", (q) => q.eq("communityId", community._id))
+        .first();
+      if (coachSettings?.weeklyDigestEnabled === false) continue;
+      const res = await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+        communityId: community._id,
+        nowMs,
+      });
+      if (res.status === "created") enrolled += 1;
+    }
+    return {
+      enrolled,
+      isDone: page.isDone,
+      continueCursor: page.isDone ? null : page.continueCursor,
+    };
+  },
+});
+
 export const claimDueCommunityWeeklyDigestSchedulesInternal = internalMutation({
   args: {
     limit: v.optional(v.number()),

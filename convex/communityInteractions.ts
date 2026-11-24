@@ -1,6 +1,7 @@
 import { markCommunityMemoryReviewDue } from "./communityMemory";
 import { markCommunityBriefDue } from "./communityBriefs";
 import { markReplyDraftDue } from "./communityReplyDrafts";
+import { wakePausedCommunityHeartbeatIfNeeded } from "./communityHeartbeatWake";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { fingerprintCommunityComposerPayload } from "./communityComposerReplay";
 import { v } from "convex/values";
@@ -246,6 +247,9 @@ async function createCommunityInteractionComposerMessageCore(
           blocks: contentBlocks,
           nowMs,
         });
+        if (actorType === "human") {
+          await wakePausedCommunityHeartbeatIfNeeded(ctx, args.communityId, nowMs);
+        }
         const mentionRows = await insertCommunityInteractionMentionRows({
           ctx,
           communityId: args.communityId,
@@ -390,6 +394,9 @@ async function createCommunityInteractionComposerMessageCore(
         blocks: contentBlocks,
         nowMs,
       });
+      if (actorType === "human") {
+        await wakePausedCommunityHeartbeatIfNeeded(ctx, root.communityId, nowMs);
+      }
       const mentionRows = await insertCommunityInteractionMentionRows({
         ctx,
         communityId: root.communityId,

@@ -52,8 +52,15 @@ One pipeline joins them:
   recurring weekly community digest runs on a bounded cron at $0 AI cost
   (skipping quiet weeks and respecting both founder community toggle and member
   email preferences) so Cold handed-off members stay in the loop and return.
-  Founders see monthly AI allowance usage split by surface (live chats,
-  proactive heartbeats, briefs) plus 30-day member win-back counts in Settings.
+  Pre-existing active communities (including free communities) are automatically
+  enrolled into the weekly digest schedule via bounded paginated sweeps unless
+  their founder explicitly opted out (`weeklyDigestEnabled: false`). Paused
+  communities wake immediately on real human activity (posts, replies, lesson
+  completions, or private Guide messages). Founders see billing-cycle (Stripe
+  or operator-grant) AI allowance usage split by surface (live chats, proactive
+  heartbeats, briefs) plus 30-day member win-back counts in Settings, and
+  members/founders can jump straight to their SOUL & MEMORY cards from the Agent
+  page header.
 - **Cards are members only** (no task cards in v0).
 - **The agent drafts the journey and rhythm** from the community's description;
   the founder edits in plain words.
