@@ -21,6 +21,7 @@ import { readPersonFacts } from "./communityPersonFacts";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
+import { enqueueSingleEmailJob } from "./email";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
@@ -323,7 +324,7 @@ async function readLatestCommunityActivityAt(
   ctx: any,
   communityId: Id<"communities">,
 ): Promise<number | null> {
-  const [latestRoot, latestReply, latestMember] = await Promise.all([
+  const [latestRoot, latestReply, latestMember, latestLesson, latestAgentChannel] = await Promise.all([
     ctx.db
       .query("communityInteractionRoots")
       .withIndex("by_community_status_createdAt", (q: any) =>
@@ -343,11 +344,23 @@ async function readLatestCommunityActivityAt(
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
       .order("desc")
       .first(),
+    ctx.db
+      .query("communityLessonProgress")
+      .withIndex("by_community_completedAt", (q: any) => q.eq("communityId", communityId))
+      .order("desc")
+      .first(),
+    ctx.db
+      .query("memberAgentChannels")
+      .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", communityId))
+      .order("desc")
+      .first(),
   ]);
   const best = Math.max(
     Number(latestRoot?.createdAt ?? 0),
     Number(latestReply?.createdAt ?? 0),
     Number(latestMember?.activatedAt ?? latestMember?.createdAt ?? 0),
+    Number(latestLesson?.completedAt ?? 0),
+    Number(latestAgentChannel?.updatedAt ?? 0),
   );
   return best > 0 ? best : null;
 }
@@ -800,6 +813,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
     text: v.optional(v.string()),
     skipReason: v.optional(v.string()),
     requestedMode: v.union(v.literal("draft"), v.literal("auto")),
+    usedPrivateContext: v.optional(v.boolean()),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
@@ -886,6 +900,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
         deliveryMode: "auto",
         text: cleanText,
         sentText: cleanText,
+        unseenEmailState: "pending",
         sentAt: args.nowMs,
         createdAt: args.nowMs,
         updatedAt: args.nowMs,
@@ -911,6 +926,12 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
         updatedAt: args.nowMs,
       });
       return { ok: true as const, outcome: "sent_auto" as const, draftId: String(draftId) };
+    }
+
+    // Fail closed: any message generated using a member's private Soul or
+    // private Memory MUST NEVER downgrade into a founder-visible draft.
+    if (args.usedPrivateContext) {
+      return { ok: false as const, code: "private_context_cannot_downgrade_to_draft" };
     }
 
     const draftId = await ctx.db.insert("communityMemberCoachDrafts", {
@@ -1038,6 +1059,7 @@ async function runCoachForCommunity(
       decision: decision.action,
       ...(decision.action === "send" ? { text: decision.text } : { skipReason: decision.reason }),
       requestedMode: candidate.mode,
+      usedPrivateContext: Boolean(candidate.personalSoulMd || candidate.personalMemoryExcerpt),
       nowMs: Date.now(),
     });
     return saved?.ok ? saved.outcome : `blocked:${saved?.code ?? "unknown"}`;
@@ -1053,21 +1075,25 @@ async function runCoachForCommunity(
   }
 }
 
-// 24-hour unseen proactive check-in email nudge: finds sent check-ins aged
-// 24..72h that haven't been checked yet, marks already-answered ones as "seen",
-// suppresses opted-out/inactive members, and returns ready email jobs to enqueue.
-export const claimUnseenMemberCoachEmailsInternal = internalMutation({
+// 24-hour unseen proactive check-in email nudge: queries ONLY indexed "pending"
+// sent check-ins aged 24..72h so processed rows never starve older pending ones,
+// and enqueues the durable email outbox job atomically in the exact same mutation.
+export const processUnseenMemberCoachEmailsInternal = internalMutation({
   args: { nowMs: v.number() },
   handler: async (ctx, args) => {
     const oldestMs = args.nowMs - UNSEEN_COACH_EMAIL_MAX_AGE_MS;
     const dueBeforeMs = args.nowMs - UNSEEN_COACH_EMAIL_GRACE_MS;
     const candidates = await ctx.db
       .query("communityMemberCoachDrafts")
-      .withIndex("by_status_sentAt", (q) =>
-        q.eq("status", "sent").gte("sentAt", oldestMs).lte("sentAt", dueBeforeMs),
+      .withIndex("by_status_unseenEmailState_sentAt", (q) =>
+        q
+          .eq("status", "sent")
+          .eq("unseenEmailState", "pending")
+          .gte("sentAt", oldestMs)
+          .lte("sentAt", dueBeforeMs),
       )
-      .order("desc")
-      .take(200);
+      .order("asc")
+      .take(UNSEEN_EMAIL_BATCH_LIMIT);
 
     let origin = "https://www.polynet.ai";
     try {
@@ -1076,23 +1102,12 @@ export const claimUnseenMemberCoachEmailsInternal = internalMutation({
       // fallback to canonical public origin
     }
 
-    const jobs: Array<{
-      draftId: string;
-      communityId: Id<"communities">;
-      communityLifecycleGeneration: number;
-      recipientUserId: Id<"users">;
-      dedupeKey: string;
-      payload: {
-        communityName: string;
-        guideName: string;
-        bodyPreview: string;
-        actionUrl: string;
-      };
-    }> = [];
+    let enqueued = 0;
+    let seen = 0;
+    let suppressed = 0;
+    const communityCache = new Map<string, any>();
 
     for (const draft of candidates) {
-      if (jobs.length >= UNSEEN_EMAIL_BATCH_LIMIT) break;
-      if (draft.unseenEmailState) continue;
       const sentAt = Number(draft.sentAt ?? draft.createdAt ?? 0);
       if (sentAt <= 0 || args.nowMs - sentAt < UNSEEN_COACH_EMAIL_GRACE_MS) continue;
 
@@ -1103,6 +1118,7 @@ export const claimUnseenMemberCoachEmailsInternal = internalMutation({
           unseenEmailCheckedAt: args.nowMs,
           updatedAt: args.nowMs,
         });
+        suppressed += 1;
         continue;
       }
 
@@ -1113,6 +1129,7 @@ export const claimUnseenMemberCoachEmailsInternal = internalMutation({
           unseenEmailCheckedAt: args.nowMs,
           updatedAt: args.nowMs,
         });
+        suppressed += 1;
         continue;
       }
 
@@ -1123,6 +1140,7 @@ export const claimUnseenMemberCoachEmailsInternal = internalMutation({
           unseenEmailCheckedAt: args.nowMs,
           updatedAt: args.nowMs,
         });
+        seen += 1;
         continue;
       }
 
@@ -1139,26 +1157,35 @@ export const claimUnseenMemberCoachEmailsInternal = internalMutation({
             ? `${rawText.slice(0, 177).trimEnd()}…`
             : rawText || "Your guide left a check-in waiting for you.";
 
+      const emailResult = await enqueueSingleEmailJob(
+        ctx,
+        {
+          kind: "member_coach_nudge",
+          communityId: draft.communityId,
+          communityLifecycleGeneration: lifecycle.generation,
+          recipientUserId: draft.memberUserId,
+          templateKey: "member_coach_nudge",
+          payload: {
+            communityName,
+            guideName,
+            bodyPreview,
+            actionUrl: slug ? `${origin}/c/${encodeURIComponent(slug)}/agent` : origin,
+          },
+          dedupeKey: `member-coach-nudge:${String(draft._id)}`,
+          nowMs: args.nowMs,
+        },
+        communityCache,
+      );
+      const nextState = emailResult.status === "suppressed" ? "suppressed" : "enqueued";
       await ctx.db.patch(draft._id, {
-        unseenEmailState: "enqueued",
+        unseenEmailState: nextState,
         unseenEmailCheckedAt: args.nowMs,
         updatedAt: args.nowMs,
       });
-      jobs.push({
-        draftId: String(draft._id),
-        communityId: draft.communityId,
-        communityLifecycleGeneration: lifecycle.generation,
-        recipientUserId: draft.memberUserId,
-        dedupeKey: `member-coach-nudge:${String(draft._id)}`,
-        payload: {
-          communityName,
-          guideName,
-          bodyPreview,
-          actionUrl: slug ? `${origin}/c/${encodeURIComponent(slug)}/agent` : origin,
-        },
-      });
+      if (nextState === "enqueued") enqueued += 1;
+      else suppressed += 1;
     }
-    return { jobs };
+    return { enqueued, seen, suppressed };
   },
 });
 
@@ -1197,25 +1224,12 @@ export const processDueMemberCoachScansInternal = internalAction({
       }
     }
 
-    // 24-hour unseen proactive check-in email fallback (bounded, preference-gated).
+    // 24-hour unseen proactive check-in email fallback (bounded, atomic, preference-gated).
     const unseen = await ctx.runMutation(
-      internalRefs.communityMemberCoach.claimUnseenMemberCoachEmailsInternal,
+      internalRefs.communityMemberCoach.processUnseenMemberCoachEmailsInternal,
       { nowMs },
     );
-    let unseenEmailsEnqueued = 0;
-    for (const job of unseen?.jobs ?? []) {
-      await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
-        kind: "member_coach_nudge",
-        communityId: job.communityId,
-        communityLifecycleGeneration: job.communityLifecycleGeneration,
-        recipientUserId: job.recipientUserId,
-        templateKey: "member_coach_nudge",
-        payload: job.payload,
-        dedupeKey: job.dedupeKey,
-      });
-      unseenEmailsEnqueued += 1;
-    }
-    return { scanned: due.length, outcomes, unseenEmailsEnqueued };
+    return { scanned: due.length, outcomes, unseenEmailsEnqueued: unseen?.enqueued ?? 0 };
   },
 });
 
@@ -1337,6 +1351,7 @@ export const sendMemberCoachDraft = mutation({
       status: "sent",
       deliveryMode: "approved",
       sentText: finalText,
+      unseenEmailState: "pending",
       threadId: delivered.threadId,
       threadMessageKey,
       decidedByUserId: userId,

@@ -1088,6 +1088,24 @@ async function addCloudThreadMessageHandler(ctx: MutationCtx, args: ObjectType<t
     };
     await ctx.db.patch(thread._id, patch);
 
+    // Keep the member's community agent channel activity timestamp fresh on
+    // user messages only (never assistant/proactive deliveries) so community
+    // heartbeats reflect real private member participation.
+    if (args.role === "user" && thread.communityId) {
+      const normalizedCommunityId = ctx.db.normalizeId("communities", String(thread.communityId));
+      if (normalizedCommunityId) {
+        const channel = await ctx.db
+          .query("memberAgentChannels")
+          .withIndex("by_owner_scope_community", (q: any) =>
+            q.eq("ownerId", ownerId).eq("scopeKey", "community").eq("communityId", normalizedCommunityId),
+          )
+          .unique();
+        if (channel) {
+          await ctx.db.patch(channel._id, { updatedAt: nowMs });
+        }
+      }
+    }
+
     const created = (await ctx.db.get(id)) as CloudMessageLike | null;
     if (!created) throw new Error("message_create_failed");
     return created;

@@ -238,7 +238,7 @@ export const enqueueEmailJobsBatchInternal = internalMutation({
   },
 });
 
-async function enqueueSingleEmailJob(
+export async function enqueueSingleEmailJob(
   ctx: any,
   args: {
     kind: string;

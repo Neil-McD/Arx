@@ -316,6 +316,7 @@ describe("activity-tapered heartbeats (Slice 3)", () => {
         signalSummary: "Active commitment shared with guide 4 days ago",
         status: "sent",
         deliveryMode: "auto",
+        unseenEmailState: "pending",
         sentText: "Secret private goal details that should not leak in email preview.",
         sentAt: NOW - 26 * HOUR_MS,
         createdAt: NOW - 26 * HOUR_MS,
@@ -330,6 +331,7 @@ describe("activity-tapered heartbeats (Slice 3)", () => {
         signalSummary: "Joined 3 days ago",
         status: "sent",
         deliveryMode: "auto",
+        unseenEmailState: "pending",
         sentText: "Welcome!",
         sentAt: NOW - 26 * HOUR_MS,
         createdAt: NOW - 26 * HOUR_MS,
@@ -433,20 +435,57 @@ describe("activity-tapered heartbeats (Slice 3)", () => {
       counts: { hot: 2, warm: 0, cooling: 0, cold: 1 },
     });
 
-    // 5. 24-hour unseen email nudge: enqueues 1 neutral email for hotUserId, marks seenUserId as "seen", and is idempotent.
-    const firstSweep = await t.mutation(internal.communityMemberCoach.claimUnseenMemberCoachEmailsInternal, {
+    // 5. Private-context responses NEVER downgrade into a founder-visible draft if auto mode turns off mid-run.
+    const downgraded = await t.mutation(internal.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal, {
+      communityId: fx.activeCommunityId,
+      memberUserId: fx.hotUserId,
+      reason: "course_stall",
+      dedupeKey: "private-no-downgrade-1",
+      signalSummary: "Paused on course",
+      decision: "send",
+      text: "References private memory that founder must never see.",
+      requestedMode: "auto",
+      usedPrivateContext: true,
+      nowMs: NOW + 4 * DAY_MS,
+    });
+    expect(downgraded).toEqual({ ok: false, code: "private_context_cannot_downgrade_to_draft" });
+
+    // 6. Private guide activity wakes a paused community cleanly.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fx.quietSettingsId, { nextScanAt: NOW - 1000 });
+      await ctx.db.insert("memberAgentChannels", {
+        ownerId: fx.coldUserId,
+        scopeKey: "community",
+        communityId: fx.quietCommunityId,
+        nextOrdinal: 2,
+        createdAt: NOW - 2 * HOUR_MS,
+        updatedAt: NOW - 2 * HOUR_MS,
+      });
+    });
+    const wokenClaim = await t.mutation(internal.communityMemberCoach.claimCommunityMemberCoachScanInternal, {
+      settingsId: fx.quietSettingsId,
       nowMs: NOW,
     });
-    expect(firstSweep.jobs).toHaveLength(1);
-    expect(firstSweep.jobs[0]?.recipientUserId).toBe(fx.hotUserId);
+    expect(wokenClaim).toMatchObject({ communityTier: "active" });
+
+    // 7. 24-hour unseen email nudge: atomically enqueues 1 neutral email in emailOutbox for hotUserId,
+    // marks seenUserId as "seen", and leaves zero pending rows on second run.
+    const firstSweep = await t.mutation(internal.communityMemberCoach.processUnseenMemberCoachEmailsInternal, {
+      nowMs: NOW,
+    });
+    expect(firstSweep).toEqual({ enqueued: 1, seen: 1, suppressed: 0 });
+    const outboxRows = await t.run(async (ctx) => await ctx.db.query("emailOutbox").collect());
+    expect(outboxRows).toHaveLength(1);
+    expect(outboxRows[0]?.recipientUserId).toBe(fx.hotUserId);
+    expect(outboxRows[0]?.templateKey).toBe("member_coach_nudge");
     // Private commitment text never leaks into email preview!
-    expect(firstSweep.jobs[0]?.payload.bodyPreview).not.toContain("Secret private goal");
-    expect(firstSweep.jobs[0]?.payload.actionUrl).toContain("/c/active-club/agent");
+    expect(String((outboxRows[0]?.payload as any)?.bodyPreview ?? "")).not.toContain("Secret private goal");
+    expect(String((outboxRows[0]?.payload as any)?.actionUrl ?? "")).toContain("/c/active-club/agent");
 
     // Second sweep is strictly idempotent (0 duplicate jobs).
-    const secondSweep = await t.mutation(internal.communityMemberCoach.claimUnseenMemberCoachEmailsInternal, {
+    const secondSweep = await t.mutation(internal.communityMemberCoach.processUnseenMemberCoachEmailsInternal, {
       nowMs: NOW + 1000,
     });
-    expect(secondSweep.jobs).toHaveLength(0);
+    expect(secondSweep).toEqual({ enqueued: 0, seen: 0, suppressed: 0 });
   });
 });

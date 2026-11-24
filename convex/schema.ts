@@ -1734,6 +1734,7 @@ export default defineSchema({
   })
     .index("by_user_resource", ["userId", "resourceId"])
     .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_completedAt", ["communityId", "completedAt"])
     .index("by_community_user_completedAt", ["communityId", "userId", "completedAt"])
     .index("by_resource", ["resourceId"]),
 
@@ -2086,7 +2087,12 @@ export default defineSchema({
     threadId: v.optional(v.string()),
     threadMessageKey: v.optional(v.string()),
     unseenEmailState: v.optional(
-      v.union(v.literal("enqueued"), v.literal("seen"), v.literal("suppressed")),
+      v.union(
+        v.literal("pending"),
+        v.literal("enqueued"),
+        v.literal("seen"),
+        v.literal("suppressed"),
+      ),
     ),
     unseenEmailCheckedAt: v.optional(v.number()),
     decidedByUserId: v.optional(v.id("users")),
@@ -2097,7 +2103,7 @@ export default defineSchema({
   })
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_status_sentAt", ["communityId", "status", "sentAt"])
-    .index("by_status_sentAt", ["status", "sentAt"])
+    .index("by_status_unseenEmailState_sentAt", ["status", "unseenEmailState", "sentAt"])
     .index("by_community_member_createdAt", ["communityId", "memberUserId", "createdAt"])
     .index("by_community_member_dedupe", ["communityId", "memberUserId", "dedupeKey"]),
 
@@ -3207,7 +3213,8 @@ export default defineSchema({
     .index("by_owner_scope_community", ["ownerId", "scopeKey", "communityId"])
     .index("by_owner", ["ownerId"])
     .index("by_owner_community", ["ownerId", "communityId"])
-    .index("by_community", ["communityId"]),
+    .index("by_community", ["communityId"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"]),
 
   memberAgentEpisodes: defineTable({
     channelId: v.id("memberAgentChannels"),
