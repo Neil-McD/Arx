@@ -222,6 +222,9 @@ function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): Menti
     displayName,
     handle,
     avatarUrl: String(row.avatar_url ?? "").trim() || null,
+    avatarFocusX: row.avatar_focus_x ?? null,
+    avatarFocusY: row.avatar_focus_y ?? null,
+    avatarZoom: row.avatar_zoom ?? null,
     kind,
     ...(kind === "role" ? { roleKey: "everybody" as const } : {}),
     ...(kind === "role" ? { emailMode, emailCooldownUntil: row.email_cooldown_until ?? null } : {}),
@@ -549,6 +552,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           displayName: label,
           handle,
           avatarUrl: profile.avatar_url ?? null,
+          avatarFocusX: profile.avatar_focus_x ?? null,
+          avatarFocusY: profile.avatar_focus_y ?? null,
+          avatarZoom: profile.avatar_zoom ?? null,
         });
         return candidates;
       }, [])

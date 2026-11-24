@@ -9,6 +9,7 @@
 // Empty, the list isn't drawn.
 import { useState, type ReactNode } from "react";
 import { AtSign, BookOpen, CalendarDays, ChevronDown, MessageCircleQuestion, MessageSquare, UserPlus, Users } from "lucide-react";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
 import { Btn, cx } from "./kit";
 
@@ -125,9 +126,17 @@ export function NeedsYou(props: {
           <div className={cx("nopen")}>
             {requests.slice(0, NEEDS_YOU_JOIN_SHOWN).map((request) => (
               <div key={request.id} className={cx("nperson")}>
-                <span className={cx("nface")} aria-hidden="true">
-                  {request.avatarUrl ? <img src={request.avatarUrl} alt="" /> : (request.displayName ?? "S").trim().charAt(0).toUpperCase()}
-                </span>
+                <UserAvatar
+                  className={cx("nface")}
+                  name={request.displayName ?? "Someone"}
+                  imageUrl={request.avatarUrl}
+                  focusX={request.avatarFocusX}
+                  focusY={request.avatarFocusY}
+                  zoom={request.avatarZoom}
+                  fallback={(request.displayName ?? "S").trim().charAt(0).toUpperCase()}
+                  alt=""
+                  aria-hidden
+                />
                 <span className={cx("ntext")}>
                   <b>{request.displayName ?? "Someone"}</b>
                   <span>Asked {request.createdAtLabel}</span>

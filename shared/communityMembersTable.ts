@@ -8,6 +8,9 @@ export type MemberTableRow = {
   user_id: string;
   name: string;
   handle: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: string;
   plan: MemberPlan;
   money: MemberMoney;

@@ -144,7 +144,14 @@ export function podVisibilityOf(record: { visibility?: string | null } | null | 
   return record?.visibility === "hidden" ? "hidden" : "listed";
 }
 
-type PodPersonSummary = { user_id: string; name: string; avatar_url: string | null };
+type PodPersonSummary = {
+  user_id: string;
+  name: string;
+  avatar_url: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
+};
 
 async function personSummary(
   ctx: Ctx,
@@ -162,6 +169,9 @@ async function personSummary(
       user_id: key,
       name: profile?.display_name ?? name,
       avatar_url: profile?.avatar_url ?? null,
+      avatar_focus_x: profile?.avatar_focus_x ?? 0.5,
+      avatar_focus_y: profile?.avatar_focus_y ?? 0.5,
+      avatar_zoom: profile?.avatar_zoom ?? 1,
     });
   }
   return people.get(key)!;
@@ -309,6 +319,9 @@ export const getPod = query({
             user_id: memberId,
             name: person.name,
             avatar_url: person.avatar_url,
+            avatar_focus_x: person.avatar_focus_x,
+            avatar_focus_y: person.avatar_focus_y,
+            avatar_zoom: person.avatar_zoom,
             is_host: isHost(record, memberId),
             // A seat their plan gives follows the plan: it can't be taken away here.
             // public_id: how the member directory names them, so "Add someone"

@@ -127,7 +127,13 @@ export type DiscoverCommunitySnapshot = {
   branding_revision?: number | null;
   visual_identity?: CommunityVisualIdentity | null;
   // The card's host, and a sign of life (posts by people, this week).
-  host?: { name: string; avatar_url: string | null } | null;
+  host?: {
+    name: string;
+    avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  } | null;
   last_active_at?: string | null;
   posts_this_week?: number | null;
 };
@@ -292,6 +298,9 @@ export type CommunityTypingPresenceUser = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   root_id?: string | null;
   display_until_ms: number;
   updated_at?: string | null;

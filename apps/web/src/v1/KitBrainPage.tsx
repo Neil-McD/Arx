@@ -243,7 +243,7 @@ function CommunityDetail(props: { map: BrainMap; session: unknown; communityId: 
   return (
     <div className={cx("land")}>
       <div className="brain-card-top">
-        <StableFramedMedia className="brain-card-banner" imageClassName="brain-card-banner-img" imageUrl={identity?.banner.url ?? null}
+        <StableFramedMedia className="brain-card-banner" imageUrl={identity?.banner.url ?? null}
           frame={identity ? { focusX: identity.banner.focus_x, focusY: identity.banner.focus_y, zoom: identity.banner.zoom } : undefined} alt="" aria-hidden />
         <CommunityAvatar communityId={props.communityId} name={map.center.name} className="brain-card-logo" aria-hidden />
       </div>

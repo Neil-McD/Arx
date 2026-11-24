@@ -299,7 +299,14 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
           <PanelPeople
             names={page.hosts}
             people={page.host_people?.length
-              ? page.host_people.map((host) => ({ id: host.user_id, name: host.name, avatarUrl: host.avatar_url ?? null }))
+              ? page.host_people.map((host) => ({
+                  id: host.user_id,
+                  name: host.name,
+                  avatarUrl: host.avatar_url ?? null,
+                  avatarFocusX: host.avatar_focus_x,
+                  avatarFocusY: host.avatar_focus_y,
+                  avatarZoom: host.avatar_zoom,
+                }))
               : undefined}
           />
         </PanelPart>

@@ -30,9 +30,13 @@ export function buildWebShellAccountProps(params: {
   onSignOut: NonNullable<ShellChromeAccountProps>["onSignOut"];
 }): ShellChromeAccountProps {
   if (!params.canonicalSessionUserId) return undefined;
+  const selfProfile = params.savedProfilesByUserId[params.canonicalSessionUserId];
   return {
     name: params.displayName(params.canonicalSessionUserId),
-    avatarUrl: params.savedProfilesByUserId[params.canonicalSessionUserId]?.avatar_url ?? null,
+    avatarUrl: selfProfile?.avatar_url ?? null,
+    avatarFocusX: selfProfile?.avatar_focus_x ?? null,
+    avatarFocusY: selfProfile?.avatar_focus_y ?? null,
+    avatarZoom: selfProfile?.avatar_zoom ?? null,
     // "Host" is the owner. Being able to see settings is not enough: a
     // Polynet operator can, in communities where they are only a member.
     // Blank until this community's access has loaded, so a host never

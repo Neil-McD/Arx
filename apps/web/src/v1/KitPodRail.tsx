@@ -113,7 +113,14 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   // looked at rarely: two links at the foot open them in place. Each part
   // keeps its own key, so one coming or going never resets a draft in
   // another.
-  const people = pod.members.map((member) => ({ id: member.user_id, name: member.name, avatarUrl: member.avatar_url ?? null }));
+  const people = pod.members.map((member) => ({
+    id: member.user_id,
+    name: member.name,
+    avatarUrl: member.avatar_url ?? null,
+    avatarFocusX: member.avatar_focus_x,
+    avatarFocusY: member.avatar_focus_y,
+    avatarZoom: member.avatar_zoom,
+  }));
   const parts = ([
     ["requests", pod.can_manage && pod.requests.length ? (
       <div className={cx("needs")}>

@@ -52,7 +52,14 @@ export type CommunityLandingPage = {
   listed: boolean;
   is_owner: boolean;
   signed_in: boolean;
-  host: { name: string; avatar_url: string | null; bio: string | null } | null;
+  host: {
+    name: string;
+    avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+    bio: string | null;
+  } | null;
   events: Array<{ title: string; starts_at: string; place: string | null; repeats: string | null }>;
   guide: Record<string, never> | null;
   app: { name: string; url: string; host: string } | null;

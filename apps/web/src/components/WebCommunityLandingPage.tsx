@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   cancelCommunityJoinRequestFromLanding,
   fetchCommunityLanding,
@@ -392,7 +393,16 @@ export function WebCommunityLandingPage(props: Props) {
             <div className="cl-facts">
               {data!.host ? (
                 <span className="cl-fact">
-                  <span className="cl-face" aria-hidden="true">{data!.host.avatar_url ? <img src={data!.host.avatar_url} alt="" /> : initials(data!.host.name)}</span>
+                  <UserAvatar
+                    className="cl-face"
+                    name={data!.host.name}
+                    imageUrl={data!.host.avatar_url}
+                    focusX={data!.host.avatar_focus_x}
+                    focusY={data!.host.avatar_focus_y}
+                    zoom={data!.host.avatar_zoom}
+                    alt=""
+                    aria-hidden
+                  />
                   Hosted by {data!.host.name}
                 </span>
               ) : null}
@@ -467,7 +477,16 @@ export function WebCommunityLandingPage(props: Props) {
             <section className="cl-section">
               <h2>Your host</h2>
               <div className="cl-host">
-                <span className="cl-face is-big" aria-hidden="true">{data!.host.avatar_url ? <img src={data!.host.avatar_url} alt="" /> : initials(data!.host.name)}</span>
+                <UserAvatar
+                  className="cl-face is-big"
+                  name={data!.host.name}
+                  imageUrl={data!.host.avatar_url}
+                  focusX={data!.host.avatar_focus_x}
+                  focusY={data!.host.avatar_focus_y}
+                  zoom={data!.host.avatar_zoom}
+                  alt=""
+                  aria-hidden
+                />
                 <div><div className="cl-host-name">{data!.host.name}</div>{data!.host.bio ? <p>{data!.host.bio}</p> : null}</div>
               </div>
             </section>

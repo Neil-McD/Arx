@@ -11,6 +11,7 @@ import {
   computeCoverFrameLayout,
   focusFromCoverFramePosition,
   getCoverFrameImageStyle,
+  measureFramedMediaViewport,
   type CoverFrameLayout,
 } from "../../../../shared/coverFrameUi";
 import { useImageResource } from "../../../../shared/useImageResource";
@@ -59,10 +60,10 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
     const viewport = viewportRef.current;
     if (!viewport) return;
     const syncViewport = () => {
-      const rect = viewport.getBoundingClientRect();
+      const measured = measureFramedMediaViewport(viewport);
       setViewportSize({
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
+        width: Math.max(0, Math.round(measured.width)),
+        height: Math.max(0, Math.round(measured.height)),
       });
     };
     syncViewport();

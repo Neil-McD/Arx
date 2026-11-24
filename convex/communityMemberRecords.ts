@@ -123,6 +123,9 @@ export type MemberRecordRow = {
   name: string;
   handle: string | null;
   avatar_url: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
   role: "owner" | "admin" | "moderator" | "member";
   plan: MemberPlan;
   money: MemberMoney;
@@ -136,6 +139,9 @@ export type PastMemberRow = {
   user_id: string;
   name: string;
   avatar_url: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
   reason: MemberOutReason;
   reason_text: string;
   was_on: string | null;
@@ -519,6 +525,9 @@ export const listCommunityMemberRecordsPage = query({
         name: profile.display_name ?? user?.displayName ?? user?.handle ?? "Member",
         handle: user?.handle ?? null,
         avatar_url: profile.avatar_url ?? null,
+        avatar_focus_x: profile.avatar_focus_x,
+        avatar_focus_y: profile.avatar_focus_y,
+        avatar_zoom: profile.avatar_zoom,
       };
     };
     const lastActive = async (userId: any) => {
@@ -576,6 +585,9 @@ export const listCommunityMemberRecordsPage = query({
                 user_id: who.user_id,
                 name: who.name,
                 avatar_url: who.avatar_url,
+                avatar_focus_x: who.avatar_focus_x,
+                avatar_focus_y: who.avatar_focus_y,
+                avatar_zoom: who.avatar_zoom,
                 reason: out,
                 reason_text: OUT_REASON_TEXT[out],
                 was_on: plan.label,
@@ -627,6 +639,9 @@ export const listCommunityMemberRecordsPage = query({
               user_id: who.user_id,
               name: who.name,
               avatar_url: who.avatar_url,
+              avatar_focus_x: who.avatar_focus_x,
+              avatar_focus_y: who.avatar_focus_y,
+              avatar_zoom: who.avatar_zoom,
               reason: "declined" as const,
               reason_text: OUT_REASON_TEXT.declined,
               was_on: null,
@@ -779,6 +794,9 @@ export const getCommunityMemberRecord = query({
       name: profile.display_name ?? user?.displayName ?? user?.handle ?? "Member",
       handle: user?.handle ?? null,
       avatar_url: profile.avatar_url ?? null,
+      avatar_focus_x: profile.avatar_focus_x,
+      avatar_focus_y: profile.avatar_focus_y,
+      avatar_zoom: profile.avatar_zoom,
       role: membership ? membership.role : "owner",
       joined_at: iso(membership ? (membership.activatedAt ?? membership.createdAt) : community.createdAt),
       last_active_at: iso(presence?.lastSeenAt),

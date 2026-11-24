@@ -64,7 +64,14 @@ export function KitPodLanding(props: {
       ) : null}
       {members.length ? (
         <PanelPart label="In this pod" fact={String(members.length)}>
-          <PanelPeople people={members.map((member) => ({ id: member.user_id, name: member.name, avatarUrl: member.avatar_url ?? null }))} />
+          <PanelPeople people={members.map((member) => ({
+            id: member.user_id,
+            name: member.name,
+            avatarUrl: member.avatar_url ?? null,
+            avatarFocusX: member.avatar_focus_x,
+            avatarFocusY: member.avatar_focus_y,
+            avatarZoom: member.avatar_zoom,
+          }))} />
         </PanelPart>
       ) : null}
       {/* The way in sits under the parts on a phone, so it draws with them. */}

@@ -67,6 +67,23 @@ export function focusFromCoverFramePosition(layout: CoverFrameLayout, left: numb
   };
 }
 
+export function measureFramedMediaViewport(element: {
+  clientWidth?: number;
+  clientHeight?: number;
+  getBoundingClientRect: () => { width: number; height: number };
+}): { width: number; height: number } {
+  const clientWidth = Math.max(0, Number(element.clientWidth) || 0);
+  const clientHeight = Math.max(0, Number(element.clientHeight) || 0);
+  if (clientWidth > 0 && clientHeight > 0) {
+    return { width: clientWidth, height: clientHeight };
+  }
+  const rect = element.getBoundingClientRect();
+  return {
+    width: Math.max(0, rect.width),
+    height: Math.max(0, rect.height),
+  };
+}
+
 export function getCoverFrameImageStyle(layout: CoverFrameLayout): CSSProperties {
   return {
     position: "absolute",

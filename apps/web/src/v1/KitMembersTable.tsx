@@ -14,10 +14,20 @@ import { Btn, cx } from "./kit";
 
 type Avatars = { getAvatarColor: (id: string) => string; getInitials: (name: string) => string };
 
-export function Face(props: Avatars & { name: string; url: string | null; seed: string; size?: "s"; style?: CSSProperties }) {
+export function Face(props: Avatars & {
+  name: string;
+  url: string | null;
+  focusX?: number | null;
+  focusY?: number | null;
+  zoom?: number | null;
+  seed: string;
+  size?: "s";
+  style?: CSSProperties;
+}) {
   return (
     <span className={cx("av", props.size)} style={props.style}>
-      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={props.name} imageUrl={props.url} alt=""
+      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={props.name} imageUrl={props.url}
+        focusX={props.focusX} focusY={props.focusY} zoom={props.zoom} alt=""
         loading="lazy" fetchPriority="low"
         fallback={<span>{props.getInitials(props.name)}</span>} fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed) }} />
     </span>
@@ -133,7 +143,8 @@ export function MembersTable(props: Avatars & {
             onClick={() => props.onOpen(key)} onKeyDown={(event) => { if (event.key === "Enter") props.onOpen(key); }}>
             <Tick on={props.selected.has(key)} label={`Select ${row.name}`} onToggle={() => props.onToggle(key)} />
             <span className={cx("mwho")}>
-              <Face size="s" name={row.name} url={props.avatarOf(row)} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+              <Face size="s" name={row.name} url={props.avatarOf(row)} focusX={row.avatar_focus_x} focusY={row.avatar_focus_y} zoom={row.avatar_zoom}
+                seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
               <span>
                 <b>{row.name}{roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}</b>
                 {row.handle ? <small>@{row.handle}</small> : null}
@@ -231,7 +242,9 @@ export function JoinRequestsDrawer(props: Avatars & {
       {props.requests.length === 0 ? <p className={cx("mnone")}>Nobody is waiting.</p> : null}
       {props.requests.map((request) => (
         <article key={request.id} className={cx("mreq")}>
-          <Face name={request.displayName ?? "Someone"} url={request.avatarUrl} seed={request.userId} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+          <Face name={request.displayName ?? "Someone"} url={request.avatarUrl}
+            focusX={request.avatarFocusX} focusY={request.avatarFocusY} zoom={request.avatarZoom}
+            seed={request.userId} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
           <div>
             <b>{request.displayName ?? "Someone"}</b><small>Asked {request.createdAtLabel}</small>
             {request.message ? <p>{request.message}</p> : null}

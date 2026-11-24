@@ -29,10 +29,21 @@ export function memberDirectoryRowsFor(rows: CloudMemberDirectoryRow[], filter: 
   return [...listed].sort((a, b) => Number(b.you) - Number(a.you) || Number(b.here_now) - Number(a.here_now));
 }
 
-function Face(props: { name: string; url: string | null; seed: string; getAvatarColor: (id: string) => string; getInitials: (name: string) => string; style?: CSSProperties }) {
+function Face(props: {
+  name: string;
+  url: string | null;
+  focusX?: number | null;
+  focusY?: number | null;
+  zoom?: number | null;
+  seed: string;
+  getAvatarColor: (id: string) => string;
+  getInitials: (name: string) => string;
+  style?: CSSProperties;
+}) {
   return (
     <span className={cx("av")} style={props.style}>
-      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={props.name} imageUrl={props.url} alt=""
+      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={props.name} imageUrl={props.url}
+        focusX={props.focusX} focusY={props.focusY} zoom={props.zoom} alt=""
         fallback={<span>{props.getInitials(props.name)}</span>} fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed) }} />
     </span>
   );
@@ -112,7 +123,8 @@ export function KitMembersDirectory(props: {
             <div className={cx("ppl")}>
               {shown.map((row) => (
                 <button key={keyOf(row)} type="button" className={cx("p", openKey === keyOf(row) && "sel", row.you && "you")} onClick={() => writeRouteDetail("member", keyOf(row))}>
-                  <Face name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+                  <Face name={row.name} url={row.avatar_url} focusX={row.avatar_focus_x} focusY={row.avatar_focus_y} zoom={row.avatar_zoom}
+                    seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                   <b>{row.name}{row.you ? <span className={cx("tag")}>you</span> : null}{roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}</b>
                   <span>{row.working_on ?? (row.you ? "Add what you're working on" : row.here_now ? "Here now" : "")}</span>
                 </button>
@@ -143,7 +155,8 @@ function MemberProfileView(props: { profile: CloudMemberProfile; onMessage?: (us
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <Face name={profile.name} url={profile.avatar_url} seed={profile.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} style={{ width: 56, height: 56, fontSize: 18 }} />
+        <Face name={profile.name} url={profile.avatar_url} focusX={profile.avatar_focus_x} focusY={profile.avatar_focus_y} zoom={profile.avatar_zoom}
+          seed={profile.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} style={{ width: 56, height: 56, fontSize: 18 }} />
         <div>
           <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.015em" }}>{profile.name}</div>
           <div className={cx("sub")} style={{ marginTop: 2 }}>{profile.you ? "This is what other members see about you" : memberRoleLine(profile.role, profile.here_now)}</div>

@@ -293,7 +293,9 @@ export function KitMembersPage(props: {
                 {(search.trim() ? pastRows.filter((row) => matchesMemberSearch({ name: row.name, handle: null }, search)) : pastRows).map((row) => (
                   <button key={`${row.user_id}:${row.reason}`} type="button" role="row" className={cx("trow", row.membership_id && openKey === row.membership_id && "sel")}
                     onClick={() => { if (!row.membership_id) return; openRecord(row.membership_id); }} disabled={!row.membership_id}>
-                    <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+                    <Face size="s" name={row.name} url={row.avatar_url}
+                      focusX={row.avatar_focus_x} focusY={row.avatar_focus_y} zoom={row.avatar_zoom}
+                      seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span><b>{row.name}</b>{row.reason === "blocked" ? <span className={cx("tag hold")}>blocked</span> : null}{row.rejoined ? <span className={cx("tag")}>rejoined before</span> : null}</span>
                     <span>{row.reason_text}</span>
                     <span className={cx(!row.was_on && "none")}>{row.was_on ?? "Never joined"}</span>
@@ -401,7 +403,9 @@ function MemberRecordView(props: {
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Face name={record.name} url={record.avatar_url} seed={record.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+          <Face name={record.name} url={record.avatar_url}
+            focusX={record.avatar_focus_x} focusY={record.avatar_focus_y} zoom={record.avatar_zoom}
+            seed={record.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
             style={{ width: 44, height: 44, fontSize: 15, flex: "none" }} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.name}</div>
