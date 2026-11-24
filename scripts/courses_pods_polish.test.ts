@@ -179,8 +179,14 @@ describe("next slice: pods dropdown, pod knowledge cleanup, real avatars, clicka
     expect(channelRail).toContain('cx("av s")');
   });
 
-  it("supports one-tap step reordering for courses and lessons on touch screens", async () => {
+  it("keeps drag-to-reorder grip and tap-and-hold drag on course cards without arrow buttons", async () => {
     const { courseOrderAfterMove } = await import("../apps/web/src/v1/KitClassroom");
+    const classroom = readFileSync(new URL("../apps/web/src/v1/KitClassroom.tsx", import.meta.url), "utf8");
+    const kitCss = readFileSync(new URL("../apps/web/src/v1/kit.module.css", import.meta.url), "utf8");
+    expect(classroom).toContain("courseDrag.grip(");
+    expect(classroom).toContain("courseDrag.hold(");
+    expect(classroom).not.toContain("kcard-order");
+    expect(kitCss).not.toContain("kcard-order");
     expect(courseOrderAfterMove(["a", "b", "c"], 1, -1)).toEqual(["b", "a", "c"]);
     expect(courseOrderAfterMove(["a", "b", "c"], 1, 1)).toEqual(["a", "c", "b"]);
     expect(courseOrderAfterMove(["a", "b", "c"], 0, -1)).toBeNull();

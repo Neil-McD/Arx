@@ -4,13 +4,19 @@
 // gap it would land in; letting go drops it there and saves the order once.
 // Pointer events, not the browser's drag-and-drop: the same on a mouse and a
 // finger, and it can be dropped anywhere, not only exactly on another item.
-import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { orderAfterDrop } from "../../../../shared/communityClassroom";
 
 const SLIDE_MS = 180;
+// Long-press delay when picking up a card directly (not its grip): long enough
+// that a normal tap opens the item and a swipe scrolls the page, short enough
+// that tap-and-hold feels immediate.
+const HOLD_MS = 220;
+const HOLD_SLOP_PX = 8;
 
 type Held = {
   id: string;
+  pointerId: number;
   startX: number;
   startY: number;
   item: HTMLElement;
@@ -22,6 +28,17 @@ type Held = {
   quietUntil: number;
   x: number;
   y: number;
+  fromHold: boolean;
+};
+
+type PendingHold = {
+  id: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  item: HTMLElement;
+  container: HTMLElement;
+  timer: number;
 };
 
 export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, liftedClass: string) {
@@ -37,6 +54,8 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
   const onOrderRef = useRef(onOrder);
   onOrderRef.current = onOrder;
   const heldRef = useRef<Held | null>(null);
+  const pendingHoldRef = useRef<PendingHold | null>(null);
+  const suppressClickUntilRef = useRef(0);
   const containerRef = useRef<HTMLElement | null>(null);
   // Where everything was just before the order changed, so it can slide.
   const wasRef = useRef<Map<string, DOMRect> | null>(null);
@@ -62,6 +81,10 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     }
   }, [orderKey]);
 
+  const blockTouchScroll = (event: TouchEvent) => {
+    if (heldRef.current?.clone) event.preventDefault();
+  };
+
   const lift = (state: Held) => {
     const box = state.item.getBoundingClientRect();
     const clone = state.item.cloneNode(true) as HTMLElement;
@@ -77,12 +100,13 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     state.clone = clone;
     document.body.style.userSelect = "none";
     document.body.style.cursor = "grabbing";
+    window.addEventListener("touchmove", blockTouchScroll, { passive: false });
     setHeld(state.id);
   };
 
   const move = (event: PointerEvent) => {
     const state = heldRef.current;
-    if (!state) return;
+    if (!state || event.pointerId !== state.pointerId) return;
     const dx = event.clientX - state.startX;
     const dy = event.clientY - state.startY;
     if (!state.clone) {
@@ -123,11 +147,28 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     window.removeEventListener("pointerup", drop);
     window.removeEventListener("pointercancel", cancel);
     window.removeEventListener("keydown", key, true);
+    window.removeEventListener("touchmove", blockTouchScroll);
     document.body.style.userSelect = "";
     document.body.style.cursor = "";
     const state = heldRef.current;
     heldRef.current = null;
     return state;
+  };
+  const clearPendingHold = () => {
+    const pending = pendingHoldRef.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    window.removeEventListener("pointermove", watchPendingHold);
+    window.removeEventListener("pointerup", clearPendingHold);
+    window.removeEventListener("pointercancel", clearPendingHold);
+    pendingHoldRef.current = null;
+  };
+  const watchPendingHold = (event: PointerEvent) => {
+    const pending = pendingHoldRef.current;
+    if (!pending || event.pointerId !== pending.pointerId) return;
+    if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) > HOLD_SLOP_PX) {
+      clearPendingHold();
+    }
   };
   // The lifted copy settles into the gap, then goes.
   const settle = (state: Held) => {
@@ -145,9 +186,11 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     clone.style.translate = `${x + (to.left + to.width / 2) - (now.left + now.width / 2)}px ${y + (to.top + to.height / 2) - (now.top + now.height / 2)}px`;
     window.setTimeout(done, 170);
   };
-  function drop() {
+  function drop(event?: PointerEvent) {
+    if (event && heldRef.current && event.pointerId !== heldRef.current.pointerId) return;
     const state = stop();
     if (!state || !state.clone) return;
+    if (state.fromHold) suppressClickUntilRef.current = performance.now() + 400;
     // A quick flick can let go mid-slide: stop the slide and look once more.
     for (const element of itemsOf(state.container)) for (const animation of element.getAnimations()) animation.finish();
     retarget(state);
@@ -162,9 +205,11 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     // If the saved order never arrives (the save failed), go back to what is true.
     window.setTimeout(() => setPreview((current) => (current && current.order === shown.order ? null : current)), 6000);
   }
-  function cancel() {
+  function cancel(event?: PointerEvent) {
+    if (event && heldRef.current && event.pointerId !== heldRef.current.pointerId) return;
     const state = stop();
     if (!state) return;
+    if (state.fromHold && state.clone) suppressClickUntilRef.current = performance.now() + 400;
     if (state.clone) {
       wasRef.current = new Map(itemsOf(state.container).map((element) => [element.dataset.dragItem ?? "", element.getBoundingClientRect()]));
       state.clone.remove();
@@ -179,6 +224,22 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     cancel();
   }
 
+  const beginDrag = (state: Held, immediateLift: boolean) => {
+    containerRef.current = state.container;
+    heldRef.current = state;
+    if (immediateLift) lift(state);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", drop);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("keydown", key, true);
+  };
+
+  useEffect(() => () => {
+    clearPendingHold();
+    const active = stop();
+    active?.clone?.remove();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
     // The ids in the order to draw them.
     order,
@@ -191,13 +252,49 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
         const item = event.currentTarget.closest<HTMLElement>("[data-drag-item]");
         const container = item?.parentElement;
         if (!item || !container) return;
+        clearPendingHold();
         event.preventDefault();
-        containerRef.current = container;
-        heldRef.current = { id, startX: event.clientX, startY: event.clientY, item, container, clone: null, order: orderRef.current, from: orderRef.current, baseKey: idsKey, quietUntil: 0, x: event.clientX, y: event.clientY };
-        window.addEventListener("pointermove", move);
-        window.addEventListener("pointerup", drop);
-        window.addEventListener("pointercancel", cancel);
-        window.addEventListener("keydown", key, true);
+        beginDrag(
+          { id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, item, container, clone: null, order: orderRef.current, from: orderRef.current, baseKey: idsKey, quietUntil: 0, x: event.clientX, y: event.clientY, fromHold: false },
+          false,
+        );
+      },
+    }),
+    // Tap-and-hold (or click-and-hold) directly on a card: lifts after HOLD_MS
+    // while normal taps still open it and touch swipes still scroll the page.
+    hold: (id: string) => ({
+      onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
+        if (event.button !== 0 || heldRef.current || pendingHoldRef.current) return;
+        const item = event.currentTarget.closest<HTMLElement>("[data-drag-item]");
+        const container = item?.parentElement;
+        if (!item || !container) return;
+        const pointerId = event.pointerId;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const timer = window.setTimeout(() => {
+          const pending = pendingHoldRef.current;
+          if (!pending || pending.pointerId !== pointerId || heldRef.current) return;
+          clearPendingHold();
+          beginDrag(
+            { id, pointerId, startX, startY, item, container, clone: null, order: orderRef.current, from: orderRef.current, baseKey: idsKey, quietUntil: 0, x: startX, y: startY, fromHold: true },
+            true,
+          );
+        }, HOLD_MS);
+        pendingHoldRef.current = { id, pointerId, startX, startY, item, container, timer };
+        window.addEventListener("pointermove", watchPendingHold);
+        window.addEventListener("pointerup", clearPendingHold);
+        window.addEventListener("pointercancel", clearPendingHold);
+      },
+      onClickCapture: (event: { preventDefault: () => void; stopPropagation: () => void }) => {
+        if (performance.now() < suppressClickUntilRef.current) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+      onContextMenu: (event: { preventDefault: () => void }) => {
+        if (heldRef.current?.fromHold || pendingHoldRef.current || performance.now() < suppressClickUntilRef.current) {
+          event.preventDefault();
+        }
       },
     }),
     item: (id: string) => ({ "data-drag-item": id }),
