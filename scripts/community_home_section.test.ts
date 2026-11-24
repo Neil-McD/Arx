@@ -308,6 +308,15 @@ test("a member's quiet day with a tag says so; the host's sentence counts tags a
   expect(homeSentenceFor(quiet, "host", 2, 2)).toBe("2 things need you today.");
 });
 
+test("Home shows its Today glanceables inline on narrow screens when at rest, and hides them on desktop or during guide talk", async () => {
+  const { showsInlineHomeRail } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  expect(showsInlineHomeRail({ wide: false, ready: true, talking: false, hasSnapshot: true })).toBe(true);
+  expect(showsInlineHomeRail({ wide: true, ready: true, talking: false, hasSnapshot: true })).toBe(false);
+  expect(showsInlineHomeRail({ wide: false, ready: true, talking: true, hasSnapshot: true })).toBe(false);
+  expect(showsInlineHomeRail({ wide: false, ready: false, talking: false, hasSnapshot: true })).toBe(false);
+  expect(showsInlineHomeRail({ wide: false, ready: true, talking: false, hasSnapshot: false })).toBe(false);
+});
+
 test("a tag's message has one address: its thread in its room", async () => {
   const { buildCommunityThreadPath } = await import("../shared/webAppRouteState");
   expect(buildCommunityThreadPath("kiln", "general", "r1")).toBe("/c/kiln/chat/general/r1");

@@ -360,6 +360,111 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
 // Which learned things get a name on the full page: what the viewer may read,
 // new this week or most used, and only where the name doesn't cover another.
 export type LabelBox = { x: number; y: number; w: number; h: number };
+export type PlacedLabel = {
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+  side: "above" | "below" | "right" | "left";
+  box: LabelBox;
+};
+
+function boxInside(b: LabelBox, within?: LabelBox): boolean {
+  return !within || (b.x >= within.x && b.x + b.w <= within.x + within.w && b.y >= within.y && b.y + b.h <= within.y + within.h);
+}
+
+function countDotHits(dots: Array<{ x: number; y: number; r: number }>, box: LabelBox, pad = 3): number {
+  let hits = 0;
+  for (const d of dots) {
+    const r = d.r + pad;
+    if (d.x + r > box.x && d.x - r < box.x + box.w && d.y + r > box.y && d.y - r < box.y + box.h) hits += 1;
+  }
+  return hits;
+}
+
+function pickBestLabel(
+  candidates: PlacedLabel[],
+  dots: Array<{ x: number; y: number; r: number }>,
+  within?: LabelBox,
+): PlacedLabel {
+  let best = candidates[0];
+  let bestOut = boxInside(best.box, within) ? 0 : 1;
+  let bestHits = countDotHits(dots, best.box);
+  if (bestOut === 0 && bestHits === 0) return best;
+  for (let i = 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    const out = boxInside(c.box, within) ? 0 : 1;
+    const hits = countDotHits(dots, c.box);
+    if (out < bestOut || (out === bestOut && hits < bestHits)) {
+      best = c;
+      bestOut = out;
+      bestHits = hits;
+      if (bestOut === 0 && bestHits === 0) return best;
+    }
+  }
+  return best;
+}
+
+// Places a subject (or "Not filed yet") hub's label on the clearest side around
+// its dot so attached learned notes never sit behind the text on narrow screens.
+export function chooseSubjectLabelPos(
+  hub: LayoutHub,
+  layout: BrainLayout,
+  opts: { charW?: number; dot?: number; within?: LabelBox } = {},
+): PlacedLabel {
+  const charW = opts.charW ?? HUB_CHAR_W;
+  const dot = opts.dot ?? 1;
+  const w = Math.max(24, hub.label.length * charW);
+  const h = 17;
+  const dots: Array<{ x: number; y: number; r: number }> = [
+    ...layout.points.map((p) => ({ x: p.x, y: p.y, r: p.r * dot })),
+    ...layout.lessons.map((l) => ({ x: l.x, y: l.y, r: Math.max(4, l.r * 0.9) })),
+    ...layout.courses.map((c) => ({ x: c.x, y: c.y, r: 5.5 * dot })),
+    ...layout.hubs.filter((other) => other.key !== hub.key && other.kind !== "course").map((other) => ({ x: other.x, y: other.y, r: 7 })),
+    { x: layout.center.x, y: layout.center.y, r: 14 },
+  ];
+  const candidates: PlacedLabel[] = [
+    { x: hub.x, y: hub.y - 13, anchor: "middle", side: "above", box: { x: hub.x - w / 2, y: hub.y - 26, w, h } },
+    { x: hub.x, y: hub.y + 22, anchor: "middle", side: "below", box: { x: hub.x - w / 2, y: hub.y + 9, w, h } },
+    { x: hub.x + 13, y: hub.y + 4, anchor: "start", side: "right", box: { x: hub.x + 13, y: hub.y - 9, w, h } },
+    { x: hub.x - 13, y: hub.y + 4, anchor: "end", side: "left", box: { x: hub.x - 13 - w, y: hub.y - 9, w, h } },
+  ];
+  return pickBestLabel(candidates, dots, opts.within);
+}
+
+// Places the community's center name on the clearest side around the center ring
+// (defaulting below at y=33 whenever clear), preventing overlaps with nearby
+// lesson dots when the map scales down on a phone.
+export function chooseCenterLabelPos(
+  label: string,
+  layout: BrainLayout,
+  opts: { charW?: number; dot?: number; within?: LabelBox } = {},
+): PlacedLabel {
+  const charW = opts.charW ?? HUB_CHAR_W;
+  const dot = opts.dot ?? 1;
+  const w = Math.max(28, label.length * charW);
+  const h = 17;
+  const cx = layout.center.x, cy = layout.center.y;
+  const dots: Array<{ x: number; y: number; r: number }> = [
+    ...layout.lessons.map((l) => ({ x: l.x, y: l.y, r: Math.max(4, l.r * 0.9) })),
+    ...layout.points.map((p) => ({ x: p.x, y: p.y, r: p.r * dot })),
+    ...layout.courses.map((c) => ({ x: c.x, y: c.y, r: 5.5 * dot })),
+    ...layout.hubs.filter((h) => h.kind !== "course").map((h) => ({ x: h.x, y: h.y, r: 7 })),
+  ];
+  const candidates: PlacedLabel[] = [
+    { x: cx, y: cy + 33, anchor: "middle", side: "below", box: { x: cx - w / 2, y: cy + 20, w, h } },
+    { x: cx, y: cy - 23, anchor: "middle", side: "above", box: { x: cx - w / 2, y: cy - 36, w, h } },
+    { x: cx + 22, y: cy + 5, anchor: "start", side: "right", box: { x: cx + 22, y: cy - 8, w, h } },
+    { x: cx - 22, y: cy + 5, anchor: "end", side: "left", box: { x: cx - 22 - w, y: cy - 8, w, h } },
+    { x: cx + 18, y: cy + 22, anchor: "start", side: "right", box: { x: cx + 18, y: cy + 9, w, h } },
+    { x: cx - 18, y: cy + 22, anchor: "end", side: "left", box: { x: cx - 18 - w, y: cy + 9, w, h } },
+    { x: cx + 18, y: cy - 14, anchor: "start", side: "right", box: { x: cx + 18, y: cy - 27, w, h } },
+    { x: cx - 18, y: cy - 14, anchor: "end", side: "left", box: { x: cx - 18 - w, y: cy - 27, w, h } },
+    { x: cx, y: cy + 48, anchor: "middle", side: "below", box: { x: cx - w / 2, y: cy + 35, w, h } },
+    { x: cx, y: cy - 38, anchor: "middle", side: "above", box: { x: cx - w / 2, y: cy - 51, w, h } },
+  ];
+  return pickBestLabel(candidates, dots, opts.within);
+}
+
 export function chooseLabels(layout: BrainLayout, opts: { max?: number; charW?: number; lineH?: number; taken?: LabelBox[]; within?: LabelBox; dot?: number; clearOfDots?: boolean } = {}): Array<{ id: string; box: LabelBox; right: boolean }> {
   const max = opts.max ?? 10;
   const charW = opts.charW ?? 6.2;

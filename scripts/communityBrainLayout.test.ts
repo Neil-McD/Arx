@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { BrainMap, BrainPoint } from "../shared/communityBrain";
-import { BRAIN_FIT_MAX, BRAIN_ZOOM_MAX, chooseLabels, fitScale, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, reachFor, revealPoint, scaleLayout, stageWindow, zoomAt } from "../shared/communityBrainLayout";
+import { BRAIN_FIT_MAX, BRAIN_ZOOM_MAX, chooseCenterLabelPos, chooseLabels, chooseSubjectLabelPos, fitScale, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, reachFor, revealPoint, scaleLayout, stageWindow, zoomAt } from "../shared/communityBrainLayout";
 
 const NOW = Date.UTC(2026, 10, 15);
 const DAY = 86_400_000;
@@ -296,5 +296,45 @@ test("the small map's lens keeps every direction and order, pulls far things in,
   expect(small.points[0].r).toBe(layout.points[0].r);
   // The same map always draws the same.
   expect(lensLayout(layout, box)).toEqual(small);
+});
+
+test("on a phone screen, center and subject labels move to a dot-free side instead of sitting on dots", () => {
+  const m: BrainMap = {
+    center: { name: "Polynet", kind: "community" },
+    counts: { courses: 3, lessons: 20, learned: 1, this_week: 1 },
+    can_manage: true,
+    courses: [
+      { id: "course:c1", name: "Start here", order: 0, lessons: Array.from({ length: 5 }, (_, i) => ({ id: `resource:c1l${i}`, order: i + 1, title: `Lesson ${i + 1}`, done: true, use: 1 })) },
+      { id: "course:c2", name: "Build your community", order: 1, lessons: Array.from({ length: 10 }, (_, i) => ({ id: `resource:c2l${i}`, order: i + 1, title: `Lesson ${i + 1}`, done: false, use: 1 })) },
+      { id: "course:c3", name: "Your community's AI", order: 2, lessons: Array.from({ length: 5 }, (_, i) => ({ id: `resource:c3l${i}`, order: i + 1, title: `Lesson ${i + 1}`, done: false, use: 1 })) },
+    ],
+    subjects: [{ name: "AI guide", first_at: new Date(NOW - 3 * DAY).toISOString(), size: 1 }],
+    pods: [],
+    points: [point("p1", { kind: "subject", name: "AI guide" }, 2)],
+    arcs: [],
+    hidden: {},
+  };
+  const stage = { w: 390, h: 600 };
+  const base = layoutBrain(m, NOW);
+  const { scale, frame } = fitStage(base, stage, { inset: { x: 39, y: 92 }, hubCharW: 8.2, edge: 16 });
+  const scaled = scaleLayout(base, scale);
+  const win = stageWindow(fitView(frame), scale, stage);
+  const within = { x: win.x + 8, y: win.y + 8, w: win.w - 16, h: win.h - 16 };
+  const dot = Math.min(1.5, Math.max(0.7, 0.45 + scale * 0.55));
+
+  const centerPos = chooseCenterLabelPos("Polynet", scaled, { charW: 8.2, dot, within });
+  const hitLessons = scaled.lessons.filter((l) => {
+    const r = Math.max(4, l.r * 0.9) + 3;
+    return l.x + r > centerPos.box.x && l.x - r < centerPos.box.x + centerPos.box.w && l.y + r > centerPos.box.y && l.y - r < centerPos.box.y + centerPos.box.h;
+  });
+  expect(hitLessons).toHaveLength(0);
+
+  const subjectHub = scaled.hubs.find((h) => h.kind === "subject")!;
+  const subjectPos = chooseSubjectLabelPos(subjectHub, scaled, { charW: 8.2, dot, within });
+  const hitPoints = scaled.points.filter((p) => {
+    const r = p.r * dot + 3;
+    return p.x + r > subjectPos.box.x && p.x - r < subjectPos.box.x + subjectPos.box.w && p.y + r > subjectPos.box.y && p.y - r < subjectPos.box.y + subjectPos.box.h;
+  });
+  expect(hitPoints).toHaveLength(0);
 });
 
