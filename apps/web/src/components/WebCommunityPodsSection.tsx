@@ -311,7 +311,7 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
         {props.onPreviewInside ? <Btn small onClick={props.onPreviewInside}>Preview inside as a member</Btn> : null}
       </div>
       {page.can_edit ? (
-        <p className={cx("sub2")}>This is what members who aren't in it see. Edit it from the pod's right column.{page.visibility === "hidden" ? " It's hidden, so only its members know it's here." : ""}</p>
+        <p className={cx("sub2")}>This is what members who aren't in it see. Edit it from the pod's Settings.{page.visibility === "hidden" ? " It's hidden, so only its members know it's here." : ""}</p>
       ) : null}
     </div>
   );

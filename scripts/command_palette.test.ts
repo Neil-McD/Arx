@@ -54,4 +54,19 @@ describe("command palette", () => {
     const typed = paletteItems(paletteSections({ query: "who priced a founding tier", places, suggestions, communities, ask: false }));
     expect(typed).toEqual([]);
   });
+
+  it("shows mobile top-bar Search on open community pages and hides it where it would duplicate or collide", async () => {
+    const { showsMobileTopBarSearch } = await import("../apps/web/src/components/WebMobileTopBar");
+    // Open community sub-pages (Knowledge, Brain, Events, Pods, Members, Analytics)
+    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, isCommunityHome: false })).toBe(true);
+    // Community Home already displays the full-width Search or ask bar in its menu
+    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, isCommunityHome: true })).toBe(false);
+    // Inside a channel or pod chat room (People / Pod panel trigger occupies top-right)
+    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, communityDetailLabel: "General" })).toBe(false);
+    // Thread page, Home/Agent, Settings, Discover, public visitor funnel
+    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, isThreadPage: true })).toBe(false);
+    expect(showsMobileTopBarSearch({ mode: "agent", rootPage: "agent", hasActiveCommunity: true })).toBe(false);
+    expect(showsMobileTopBarSearch({ mode: "settings", rootPage: "community", hasActiveCommunity: true })).toBe(false);
+    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, canOpenCommunitySelector: false })).toBe(false);
+  });
 });

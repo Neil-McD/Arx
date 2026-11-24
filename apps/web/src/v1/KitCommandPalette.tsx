@@ -74,6 +74,7 @@ export function KitCommandPalette(props: {
               placeholder={placeholder} aria-label={placeholder}
               role="combobox" aria-expanded="true" aria-controls="kit-palette-list"
               aria-activedescendant={items[hot] ? `kit-palette-${items[hot].id}` : undefined} />
+            <button type="button" className={cx("pal-cancel")} onClick={close}>Cancel</button>
           </div>
           <div className={cx("res")} id="kit-palette-list" role="listbox">
             {sections.map((section) => (
