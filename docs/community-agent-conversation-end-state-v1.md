@@ -100,11 +100,21 @@ inference receipt, and one visible response.
 - A live human reply without `targetReplyId` under a root authored by the
   canonical community-agent identity treats that root as its effective target
   and invokes the agent.
-- A reply with `targetReplyId` pointing to a human reply does not invoke the
-  agent unless the same source turn explicitly mentions the agent. This remains
-  true when the root is agent-authored or the agent spoke earlier in the thread.
-- Prior agent participation by itself never grants standing permission to
-  answer later general thread comments.
+- A reply with `targetReplyId` pointing to a human reply, or explicitly
+  mentioning another member or role without mentioning the agent, does not
+  invoke the agent. This remains true when the root is agent-authored or the
+  agent spoke earlier in the thread.
+- Bounded thread follow-up (`thread_followup`, enabled by default via
+  `communityMemberCoachSettings.threadFollowupEnabled`): after the canonical
+  community agent has posted a live reply in a thread, a subsequent untargeted
+  human reply without other mentions may invoke the agent for up to 2 hours
+  after the agent's last live reply and up to 4 consecutive automatic
+  follow-ups (reset by a fresh explicit mention or direct reply). Follow-up
+  turns run silence-by-default: wrap-ups or human-to-human exchanges return
+  `[[SILENT]]`, settle token usage, and terminate as `skipped`
+  (`thread_followup_silent`) without posting a reply or consuming the 4-reply
+  cap. Owners can disable automatic follow-ups in Settings → Guide to enforce
+  strict mention/direct-reply admission.
 - An ordinary human-to-human reply outside those boundaries does not wake the
   agent.
 - A turn qualifying through both reply semantics and a mention produces one

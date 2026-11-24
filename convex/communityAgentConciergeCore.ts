@@ -4,7 +4,10 @@ import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
-import { shouldAutoFollowThreadReply } from "../shared/communityThreadFollowup";
+import {
+  THREAD_FOLLOWUP_MAX_CONSECUTIVE,
+  shouldAutoFollowThreadReply,
+} from "../shared/communityThreadFollowup";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
 
@@ -382,15 +385,19 @@ async function resolveTriggerKind(args: {
 
     let consecutiveAutoFollowups = 0;
     if (lastAgentReplyCreatedAt !== null) {
-      const recentRequests = (await args.ctx.db
+      const qualifyingRequests = (await args.ctx.db
         .query("communityAgentServeRequests" as any)
         .withIndex("by_sourceRoot_createdAt", (q: any) => q.eq("sourceRootId", root._id))
         .order("desc")
-        .take(20)) as Array<Record<string, any>>;
-      for (const req of recentRequests) {
-        const activeOrSent =
-          req.status === "responded" || req.status === "queued" || req.status === "running";
-        if (!activeOrSent) continue;
+        .filter((q: any) =>
+          q.or(
+            q.eq(q.field("status"), "responded"),
+            q.eq(q.field("status"), "queued"),
+            q.eq(q.field("status"), "running"),
+          ),
+        )
+        .take(THREAD_FOLLOWUP_MAX_CONSECUTIVE + 1)) as Array<Record<string, any>>;
+      for (const req of qualifyingRequests) {
         if (req.triggerKind === "thread_followup") {
           consecutiveAutoFollowups += 1;
         } else {

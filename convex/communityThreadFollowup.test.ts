@@ -306,7 +306,8 @@ describe("smart thread follow-up without re-tagging", () => {
     const agentAt = fixture.baseTimeMs + 60_000;
     await addReply(t, fixture, { seq: 1, actorType: "community_agent", createdAt: agentAt });
 
-    // Seed 4 responded thread_followup requests on this thread.
+    // Seed 4 responded thread_followup requests followed by 25 silent skipped requests
+    // to ensure skipped rows never truncate the consecutive cap count.
     await t.run(async (ctx) => {
       for (let i = 0; i < THREAD_FOLLOWUP_MAX_CONSECUTIVE; i += 1) {
         await ctx.db.insert("communityAgentServeRequests", {
@@ -321,6 +322,22 @@ describe("smart thread follow-up without re-tagging", () => {
           intakeReason: "accepted",
           createdAt: agentAt + (i + 1) * 1_000,
           updatedAt: agentAt + (i + 1) * 1_000,
+        });
+      }
+      for (let i = 0; i < 25; i += 1) {
+        await ctx.db.insert("communityAgentServeRequests", {
+          communityId: fixture.communityId,
+          agentKey: "community_agent",
+          invocationKey: `seeded-silent-${i}`,
+          triggerKind: "thread_followup",
+          sourceRootId: fixture.rootId,
+          requesterUserId: fixture.memberId,
+          sponsorUserId: fixture.memberId,
+          status: "skipped",
+          intakeReason: "accepted",
+          skipReason: "thread_followup_silent",
+          createdAt: agentAt + 5_000 + i * 100,
+          updatedAt: agentAt + 5_000 + i * 100,
         });
       }
     });
