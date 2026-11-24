@@ -1110,6 +1110,35 @@ export const addCloudThreadMessageForTrustedOwnerInternal = internalMutation({
   handler: async (ctx, { trustedOwnerId, ...args }) => await addCloudThreadMessageHandler(ctx, args, trustedOwnerId),
 });
 
+// Atomic delivery into a member's private community Agent conversation from
+// server-side mutations (e.g. proactive member coach approval or auto-send).
+export async function deliverAssistantMessageToMemberCommunityThread(
+  ctx: MutationCtx,
+  args: {
+    communityId: Id<"communities">;
+    memberUserId: Id<"users">;
+    messageKey: string;
+    contentJson: unknown;
+  },
+): Promise<{ threadId: string }> {
+  const conversation = await ensureCommunityAgentConversationHandler(
+    ctx,
+    { communityId: args.communityId },
+    args.memberUserId,
+  );
+  await addCloudThreadMessageHandler(
+    ctx,
+    {
+      threadId: conversation.thread_id as Id<"threads">,
+      messageKey: args.messageKey,
+      role: "assistant",
+      contentJson: args.contentJson,
+    },
+    args.memberUserId,
+  );
+  return { threadId: conversation.thread_id };
+}
+
 const upsertCloudThreadMessageByMessageKeyArgs = {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),

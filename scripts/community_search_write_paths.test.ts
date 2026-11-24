@@ -20,6 +20,7 @@ const NOT_POST_WRITES: Record<string, string> = {
   "communityMemory.ts": "patches the guide's review runs' status, not posts; reads posts only to check a note's evidence",
   "communityGuideQuestions.ts": "patches the guide's question rows' status, not posts; a yes runs the saved call through the executor, which keeps search in step",
   "communityReplyDrafts.ts": "patches its own draft rows' status, not posts; a posted draft goes into the thread through communityInteractions, which keeps search in step",
+  "communityMemberCoach.ts": "patches its own coach draft rows' status, not posts; reads posts only to detect recent member activity",
 };
 
 function sources(): string[] {

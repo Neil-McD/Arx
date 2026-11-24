@@ -17,7 +17,7 @@
 //
 // A member sees only what any member can already see
 // (convex/communityFounderBrief.ts, convex/communityHomeMoments.ts).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { KitHomeRail } from "../v1/KitHomeRail";
 import { usePlaceBriefRead } from "../v1/KitBrief";
@@ -32,9 +32,17 @@ import {
   type CloudCommunityHomeSnapshot,
 } from "../../../../shared/cloudCommunityAdminGateway";
 import { NeedsYou, homeThingsCount, type HomeThing, type NeedsYouJoinReview } from "../v1/KitNeedsYou";
-import { GuideSuggests } from "../v1/KitGuideSuggests";
+const GuideSuggests = lazy(() =>
+  import("../v1/KitGuideSuggests").then((m) => ({ default: m.GuideSuggests })),
+);
 import { fetchReplyDrafts, postReplyDraft, skipReplyDraft } from "../../../../shared/cloudCommunityReplyDraftsGateway";
 import type { ReplyDraftView } from "../../../../shared/communityReplyDrafts";
+import {
+  fetchMemberCoachDrafts,
+  sendMemberCoachDraft,
+  skipMemberCoachDraft,
+} from "../../../../shared/cloudCommunityMemberCoachGateway";
+import type { MemberCoachDraftView } from "../../../../shared/communityMemberCoachTypes";
 import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx } from "../v1/kit";
 import type { HomeTags } from "../../../../shared/communityHomeTags";
 import { useLiveQuery } from "../../../../shared/liveQuery";
@@ -209,8 +217,9 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // What was noticed (a host) or what is for them (a member). null: not read yet.
   const [noticed, setNoticed] = useState<OwnerNoticed[] | null>(null);
   const [steps, setSteps] = useState<MemberNextStep[] | null>(null);
-  // What the guide drafted and offers to post (a host with a guide).
+  // What the guide drafted and offers to post/send (a host with a guide).
   const [drafts, setDrafts] = useState<ReplyDraftView[] | null>(null);
+  const [coachDrafts, setCoachDrafts] = useState<MemberCoachDraftView[] | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
   const isHost = props.audience === "host";
   const agentOn = props.agentOn !== false;
@@ -243,6 +252,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       setNoticed(null);
       setSteps(null);
       setDrafts(null);
+      setCoachDrafts(null);
     }
     setFailed(false);
     void (async () => {
@@ -258,9 +268,20 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           : Promise.resolve().then(() => { if (!cancelled) setSteps([]); });
       // The guide's suggestions are extra too.
       const suggested = isHost && agentOn
-        ? fetchReplyDrafts({ session, communityId: props.communityId }).then((rows) => { if (!cancelled) setDrafts(rows); })
-          .catch(() => { if (!cancelled) setDrafts([]); })
-        : Promise.resolve().then(() => { if (!cancelled) setDrafts([]); });
+        ? Promise.all([
+            fetchReplyDrafts({ session, communityId: props.communityId })
+              .then((rows) => { if (!cancelled) setDrafts(rows); })
+              .catch(() => { if (!cancelled) setDrafts([]); }),
+            fetchMemberCoachDrafts({ session, communityId: props.communityId })
+              .then((rows) => { if (!cancelled) setCoachDrafts(rows); })
+              .catch(() => { if (!cancelled) setCoachDrafts([]); }),
+          ])
+        : Promise.resolve().then(() => {
+            if (!cancelled) {
+              setDrafts([]);
+              setCoachDrafts([]);
+            }
+          });
       try {
         const loaded = await getCloudCommunityHomeSnapshot({ session, communityId: props.communityId, audience: props.audience });
         if (!cancelled) setSnapshot(loaded);
@@ -310,6 +331,30 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     })();
   };
 
+  const sendCoach = async (id: string, text?: string): Promise<string | null> => {
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) return "You're signed out. Sign in and try again.";
+      await sendMemberCoachDraft({ session, communityId: props.communityId, draftId: id, ...(text !== undefined ? { text } : {}) });
+      setCoachDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
+      return null;
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "";
+      if (raw.includes("no_longer_needed")) {
+        setCoachDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
+        return null;
+      }
+      return raw.includes("too_long") ? "That's too long to send. Shorten it and try again." : "That didn't send. Try again.";
+    }
+  };
+  const skipCoach = (id: string) => {
+    setCoachDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
+    void (async () => {
+      const session = await props.ensureSession(props.session).catch(() => null);
+      if (session) await skipMemberCoachDraft({ session, communityId: props.communityId, draftId: id }).catch(() => undefined);
+    })();
+  };
+
   if (!props.kit) return null;
   const kit = props.kit;
   const now = props.now ?? new Date();
@@ -333,7 +378,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // The page draws as one piece once its parts have answered, so the list is
   // never drawn and then pushed down by the brief (docs/specs/web-architecture
   // -end-state.md: nothing moves after it is drawn).
-  const ready = Boolean(snapshot) && briefSettled && tagsSettled && (isHost ? noticed !== null && drafts !== null : steps !== null);
+  const ready = Boolean(snapshot) && briefSettled && tagsSettled && (isHost ? noticed !== null && drafts !== null && coachDrafts !== null : steps !== null);
 
   const panel = snapshot ? (
     <KitHomeRail session={props.session} communityId={props.communityId} snapshot={snapshot}
@@ -374,7 +419,18 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           <NeedsYou label={isHost ? "Needs you" : "For you"} join={joinReview} joinCount={joinCount}
             onShowAllJoinRequests={props.onOpenJoinRequests} things={things} tags={tagThings} />
         ) : null}
-        {ready && isHost ? <GuideSuggests drafts={drafts ?? []} onPost={postDraft} onSkip={skipDraft} /> : null}
+        {ready && isHost ? (
+          <Suspense fallback={null}>
+            <GuideSuggests
+              drafts={drafts ?? []}
+              onPost={postDraft}
+              onSkip={skipDraft}
+              coachDrafts={coachDrafts ?? []}
+              onSendCoach={sendCoach}
+              onSkipCoach={skipCoach}
+            />
+          </Suspense>
+        ) : null}
         {ready && isHost && !agentOn && things.length > 0 && props.onTurnOnAgent ? (
           <TextLink style={{ marginTop: 14 }} onClick={props.onTurnOnAgent}>Turn on your guide</TextLink>
         ) : null}
