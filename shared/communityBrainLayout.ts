@@ -116,31 +116,60 @@ export function courseRing(lessonCount: number): number {
   return Math.max(RING_MIN, (Math.max(1, lessonCount) * LESSON_GAP) / (2 * Math.PI));
 }
 
+// Every pair of nodes within `reach` of each other, once, lower index first
+// and in a fixed order. Nodes are sorted into a grid of squares `reach` wide,
+// so a big map costs about its size, not its size squared.
+function nearPairs(nodes: Node[], reach: number, each: (i: number, j: number) => void): void {
+  const cells = new Map<string, number[]>();
+  const cellOf = (n: Node) => [Math.floor(n.x / reach), Math.floor(n.y / reach)] as const;
+  nodes.forEach((node, i) => {
+    const [cx, cy] = cellOf(node);
+    const key = `${cx},${cy}`;
+    const list = cells.get(key);
+    if (list) list.push(i); else cells.set(key, [i]);
+  });
+  for (let i = 0; i < nodes.length; i++) {
+    const [cx, cy] = cellOf(nodes[i]);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const list = cells.get(`${cx + dx},${cy + dy}`);
+      if (!list) continue;
+      for (const j of list) if (j > i) each(i, j);
+    }
+  }
+}
+
+// How many rounds a map of this many nodes gets: fewer as it grows, so the
+// work stays within a frame or two however big the community is.
+export function settleRounds(nodeCount: number): number {
+  return Math.max(36, Math.min(ROUNDS, Math.round((ROUNDS * 320) / Math.max(1, nodeCount))));
+}
+
 function settle(nodes: Node[], springs: Spring[]): void {
-  for (let round = 0; round < ROUNDS; round++) {
-    const heat = 1 - round / ROUNDS;
+  const rounds = settleRounds(nodes.length);
+  const widest = Math.max(1, ...nodes.map((node) => node.r)) * 2;
+  const aside = (a: Node, b: Node) => { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; return { dx: Math.cos(t), dy: Math.sin(t), d: 1 }; };
+  for (let round = 0; round < rounds; round++) {
+    const heat = 1 - round / rounds;
     const move = nodes.map(() => ({ x: 0, y: 0 }));
     for (const s of springs) {
       const a = nodes[s.a], b = nodes[s.b];
       let dx = b.x - a.x, dy = b.y - a.y;
       let d = Math.hypot(dx, dy);
-      if (d < 1e-6) { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; dx = Math.cos(t); dy = Math.sin(t); d = 1; }
+      if (d < 1e-6) ({ dx, dy, d } = aside(a, b));
       const f = (s.k * (d - s.len)) / d;
       move[s.a].x += dx * f; move[s.a].y += dy * f;
       move[s.b].x -= dx * f; move[s.b].y -= dy * f;
     }
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = b.x - a.x, dy = b.y - a.y;
-        let d = Math.hypot(dx, dy);
-        if (d > PUSH_REACH) continue;
-        if (d < 1e-6) { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; dx = Math.cos(t); dy = Math.sin(t); d = 1; }
-        const f = Math.min(5, PUSH / (d * d)) / d;
-        move[i].x -= dx * f; move[i].y -= dy * f;
-        move[j].x += dx * f; move[j].y += dy * f;
-      }
-    }
+    nearPairs(nodes, PUSH_REACH, (i, j) => {
+      const a = nodes[i], b = nodes[j];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d = Math.hypot(dx, dy);
+      if (d > PUSH_REACH) return;
+      if (d < 1e-6) ({ dx, dy, d } = aside(a, b));
+      const f = Math.min(5, PUSH / (d * d)) / d;
+      move[i].x -= dx * f; move[i].y -= dy * f;
+      move[j].x += dx * f; move[j].y += dy * f;
+    });
     for (let i = 0; i < nodes.length; i++) {
       if (nodes[i].fixed) continue;
       const step = Math.hypot(move[i].x, move[i].y);
@@ -149,19 +178,17 @@ function settle(nodes: Node[], springs: Spring[]): void {
       nodes[i].y += move[i].y * cap * (0.25 + heat * 0.75);
     }
     // Nothing sits on anything else.
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = b.x - a.x, dy = b.y - a.y;
-        let d = Math.hypot(dx, dy);
-        const need = a.r + b.r;
-        if (d >= need) continue;
-        if (d < 1e-6) { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; dx = Math.cos(t); dy = Math.sin(t); d = 1; }
-        const push = (need - d) / d / (a.fixed || b.fixed ? 1 : 2);
-        if (!a.fixed) { a.x -= dx * push; a.y -= dy * push; }
-        if (!b.fixed) { b.x += dx * push; b.y += dy * push; }
-      }
-    }
+    nearPairs(nodes, widest, (i, j) => {
+      const a = nodes[i], b = nodes[j];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d = Math.hypot(dx, dy);
+      const need = a.r + b.r;
+      if (d >= need) return;
+      if (d < 1e-6) ({ dx, dy, d } = aside(a, b));
+      const push = (need - d) / d / (a.fixed || b.fixed ? 1 : 2);
+      if (!a.fixed) { a.x -= dx * push; a.y -= dy * push; }
+      if (!b.fixed) { b.x += dx * push; b.y += dy * push; }
+    });
   }
 }
 

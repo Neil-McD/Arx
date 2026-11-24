@@ -132,9 +132,20 @@ test("arcs join only what the map draws", () => {
   expect(layoutBrain(m, NOW).arcs.map((arc) => arc.ids)).toEqual([["note:a", "resource:c0l1"]]);
 });
 
-test("a hundred-lesson course still lays out, quickly", () => {
+test("the biggest map the server sends (2,000 lessons) still lays out without freezing the page", () => {
+  const m = map({ courses: 40 });
+  m.courses.forEach((course, c) => { course.lessons = Array.from({ length: 50 }, (_, l) => ({ id: `resource:big${c}_${l}`, title: `L${l}`, order: l + 1, done: false, use: 0 })); });
+  const started = performance.now();
+  const layout = layoutBrain(m, NOW);
+  // Generous for a slow test machine; a laptop does it in a fraction of this.
+  expect(performance.now() - started).toBeLessThan(1500);
+  expect(layout.lessons).toHaveLength(2000);
+  for (const lesson of layout.lessons) expect(Number.isFinite(lesson.x) && Number.isFinite(lesson.y)).toBe(true);
+});
+
+test("one long course lays out too", () => {
   const m = map();
-  m.courses[0].lessons = Array.from({ length: 100 }, (_, l) => ({ id: `resource:long${l}`, title: `L${l}`, order: l + 1, done: false, use: 0 }));
+  m.courses[0].lessons = Array.from({ length: 500 }, (_, l) => ({ id: `resource:long${l}`, title: `L${l}`, order: l + 1, done: false, use: 0 }));
   const started = performance.now();
   const layout = layoutBrain(m, NOW);
   expect(performance.now() - started).toBeLessThan(1500);
