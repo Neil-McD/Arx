@@ -4,7 +4,6 @@ import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAp
 import { WebAccountMenu } from "./WebAccountMenu";
 import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
-import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
 import { SearchOrAskButton } from "./CommunityPageHeader";
 import { useCommunityAppLinks } from "../controllers/communityAppLinks";
 import { selectNavPods } from "../../../../shared/podsAttentionDot";
@@ -37,8 +36,6 @@ export function WebCommunityNavSurface({
     openSlug: inPod ? communityShell.selectedCommunityChannelSlug : null,
   });
   return (
-    <>
-    {!isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
       hideIdentitySettings={false}
@@ -119,6 +116,5 @@ export function WebCommunityNavSurface({
         ? () => communityShell.onOpenCommunitySettingsPane?.("agent")
         : undefined}
     />
-    </>
   );
 }

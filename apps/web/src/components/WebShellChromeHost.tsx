@@ -10,6 +10,7 @@ import { WebCommunityRail } from "./WebCommunityRail";
 import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
 import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
+import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
 import { KitConfirm } from "../v1/KitConfirm";
 import { WebGlobalNavV1 } from "./WebGlobalNavV1";
@@ -37,6 +38,14 @@ export type WebShellChromeHostProps = {
   mainSurface: ReactNode;
   globalOverlays: ReactNode;
 };
+
+export function shouldMountCommunityCommandPalette(args: {
+  hasActiveCommunity: boolean;
+  showMobilePublicFunnel: boolean;
+  isPublicCommunityFunnel: boolean;
+}): boolean {
+  return args.hasActiveCommunity && !args.showMobilePublicFunnel && !args.isPublicCommunityFunnel;
+}
 
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const isMobileDedicatedRoot =
@@ -187,10 +196,18 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       props.desktopHeader.hasBackTargetSnapshot,
   });
 
+  const mountCommandPalette = shouldMountCommunityCommandPalette({
+    hasActiveCommunity: Boolean(props.communityShell.activeCommunity),
+    showMobilePublicFunnel: props.showMobilePublicFunnel,
+    isPublicCommunityFunnel: props.desktopHeader.isPublicCommunityFunnel,
+  });
+
   return (
     <div className={rootClassName}>
       {/* The app's own "are you sure?", on every screen of the shell. */}
       <KitConfirm />
+      {/* One command palette for both desktop and mobile community screens. */}
+      {mountCommandPalette ? <WebCommunityCommandPalette communityShell={props.communityShell} /> : null}
       {shellHeader}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 

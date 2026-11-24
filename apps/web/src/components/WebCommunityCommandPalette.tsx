@@ -16,6 +16,29 @@ function initials(name: string): string {
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? "")).toUpperCase() || "·";
 }
 
+export function openCommunityPalettePlace(shell: WebCommunityShellProps, id: string): void {
+  const selectTab = shell.showMobileShell ? shell.onSelectCommunityTabFromMobile : shell.onSelectCommunityTab;
+  if (id === "home") {
+    if (shell.showMobileShell) shell.onSelectMobileRootPage("agent");
+    else shell.onSelectCommunityTab("agent");
+    return;
+  }
+  if (id === "inbox") {
+    if (shell.showMobileShell) shell.onSelectMobileRootPage("messages");
+    else if (!shell.isDirectMessagesOpen) shell.onToggleDirectMessages();
+    return;
+  }
+  if (id.startsWith("channel:")) {
+    const channel = shell.communityChannels.find((entry) => `channel:${entry.id}` === id);
+    if (channel) shell.onSelectCommunityChannel(channel);
+    return;
+  }
+  if (id === "members") { shell.onOpenMembers(); return; }
+  if (id === "guide") { shell.onOpenCommunitySettingsPane?.("agent"); return; }
+  const tab = id === "knowledge" ? "resources" : id === "events" ? "events" : id === "pods" ? "pods" : null;
+  if (tab) selectTab(tab);
+}
+
 export function WebCommunityCommandPalette({ communityShell }: { communityShell: WebCommunityShellProps }) {
   const shell = communityShell;
   const agentOn = useCommunityAgentOn();
@@ -53,18 +76,7 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
   [shell.railCommunities, shell.selectedActiveCommunitySlug, shell.communityRailAttentionById]);
 
   const actions = useMemo(() => ({
-    openPlace: (id: string) => {
-      if (id === "inbox") { if (!shell.isDirectMessagesOpen) shell.onToggleDirectMessages(); return; }
-      if (id.startsWith("channel:")) {
-        const channel = shell.communityChannels.find((entry) => `channel:${entry.id}` === id);
-        if (channel) shell.onSelectCommunityChannel(channel);
-        return;
-      }
-      if (id === "members") { shell.onOpenMembers(); return; }
-      if (id === "guide") { shell.onOpenCommunitySettingsPane?.("agent"); return; }
-      const tab = id === "home" ? "agent" : id === "knowledge" ? "resources" : id === "events" ? "events" : id === "pods" ? "pods" : null;
-      if (tab) shell.onSelectCommunityTab(tab);
-    },
+    openPlace: (id: string) => openCommunityPalettePlace(shell, id),
     openCommunity: (id: string) => {
       const community = shell.railCommunities.find((entry) => entry.id === id);
       if (!community) return;

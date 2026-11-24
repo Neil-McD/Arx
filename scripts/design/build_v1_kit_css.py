@@ -175,11 +175,13 @@ css += """
 .app.palette-part .pal{position:fixed;top:min(136px,12vh);width:min(580px,calc(100vw - 32px));margin-left:calc(min(580px,calc(100vw - 32px)) / -2)}
 .app .pal .q input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:16px}
 .app .pal .q input::placeholder{color:var(--ink3)}
+.app .pal-cancel{display:none;flex:none;padding:0 4px;border:0;background:none;color:var(--accent,var(--blue-ink));font:inherit;font-size:14px;font-weight:500;cursor:pointer}
 .app .pal .res{max-height:min(480px,62vh);overflow-y:auto;padding-bottom:6px}
 .app .pal button.opt{width:100%;text-align:left;cursor:pointer}
 .app .pal .opt-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app .pal .opt-label b{font-weight:500;color:var(--ink)}
 .app .pal .pal-mark{width:20px;height:20px;border-radius:6px;font-size:9px}
+@media (max-width:760px){.app.palette-part .veil{background:var(--bg);-webkit-backdrop-filter:none;backdrop-filter:none}.app.palette-part .pal{left:0;right:0;top:0;bottom:0;width:100%;height:100dvh;margin-left:0;border:0;border-radius:0;box-shadow:none;display:flex;flex-direction:column}.app .pal .q{height:auto;min-height:54px;padding:calc(8px + env(safe-area-inset-top,0px)) 14px 8px}.app .pal-cancel{display:inline-flex;align-items:center;min-height:36px}.app .pal .res{flex:1;max-height:none;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}.app .pal .foot{display:none}}
 
 /* Home's right column. */
 /* The guide's brief, the first part of a right panel (mock: Pods3Inside,
@@ -400,6 +402,7 @@ css += """
 .app .podset-host{margin-left:8px;padding:1px 6px;border-radius:5px;background:var(--s2);font-size:11px;color:var(--ink2)}
 .app .podset-search{margin:6px 0 4px}
 .app .podset-danger{margin-top:12px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+@media (max-width:760px){.app.podsettings-part .veil{padding:0;align-items:stretch}.app .podset{width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0;box-shadow:none}.app .podset-head{padding:calc(14px + env(safe-area-inset-top,0px)) 16px 10px}.app .podset-x{width:38px;height:38px}.app .podset-tabs{padding:0 12px;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch}.app .podset-tabs button{height:42px;padding:0 12px;flex:none;white-space:nowrap}.app .podset-body{padding:16px 16px calc(24px + env(safe-area-inset-bottom,0px))}.app .podset-field textarea,.app .podset-field input,.app .podset-search{font-size:16px}.app .podset-row{flex-wrap:wrap;gap:6px 10px;padding:10px 0}.app .podset-row .t{flex:1 1 calc(100% - 48px)}.app .podset-row>em{margin-left:38px}.app .podset-inline{flex-wrap:wrap}}
 @media (prefers-reduced-motion:reduce){.app .brainside{animation:none}}
 .app .brainside .sub2{white-space:normal;line-height:1.45}
 .app .brainside .acts{margin-top:2px;flex-wrap:wrap}

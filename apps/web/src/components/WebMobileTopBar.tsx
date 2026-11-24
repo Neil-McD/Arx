@@ -1,8 +1,35 @@
-import { ArrowLeft, Hash, LockKeyhole, Settings } from "lucide-react";
+import { ArrowLeft, Hash, LockKeyhole, Search, Settings } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
+import { openGuideFromSearch } from "./guideSearch";
 import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
 import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
+
+// Shows the top-bar Search / Ask icon on community sub-pages where the
+// top-right slot is open (Knowledge, Brain, Events, Pods, Members, Analytics).
+// Stays hidden on Community Home (which already shows the full-width Search or
+// ask bar at the top of its menu), inside channels/pods (where the People/Pod
+// panel button lives), threads, Home/Agent, Settings, Discover, and public
+// visitor funnels.
+export function showsMobileTopBarSearch(args: {
+  mode: "agent" | "discover" | "community" | "settings";
+  rootPage: MobileRootPage;
+  hasActiveCommunity: boolean;
+  isCommunityHome?: boolean;
+  isThreadPage?: boolean;
+  communityDetailLabel?: string | null;
+  canOpenCommunitySelector?: boolean;
+}): boolean {
+  return (
+    args.mode === "community" &&
+    args.rootPage === "community" &&
+    args.hasActiveCommunity &&
+    !args.isCommunityHome &&
+    !args.isThreadPage &&
+    !args.communityDetailLabel &&
+    args.canOpenCommunitySelector !== false
+  );
+}
 
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community" | "settings";
@@ -82,6 +109,15 @@ export function WebMobileTopBar({
     !hasCommunityRail &&
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
+  const showSearch = showsMobileTopBarSearch({
+    mode,
+    rootPage,
+    hasActiveCommunity,
+    isCommunityHome,
+    isThreadPage,
+    communityDetailLabel,
+    canOpenCommunitySelector,
+  });
   const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
 
   const communitySelectorContent = (
@@ -192,6 +228,17 @@ export function WebMobileTopBar({
       </div>
 
       <div className="mobile-topbar-right">
+        {showSearch ? (
+          <button
+            type="button"
+            className="mobile-topbar-icon mobile-topbar-search"
+            aria-label="Search or ask"
+            title="Search or ask"
+            onClick={() => openGuideFromSearch()}
+          >
+            <Search aria-hidden="true" />
+          </button>
+        ) : null}
         {isCommunityHome && canOpenCommunitySettings && onOpenCommunitySettings ? (
           <button
             type="button"
