@@ -28,4 +28,13 @@ describe("the app's own \"are you sure?\"", () => {
       expect(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), file).not.toMatch(/window\.(confirm|alert|prompt)\(|[^.\w](confirm|alert|prompt)\(/);
     }
   });
+  it("centers the confirmation card without transform so @keyframes pop cannot push it off-screen", () => {
+    for (const file of ["apps/web/src/v1/kit.module.css", "scripts/design/build_v1_kit_css.py"]) {
+      const css = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      const match = css.match(/\.app \.askcard\{[^}]+\}/);
+      expect(match?.[0], file).toBeTruthy();
+      expect(match?.[0], file).not.toContain("translateX(");
+      expect(match?.[0], file).toContain("left:0;right:0;margin-inline:auto;");
+    }
+  });
 });
