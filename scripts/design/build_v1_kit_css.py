@@ -899,6 +899,7 @@ css += """
 .app .kinline-about{font-size:12.5px;color:var(--ink2)}.app .kinline-about.empty{color:var(--ink3)}
 .app .kinline-name:hover,.app .kinline-about:hover{background:var(--s2)}
 .app .kinline em{font-style:normal;font-size:12px;color:var(--ink3)}
+.app .kinline-meta{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .app .kinline-input{width:100%;padding:1px 4px;margin:-1px -4px;border:0;border-radius:5px;outline:0;box-shadow:inset 0 0 0 1.5px var(--accent);background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
 .app .kinline-cover{position:relative;overflow:hidden;padding:0;border:0;cursor:pointer;transition:filter .16s var(--ease)}.app .kinline-cover:hover{filter:brightness(1.2)}
 .app .kinline-cover-media{position:absolute;inset:0;width:100%;height:100%}
@@ -1227,7 +1228,6 @@ css += """
 .app .pfcommon p{margin:0;font-size:13px;line-height:1.5;color:var(--ink)}
 .app .pfc{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px}
 .app .pfc-i{width:26px;height:26px;flex:none;border-radius:7px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--s2);box-shadow:inset 0 0 0 1px var(--line);font-size:11.5px;font-weight:600;color:var(--ink2)}
-.app .pfc-i img{width:100%;height:100%;object-fit:cover;display:block}
 .app .pfc-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
 .app .pfc em{flex:none;font-style:normal;color:var(--ink3)}
 .app .pfc em::before{content:"·";margin-right:8px}

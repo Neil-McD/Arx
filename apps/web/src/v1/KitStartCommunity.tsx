@@ -15,6 +15,9 @@ export type KitStartCommunityProps = {
   titleId: string;
   hostName: string | null;
   hostAvatarUrl: string | null;
+  hostAvatarFocusX?: number | null;
+  hostAvatarFocusY?: number | null;
+  hostAvatarZoom?: number | null;
   isPaidSetup: boolean;
   hasSession: boolean;
   isDismissible: boolean;
@@ -52,7 +55,10 @@ export function startCommunityListingLine(input: { listed: boolean; hasPicture: 
 
 export type StartCardFacts = {
   slug: string; name: string; oneLiner: string; avatarUrl: string | null; bannerUrl: string | null;
+  avatarFocusX?: number | null; avatarFocusY?: number | null; avatarZoom?: number | null;
+  bannerFocusX?: number | null; bannerFocusY?: number | null; bannerZoom?: number | null;
   monthlyCents: number | null; hostName: string | null; hostAvatarUrl: string | null;
+  hostAvatarFocusX?: number | null; hostAvatarFocusY?: number | null; hostAvatarZoom?: number | null;
 };
 
 // The card Discover shows, from what has been typed so far.
@@ -62,14 +68,28 @@ export function startCardCommunity(facts: StartCardFacts): DiscoverCommunitySnap
     name: facts.name.trim() || "Your community",
     one_liner: facts.oneLiner.trim() || "Who it's for, in one line.",
     avatar_url: facts.avatarUrl,
+    avatar_focus_x: facts.avatarFocusX ?? null,
+    avatar_focus_y: facts.avatarFocusY ?? null,
+    avatar_zoom: facts.avatarZoom ?? null,
     banner_url: facts.bannerUrl,
+    banner_focus_x: facts.bannerFocusX ?? null,
+    banner_focus_y: facts.bannerFocusY ?? null,
+    banner_zoom: facts.bannerZoom ?? null,
     visibility: "published",
     created_at: "",
     updated_at: "",
     active_plan: facts.monthlyCents
       ? { name: "Membership", description: null, amount_base_units: String(facts.monthlyCents), currency: "usd", currency_decimals: 2, billing_period: "monthly" }
       : null,
-    host: facts.hostName ? { name: facts.hostName, avatar_url: facts.hostAvatarUrl } : null,
+    host: facts.hostName
+      ? {
+          name: facts.hostName,
+          avatar_url: facts.hostAvatarUrl,
+          avatar_focus_x: facts.hostAvatarFocusX ?? null,
+          avatar_focus_y: facts.hostAvatarFocusY ?? null,
+          avatar_zoom: facts.hostAvatarZoom ?? null,
+        }
+      : null,
     member_count: 1,
   };
 }
@@ -130,6 +150,7 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
   const card: StartCardFacts = {
     slug: props.slug, name: props.name, oneLiner: props.oneLiner, avatarUrl: props.avatarUrl, bannerUrl: props.bannerUrl,
     monthlyCents, hostName: props.hostName, hostAvatarUrl: props.hostAvatarUrl,
+    hostAvatarFocusX: props.hostAvatarFocusX ?? null, hostAvatarFocusY: props.hostAvatarFocusY ?? null, hostAvatarZoom: props.hostAvatarZoom ?? null,
   };
   const cardLine = step === 1
     ? "This is the card people see. It fills in as you go."

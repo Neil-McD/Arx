@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   clampCoverZoom,
   computeCoverFrameLayout,
@@ -22,6 +23,10 @@ type WebCommunityBannerEditorModalProps = {
   focusX: number;
   focusY: number;
   zoom: number;
+  title?: string;
+  imageAlt?: string;
+  hint?: string;
+  aspectRatio?: string;
   onChangeFocusX: (value: number) => void;
   onChangeFocusY: (value: number) => void;
   onChangeZoom: (value: number) => void;
@@ -43,6 +48,10 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
     focusX,
     focusY,
     zoom,
+    title = "Adjust banner framing",
+    imageAlt = "Community banner preview",
+    hint = "Drag the image to frame it inside the banner.",
+    aspectRatio,
     onChangeFocusX,
     onChangeFocusY,
     onChangeZoom,
@@ -78,6 +87,19 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
       setIsDragging(false);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [isOpen, onClose]);
 
   const layout = useMemo(
     () =>
@@ -147,11 +169,11 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
 
   if (!isOpen || !bannerUrl) return null;
 
-  return (
+  const modal = (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal banner-focus-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Adjust banner framing</div>
+          <div className="modal-title">{title}</div>
           <button className="modal-close" type="button" onClick={onClose} title="Close">
             ×
           </button>
@@ -161,6 +183,7 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
             <div
               ref={viewportRef}
               className={`banner-editor-viewport${isDragging ? " dragging" : ""}`}
+              style={aspectRatio ? { aspectRatio } : undefined}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerEnd}
@@ -169,13 +192,13 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
               {layout ? <img
                 className="banner-editor-image"
                 src={bannerUrl}
-                alt="Community banner preview"
+                alt={imageAlt}
                 draggable={false}
                 style={getCoverFrameImageStyle(layout)}
               /> : null}
             </div>
             <div className="create-community-hint banner-editor-hint">
-              Drag the image to frame it inside the banner.
+              {hint}
             </div>
           </div>
           <div className="banner-editor-controls">
@@ -205,4 +228,6 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
 }

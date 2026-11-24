@@ -156,11 +156,16 @@ function KnowledgeV1({ resources, context }: Props) {
           } : undefined}
           onSaveCourse={canManage ? async (id, patch) => {
             try {
-              // The cover is sent only when it changed; a new one is centred.
+              // The cover is sent only when it changed; framing-only edits skip re-uploading.
               const cover = patch.cover.kind === "keep" ? {}
                 : patch.cover.kind === "remove" ? { banner_storage_id: null, banner_url: null }
-                  : { banner_storage_id: (await prepareCloudCommunityBrandingField({ session: context.session, kind: "banner", nextValue: patch.cover.dataUrl })).storageId ?? null,
-                    banner_url: null, banner_focus_x: 0.5, banner_focus_y: 0.5, banner_zoom: 1 };
+                  : patch.cover.kind === "frame" ? {
+                    banner_focus_x: patch.cover.focusX,
+                    banner_focus_y: patch.cover.focusY,
+                    banner_zoom: patch.cover.zoom,
+                  }
+                    : { banner_storage_id: (await prepareCloudCommunityBrandingField({ session: context.session, kind: "banner", nextValue: patch.cover.dataUrl })).storageId ?? null,
+                      banner_url: null, banner_focus_x: patch.cover.focusX ?? 0.5, banner_focus_y: patch.cover.focusY ?? 0.5, banner_zoom: patch.cover.zoom ?? 1 };
               await saveCloudCommunityResourceModule({ session: context.session, moduleId: id, isPatch: true,
                 payload: { name: patch.name, description_md: patch.description || null, ...cover } });
               await resources.actions.retryRead("modules");

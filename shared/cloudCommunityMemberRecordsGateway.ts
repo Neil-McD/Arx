@@ -146,7 +146,15 @@ export type CloudMemberProfile = {
   // The reader manages members here (they may open the person's record).
   viewer_can_manage: boolean;
 };
-export type CloudMemberProfileCommunity = { id: string; slug: string; name: string; avatar_url: string | null };
+export type CloudMemberProfileCommunity = {
+  id: string;
+  slug: string;
+  name: string;
+  avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+};
 
 export async function listCloudCommunityMemberDirectory<SessionT>(params: { session: SessionT; communityId: string }): Promise<CloudMemberDirectoryRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);

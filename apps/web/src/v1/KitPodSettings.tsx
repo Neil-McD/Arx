@@ -3,7 +3,7 @@
 // hosts and the builder; Access (listed, seats, price) and Pod (rename,
 // delete) are the builder's, since they touch money and who sees what. The
 // same window will open from community settings' Pods section later.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   addCloudPodMember,
@@ -18,6 +18,7 @@ import {
 import { deleteCloudCommunityChannel, renameCloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 import { listCloudCommunityMemberDirectory, type CloudMemberDirectoryRow } from "../../../../shared/cloudCommunityMemberRecordsGateway";
 import { prepareCloudCommunityBrandingField } from "../../../../shared/cloudCommunityAdminGateway";
+import { clampCoverFocus, clampCoverZoom } from "../../../../shared/coverFrameUi";
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
@@ -25,6 +26,12 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import { Btn, cx, Icon, KitApp } from "./kit";
 import { askForPodPagePreview, goToPodsPath } from "./podMemory";
 import { podSettingsTabsFor, type PodSettingsTab } from "./podSettingsTabs";
+
+const WebCommunityBannerEditorModal = lazy(() =>
+  import("../components/WebCommunityBannerEditorModal").then((mod) => ({
+    default: mod.WebCommunityBannerEditorModal,
+  })),
+);
 
 const POD_COVER_CHAR_LIMIT = 1_200_000;
 const TAB_LABEL: Record<PodSettingsTab, string> = { pitch: "Pitch", people: "People", access: "Access", pod: "Pod" };
@@ -113,15 +120,28 @@ function Field(props: { label: string; help?: string; children: ReactNode }) {
 type Cover = { kind: "keep" } | { kind: "remove" } | { kind: "new"; dataUrl: string };
 function PitchTab(props: Props) {
   const { pod } = props;
+  const savedFocusX = clampCoverFocus(pod.cover?.focus_x);
+  const savedFocusY = clampCoverFocus(pod.cover?.focus_y);
+  const savedZoom = clampCoverZoom(pod.cover?.zoom);
   const [purpose, setPurpose] = useState(pod.purpose);
   const [bullets, setBullets] = useState(pod.what_you_get.join("\n"));
   const [about, setAbout] = useState(pod.about_md ?? "");
   const [cover, setCover] = useState<Cover>({ kind: "keep" });
+  const [focusX, setFocusX] = useState(savedFocusX);
+  const [focusY, setFocusY] = useState(savedFocusY);
+  const [zoom, setZoom] = useState(savedZoom);
+  const [framingOpen, setFramingOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const coverUrl = cover.kind === "new" ? cover.dataUrl : cover.kind === "keep" ? pod.cover?.url ?? null : null;
-  const dirty = purpose !== pod.purpose || bullets !== pod.what_you_get.join("\n") || about !== (pod.about_md ?? "") || cover.kind !== "keep";
+  const frameDirty = Boolean(coverUrl) && (
+    cover.kind === "new" ||
+    Math.abs(focusX - savedFocusX) > 0.0005 ||
+    Math.abs(focusY - savedFocusY) > 0.0005 ||
+    Math.abs(zoom - savedZoom) > 0.0005
+  );
+  const dirty = purpose !== pod.purpose || bullets !== pod.what_you_get.join("\n") || about !== (pod.about_md ?? "") || cover.kind !== "keep" || frameDirty;
   const save = async () => {
     if (busy) return;
     setBusy(true); setError(null); setSaved(false);
@@ -129,8 +149,16 @@ function PitchTab(props: Props) {
       const bannerStorageId = cover.kind === "new"
         ? (await prepareCloudCommunityBrandingField({ session: props.session, kind: "banner", nextValue: cover.dataUrl })).storageId ?? null
         : cover.kind === "remove" ? null : undefined;
-      await saveCloudPodDetails({ session: props.session, communityId: props.communityId, channelId: pod.channel_id,
-        purpose, whatYouGet: bullets.split("\n"), about, ...(bannerStorageId !== undefined ? { bannerStorageId } : {}) });
+      await saveCloudPodDetails({
+        session: props.session,
+        communityId: props.communityId,
+        channelId: pod.channel_id,
+        purpose,
+        whatYouGet: bullets.split("\n"),
+        about,
+        ...(bannerStorageId !== undefined ? { bannerStorageId } : {}),
+        ...(frameDirty ? { bannerFocusX: focusX, bannerFocusY: focusY, bannerZoom: zoom } : {}),
+      });
       setCover({ kind: "keep" });
       setSaved(true);
       props.onChanged();
@@ -160,11 +188,17 @@ function PitchTab(props: Props) {
                 if (!file) return;
                 if (!file.type.toLowerCase().startsWith("image/")) { setError("A cover is an image file."); return; }
                 void readBannerFileAsWideDataUrlWithinLimit(file, POD_COVER_CHAR_LIMIT)
-                  .then((dataUrl) => setCover({ kind: "new", dataUrl }))
+                  .then((dataUrl) => {
+                    setCover({ kind: "new", dataUrl });
+                    setFocusX(0.5);
+                    setFocusY(0.5);
+                    setZoom(1);
+                  })
                   .catch(() => setError("That image couldn't be used. Try another."));
               }} />
             </label>
-            {coverUrl ? <Btn txt small onClick={() => setCover({ kind: "remove" })}>Remove cover</Btn> : null}
+            {coverUrl ? <Btn small onClick={() => setFramingOpen(true)}>Reframe</Btn> : null}
+            {coverUrl ? <Btn txt small onClick={() => { setCover({ kind: "remove" }); setFocusX(0.5); setFocusY(0.5); setZoom(1); setFramingOpen(false); }}>Remove cover</Btn> : null}
           </div>
         </div>
         {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
@@ -182,9 +216,7 @@ function PitchTab(props: Props) {
             <StableFramedMedia
               className={cx("podset-cover")}
               imageUrl={coverUrl}
-              frame={cover.kind === "keep" && pod.cover
-                ? { focusX: pod.cover.focus_x, focusY: pod.cover.focus_y, zoom: pod.cover.zoom ?? 1 }
-                : { focusX: 0.5, focusY: 0.5, zoom: 1 }}
+              frame={{ focusX, focusY, zoom }}
               alt=""
               aria-hidden
             />
@@ -197,6 +229,26 @@ function PitchTab(props: Props) {
           {about.trim() ? <div className="pod-about">{about.trim().split(/\n{2,}/).map((part, index) => <p key={index}>{part}</p>)}</div> : null}
         </div>
       </aside>
+      {framingOpen && coverUrl ? (
+        <Suspense fallback={null}>
+          <WebCommunityBannerEditorModal
+            isOpen
+            bannerUrl={coverUrl}
+            focusX={focusX}
+            focusY={focusY}
+            zoom={zoom}
+            title="Adjust pod cover framing"
+            imageAlt="Pod cover preview"
+            hint="Drag the image to frame it inside the pod cover."
+            aspectRatio="16 / 7"
+            onChangeFocusX={setFocusX}
+            onChangeFocusY={setFocusY}
+            onChangeZoom={setZoom}
+            onDirty={() => setSaved(false)}
+            onClose={() => setFramingOpen(false)}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

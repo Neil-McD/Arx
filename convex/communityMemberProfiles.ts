@@ -172,9 +172,25 @@ export const getCommunityMemberProfile = query({
     const inCommon = mine ? [] : theirs
       .filter((fact) => (fact.body.toLowerCase().match(/[a-z]{5,}/g) ?? []).some((word) => myWords.has(word)))
       .map((fact) => fact.body).slice(0, 3);
-    const elsewhere = (rows: Array<{ id: string; slug: string; name: string; avatar_url: string | null }>) =>
+    const elsewhere = (rows: Array<{
+      id: string;
+      slug: string;
+      name: string;
+      avatar_url: string | null;
+      avatar_focus_x?: number;
+      avatar_focus_y?: number;
+      avatar_zoom?: number;
+    }>) =>
       rows.filter((row) => String(row.id) !== String(args.communityId))
-        .map((row) => ({ id: String(row.id), slug: row.slug, name: row.name, avatar_url: row.avatar_url ?? null }));
+        .map((row) => ({
+          id: String(row.id),
+          slug: row.slug,
+          name: row.name,
+          avatar_url: row.avatar_url ?? null,
+          avatar_focus_x: row.avatar_focus_x ?? 0.5,
+          avatar_focus_y: row.avatar_focus_y ?? 0.5,
+          avatar_zoom: row.avatar_zoom ?? 1,
+        }));
     const bio = String(detail?.bio ?? "").trim();
     // Those who manage members may also open this person's record (its own query,
     // which checks again); a member's reader never gets a word of it here.

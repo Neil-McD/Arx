@@ -73,6 +73,7 @@
     "check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_harness_isolation_contract_proof.ts",
     "preflight:cached-production-client-compatibility:stage": "node scripts/cached_production_client_compatibility_preflight.mjs",
     "check:forbidden-patterns": "node scripts/forbidden_patterns_guard.mjs",
+    "check:canonical-media-guard": "node scripts/canonical_media_guard.mjs",
     "check:invariants": "node scripts/run_invariants.mjs",
     "check:runtime-context-integrity-proof": "tsx scripts/runtime_context_integrity_proof.ts",
     "check:runtime-working-state-ledger-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_working_state_ledger_proof.ts",
