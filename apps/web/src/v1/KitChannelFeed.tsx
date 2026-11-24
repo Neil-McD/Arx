@@ -11,6 +11,7 @@ import {
   EditForm,
   InteractionAttachments,
   InteractionContent,
+  MemberArrivalsRow,
   MessageActions,
   ProfileHoverCard,
   actorLabel,
@@ -24,7 +25,6 @@ import {
 } from "../components/communityInteractionFeed";
 import { groupInteractionFeed } from "../components/groupInteractionFeed";
 import { EmojiPickerButton } from "../components/communityInteractionRowParts";
-import { MemberAvatarStack, type MemberAvatarStackFace } from "../components/MemberAvatarStack";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { ChannelFeedSkeleton } from "../components/WebLoadingSkeleton";
 import { Icon, cx } from "./kit";
@@ -131,38 +131,16 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
           );
         }
         if (segment.type === "member_arrivals") {
-          const actorIds = Array.from(new Set(
-            segment.events.map((event) => String(event.actor_user_id ?? "").trim()).filter(Boolean),
-          ));
-          const faces: MemberAvatarStackFace[] = actorIds.map((userId) => {
-            const profile = props.profilesByUserId[userId] ?? null;
-            const name = props.displayName(userId);
-            return {
-              user_id: userId,
-              display_name: name,
-              avatar_url: profile?.avatar_url ?? null,
-              avatar_focus_x: profile?.avatar_focus_x ?? null,
-              avatar_focus_y: profile?.avatar_focus_y ?? null,
-              avatar_zoom: profile?.avatar_zoom ?? null,
-              avatar_color: props.getAvatarColor(userId),
-              initials: props.getInitials(name),
-            };
-          });
-          const names = actorIds.map(props.displayName);
-          const label = names.length === 0
-            ? "A new member joined the community"
-            : names.length === 1
-              ? `${names[0]} joined the community`
-              : names.length === 2
-                ? `${names[0]} and ${names[1]} joined the community`
-                : `${names[0]}, ${names[1]}, and ${names.length - 2} ${names.length === 3 ? "other" : "others"} joined the community`;
           return (
             <Fragment key={segment.key}>
               {dividerBefore}
-              <div className="community-interaction-member-arrivals">
-                <MemberAvatarStack faces={faces} totalCount={faces.length} limit={4} decorative className="community-interaction-member-arrival-faces" imageLoading="lazy" />
-                <span>{label}</span>
-              </div>
+              <MemberArrivalsRow
+                events={segment.events}
+                profilesByUserId={props.profilesByUserId}
+                displayName={props.displayName}
+                getAvatarColor={props.getAvatarColor}
+                getInitials={props.getInitials}
+              />
             </Fragment>
           );
         }

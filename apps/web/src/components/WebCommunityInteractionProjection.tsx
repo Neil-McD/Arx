@@ -547,6 +547,47 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   // pinned post arrives and squeezing the feed.
   const hasPin = Boolean(props.pinnedRoot || props.activeChannel?.has_pinned_root);
   const openChannelNoColumn = props.activeChannel?.access_mode !== "restricted" && !hasPin && !channelDescription;
+  const buildMentionContext = (mentions: CommunityInteractionRootBundle["mentions"] | undefined) => ({
+    mentions: mentions ?? [],
+    displayName: props.displayName,
+    profilesByUserId: props.profilesByUserId,
+    currentUserId: props.currentUserId,
+    onOpenProfile: props.onOpenProfile,
+    onMessageUser: props.onMessageUser,
+    getAvatarColor: props.getAvatarColor,
+    getInitials: props.getInitials,
+    communityAgentDisplayName: props.activeCommunityName,
+  });
+  const buildActorHoverCard = (
+    actorUserId: string | null | undefined,
+    actorAgentKey: string | null | undefined,
+    fallbackId: string,
+    label: string,
+  ) => ({
+    userId: actorUserId ?? null,
+    label,
+    seed: actorUserId ?? actorAgentKey ?? fallbackId,
+    profile: actorUserId ? props.profilesByUserId[actorUserId] ?? null : null,
+    getAvatarColor: props.getAvatarColor,
+    getInitials: props.getInitials,
+    currentUserId: props.currentUserId,
+    onOpenProfile: props.onOpenProfile,
+    onMessageUser: props.onMessageUser,
+  });
+  const selectedRootHoverCard = selectedRoot
+    ? buildActorHoverCard(selectedRoot.root.actor_user_id, selectedRoot.root.actor_agent_key, selectedRoot.root.id, selectedRootLabel)
+    : null;
+  const renderTyping = (rootId: string | null) => (
+    <TypingIndicator
+      users={(props.typingPresence?.users ?? []).filter((user) =>
+        user.user_id !== props.currentUserId && (rootId ? user.root_id === rootId : !user.root_id),
+      )}
+      countCapped={Boolean(props.typingPresence?.total_count_capped)}
+      displayName={props.displayName}
+      getAvatarColor={props.getAvatarColor}
+      getInitials={props.getInitials}
+    />
+  );
 
   return (
     <>
@@ -652,17 +693,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             <span aria-hidden="true">↓</span> New messages
           </button>
         ) : null}
-        {!props.floatingComposers ? (
-          <TypingIndicator
-            users={(props.typingPresence?.users ?? []).filter(
-              (user) => user.user_id !== props.currentUserId && !user.root_id,
-            )}
-            countCapped={Boolean(props.typingPresence?.total_count_capped)}
-            displayName={props.displayName}
-            getAvatarColor={props.getAvatarColor}
-            getInitials={props.getInitials}
-          />
-        ) : null}
+        {!props.floatingComposers ? renderTyping(null) : null}
         {props.mainComposer ? (
           <div
             className="community-interaction-main-composer"
@@ -677,17 +708,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               isMainComposerFocusedRef.current = false;
             }}
           >
-            {props.floatingComposers ? (
-              <TypingIndicator
-                users={(props.typingPresence?.users ?? []).filter(
-                  (user) => user.user_id !== props.currentUserId && !user.root_id,
-                )}
-                countCapped={Boolean(props.typingPresence?.total_count_capped)}
-                displayName={props.displayName}
-                getAvatarColor={props.getAvatarColor}
-                getInitials={props.getInitials}
-              />
-            ) : null}
+            {props.floatingComposers ? renderTyping(null) : null}
             {props.mainComposer}
           </div>
         ) : null}
@@ -734,40 +755,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 {selectedRoot.root.actor_type === "community_agent" ? (
                   <span className="community-interaction-guide-avatar" aria-hidden="true"><Icon name="spark" /></span>
                 ) : (
-                  <ProfileHoverCard
-                    userId={selectedRoot.root.actor_user_id}
-                    label={selectedRootLabel}
-                    seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
-                    profile={
-                      selectedRoot.root.actor_user_id
-                        ? props.profilesByUserId[selectedRoot.root.actor_user_id] ?? null
-                        : null
-                    }
-                    getAvatarColor={props.getAvatarColor}
-                    getInitials={props.getInitials}
-                    currentUserId={props.currentUserId}
-                    onOpenProfile={props.onOpenProfile}
-                    onMessageUser={props.onMessageUser}
-                  />
+                  <ProfileHoverCard {...selectedRootHoverCard!} />
                 )}
                 <div className="community-interaction-thread-anchor-content">
                   <div className="community-interaction-meta-row">
-                    <ProfileHoverCard
-                      userId={selectedRoot.root.actor_user_id}
-                      label={selectedRootLabel}
-                      seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
-                      profile={
-                        selectedRoot.root.actor_user_id
-                          ? props.profilesByUserId[selectedRoot.root.actor_user_id] ?? null
-                          : null
-                      }
-                      getAvatarColor={props.getAvatarColor}
-                      getInitials={props.getInitials}
-                      currentUserId={props.currentUserId}
-                      onOpenProfile={props.onOpenProfile}
-                      onMessageUser={props.onMessageUser}
-                      triggerClassName="community-interaction-author-trigger"
-                    >
+                    <ProfileHoverCard {...selectedRootHoverCard!} triggerClassName="community-interaction-author-trigger">
                       <span className="community-interaction-author">{selectedRootLabel}</span>
                     </ProfileHoverCard>
                     {selectedRootBadge ? (
@@ -788,17 +780,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     fromGuide={selectedRoot.root.actor_type === "community_agent"}
                     text={selectedRootText}
                     renderTextWithLinks={props.renderTextWithLinks}
-                    mentionContext={{
-                      mentions: selectedRoot.mentions ?? [],
-                      displayName: props.displayName,
-                      profilesByUserId: props.profilesByUserId,
-                      currentUserId: props.currentUserId,
-                      onOpenProfile: props.onOpenProfile,
-                      onMessageUser: props.onMessageUser,
-                      getAvatarColor: props.getAvatarColor,
-                      getInitials: props.getInitials,
-                      communityAgentDisplayName: props.activeCommunityName,
-                    }}
+                    mentionContext={buildMentionContext(selectedRoot.mentions)}
                     afterBody={(
                       <InteractionAttachments
                         attachments={selectedRoot.attachments}
@@ -870,6 +852,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   );
                   const isEditingReply = editing?.type === "reply" && editing.id === reply.id;
                   const isNewReply = repliesLoadedOnce.current && !seenReplyIds.current.has(reply.id);
+                  const replyHoverCard = buildActorHoverCard(reply.actor_user_id, reply.actor_agent_key, reply.id, label);
                   return (
                     <div key={reply.id} data-actor-type={reply.actor_type} className={`community-interaction-reply${isNewReply ? " is-new" : ""}${interactionMentionsViewer(bundle.mentions, props.currentUserId, reply.actor_user_id) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}>
                       {bundle.pending ? null : (
@@ -905,32 +888,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       {reply.actor_type === "community_agent" ? (
                         <span className="community-interaction-guide-avatar" aria-hidden="true"><Icon name="spark" /></span>
                       ) : (
-                        <ProfileHoverCard
-                          userId={reply.actor_user_id}
-                          label={label}
-                          seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
-                          profile={profile}
-                          getAvatarColor={props.getAvatarColor}
-                          getInitials={props.getInitials}
-                          currentUserId={props.currentUserId}
-                          onOpenProfile={props.onOpenProfile}
-                          onMessageUser={props.onMessageUser}
-                        />
+                        <ProfileHoverCard {...replyHoverCard} />
                       )}
                       <div className="community-interaction-reply-content">
                         <div className="community-interaction-meta-row">
-                          <ProfileHoverCard
-                            userId={reply.actor_user_id}
-                            label={label}
-                            seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
-                            profile={profile}
-                            getAvatarColor={props.getAvatarColor}
-                            getInitials={props.getInitials}
-                            currentUserId={props.currentUserId}
-                            onOpenProfile={props.onOpenProfile}
-                            onMessageUser={props.onMessageUser}
-                            triggerClassName="community-interaction-author-trigger"
-                          >
+                          <ProfileHoverCard {...replyHoverCard} triggerClassName="community-interaction-author-trigger">
                             <span className="community-interaction-author">{label}</span>
                           </ProfileHoverCard>
                           {badge ? <span className="community-interaction-badge">{badge}</span> : null}
@@ -952,17 +914,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                               fromGuide={reply.actor_type === "community_agent"}
                               text={body}
                               renderTextWithLinks={props.renderTextWithLinks}
-                              mentionContext={{
-                                mentions: bundle.mentions ?? [],
-                                displayName: props.displayName,
-                                profilesByUserId: props.profilesByUserId,
-                                currentUserId: props.currentUserId,
-                                onOpenProfile: props.onOpenProfile,
-                                onMessageUser: props.onMessageUser,
-                                getAvatarColor: props.getAvatarColor,
-                                getInitials: props.getInitials,
-                                communityAgentDisplayName: props.activeCommunityName,
-                              }}
+                              mentionContext={buildMentionContext(bundle.mentions)}
                               afterBody={(
                                 <InteractionAttachments
                                   attachments={bundle.attachments}
@@ -1013,30 +965,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               </div>
             )}
           </div>
-          {!props.floatingComposers ? (
-            <TypingIndicator
-              users={(props.typingPresence?.users ?? []).filter(
-                (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
-              )}
-              countCapped={Boolean(props.typingPresence?.total_count_capped)}
-              displayName={props.displayName}
-              getAvatarColor={props.getAvatarColor}
-              getInitials={props.getInitials}
-            />
-          ) : null}
+          {!props.floatingComposers ? renderTyping(selectedRoot.root.id) : null}
           {props.drawerComposer ? (
             <div className="community-interaction-drawer-composer" ref={drawerComposerRef}>
-              {props.floatingComposers ? (
-                <TypingIndicator
-                  users={(props.typingPresence?.users ?? []).filter(
-                    (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
-                  )}
-                  countCapped={Boolean(props.typingPresence?.total_count_capped)}
-                  displayName={props.displayName}
-                  getAvatarColor={props.getAvatarColor}
-                  getInitials={props.getInitials}
-                />
-              ) : null}
+              {props.floatingComposers ? renderTyping(selectedRoot.root.id) : null}
               {props.drawerComposer}
             </div>
           ) : null}
@@ -1068,15 +1000,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 fromGuide={props.pinnedRoot.root.actor_type === "community_agent"}
                 text={pinnedText}
                 renderTextWithLinks={props.renderTextWithLinks}
-                mentionContext={{
-                  mentions: props.pinnedRoot.mentions ?? [],
-                  displayName: props.displayName,
-                  profilesByUserId: props.profilesByUserId,
-                  currentUserId: props.currentUserId,
-                  getAvatarColor: props.getAvatarColor,
-                  getInitials: props.getInitials,
-                  communityAgentDisplayName: props.activeCommunityName,
-                }}
+                mentionContext={buildMentionContext(props.pinnedRoot.mentions)}
               />
             ) : null,
             onOpen: () => props.onSelectRoot(props.pinnedRoot!.root.id),

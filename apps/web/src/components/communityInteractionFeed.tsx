@@ -1040,6 +1040,46 @@ export type CommunityInteractionFeedListProps = WebCommunityInteractionProjectio
   onCancelEdit: () => void;
 };
 
+export function MemberArrivalsRow(props: {
+  events: CommunityInteractionFeedListProps["activityEvents"];
+  profilesByUserId: Record<string, UserProfile>;
+  displayName: (userId: string) => string;
+  getAvatarColor: (seed: string) => string;
+  getInitials: (value: string) => string;
+}) {
+  const actorIds = Array.from(new Set(
+    props.events.map((event) => String(event.actor_user_id ?? "").trim()).filter(Boolean),
+  ));
+  const faces: MemberAvatarStackFace[] = actorIds.map((userId) => {
+    const profile = props.profilesByUserId[userId] ?? null;
+    const name = props.displayName(userId);
+    return {
+      user_id: userId,
+      display_name: name,
+      avatar_url: profile?.avatar_url ?? null,
+      avatar_focus_x: profile?.avatar_focus_x ?? null,
+      avatar_focus_y: profile?.avatar_focus_y ?? null,
+      avatar_zoom: profile?.avatar_zoom ?? null,
+      avatar_color: props.getAvatarColor(userId),
+      initials: props.getInitials(name),
+    };
+  });
+  const names = actorIds.map(props.displayName);
+  const label = names.length === 0
+    ? "A new member joined the community"
+    : names.length === 1
+      ? `${names[0]} joined the community`
+      : names.length === 2
+        ? `${names[0]} and ${names[1]} joined the community`
+        : `${names[0]}, ${names[1]}, and ${names.length - 2} ${names.length === 3 ? "other" : "others"} joined the community`;
+  return (
+    <div className="community-interaction-member-arrivals">
+      <MemberAvatarStack faces={faces} totalCount={faces.length} limit={4} decorative className="community-interaction-member-arrival-faces" imageLoading="lazy" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function CommunityInteractionFeedList(props: CommunityInteractionFeedListProps) {
   const seenRootIds = useRef<Set<string>>(new Set());
   const rootsLoadedOnce = useRef(false);
@@ -1124,47 +1164,16 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                   );
                 }
                 if (segment.type === "member_arrivals") {
-                  const actorIds = Array.from(new Set(
-                    segment.events
-                      .map((event) => String(event.actor_user_id ?? "").trim())
-                      .filter(Boolean),
-                  ));
-                  const faces: MemberAvatarStackFace[] = actorIds.map((userId) => {
-                    const profile = props.profilesByUserId[userId] ?? null;
-                    const name = props.displayName(userId);
-                    return {
-                      user_id: userId,
-                      display_name: name,
-                      avatar_url: profile?.avatar_url ?? null,
-                      avatar_focus_x: profile?.avatar_focus_x ?? null,
-                      avatar_focus_y: profile?.avatar_focus_y ?? null,
-                      avatar_zoom: profile?.avatar_zoom ?? null,
-                      avatar_color: props.getAvatarColor(userId),
-                      initials: props.getInitials(name),
-                    };
-                  });
-                  const names = actorIds.map(props.displayName);
-                  const label = names.length === 0
-                    ? "A new member joined the community"
-                    : names.length === 1
-                      ? `${names[0]} joined the community`
-                      : names.length === 2
-                        ? `${names[0]} and ${names[1]} joined the community`
-                        : `${names[0]}, ${names[1]}, and ${names.length - 2} ${names.length === 3 ? "other" : "others"} joined the community`;
                   return (
                     <Fragment key={segment.key}>
                       {dividerBefore}
-                      <div className="community-interaction-member-arrivals">
-                        <MemberAvatarStack
-                          faces={faces}
-                          totalCount={faces.length}
-                          limit={4}
-                          decorative
-                          className="community-interaction-member-arrival-faces"
-                          imageLoading="lazy"
-                        />
-                        <span>{label}</span>
-                      </div>
+                      <MemberArrivalsRow
+                        events={segment.events}
+                        profilesByUserId={props.profilesByUserId}
+                        displayName={props.displayName}
+                        getAvatarColor={props.getAvatarColor}
+                        getInitials={props.getInitials}
+                      />
                     </Fragment>
                   );
                 }
