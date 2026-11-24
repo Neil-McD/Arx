@@ -2,6 +2,7 @@
 // (docs/specs/proactive-community-agent-v0.md, slice 1). Loaded on demand for
 // community owners only so members never download it.
 import { useEffect, useState } from "react";
+import { formatMicrosUsd } from "../../../../shared/agentRoiSummary";
 import {
   MEMBER_COACH_REASONS,
   MEMBER_COACH_REASON_LABELS,
@@ -46,6 +47,7 @@ export function CommunityMemberCoachSettingsSection(props: {
     autoReasons: MemberCoachReason[];
     autoReplyEnabled: boolean;
     threadFollowupEnabled: boolean;
+    weeklyDigestEnabled: boolean;
   }) => {
     if (saving) return;
     setSaving(true);
@@ -61,6 +63,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           autoReasons: next.autoReasons,
           autoReplyEnabled: next.autoReplyEnabled,
           threadFollowupEnabled: next.threadFollowupEnabled,
+          weeklyDigestEnabled: next.weeklyDigestEnabled,
         }),
       );
     } catch {
@@ -74,17 +77,19 @@ export function CommunityMemberCoachSettingsSection(props: {
   const autoReasons = settings?.auto_reasons ?? [];
   const autoReplyEnabled = Boolean(settings?.auto_reply_enabled);
   const threadFollowupEnabled = settings ? settings.thread_followup_enabled : true;
+  const weeklyDigestEnabled = settings ? settings.weekly_digest_enabled : true;
   const toggleAutoReason = (reason: MemberCoachReason, checked: boolean) => {
     const next = checked
       ? [...new Set<MemberCoachReason>([...autoReasons, reason])]
       : autoReasons.filter((item) => item !== reason);
-    void save({ enabled, autoReasons: next, autoReplyEnabled, threadFollowupEnabled });
+    void save({ enabled, autoReasons: next, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled });
   };
 
   const statusNote = settings && settings.sent_this_week > 0
     ? ` ${settings.sent_this_week} sent this week.`
     : "";
   const heartbeat = settings?.heartbeat;
+  const impact = settings?.impact;
   const tierLabel =
     heartbeat?.community_tier === "paused"
       ? "Paused · $0 AI until new activity"
@@ -96,6 +101,16 @@ export function CommunityMemberCoachSettingsSection(props: {
   const countsSummary = heartbeat?.counts
     ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up ($0 AI)`
     : "Updates automatically on the next heartbeat scan.";
+  const spendSummary = impact
+    ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)} monthly allowance used (${impact.percent_used}%) · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
+    : null;
+  const winBackSummary = impact
+    ? impact.contacted_30d > 0
+      ? impact.reengagement_truncated
+        ? `${impact.reengaged_30d} of ${impact.contacted_30d} sampled members checked in came back in the last 30 days.`
+        : `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
+      : "No proactive check-ins sent in the last 30 days yet."
+    : null;
 
   return (
     <SettingsGroup label="Proactive guide">
@@ -107,6 +122,31 @@ export function CommunityMemberCoachSettingsSection(props: {
           <span className="settings-v1-value">{heartbeat?.community_tier === "paused" ? "Paused" : "Live"}</span>
         </SettingsRow>
       ) : null}
+      {impact && spendSummary ? (
+        <SettingsRow
+          label="Monthly allowance & impact"
+          help={`${spendSummary} ${winBackSummary ?? ""}`}
+        >
+          <span className="settings-v1-value">{impact.percent_used}%</span>
+        </SettingsRow>
+      ) : null}
+      <SettingsRow
+        label="Weekly community digest ($0 AI)"
+        help={
+          weeklyDigestEnabled
+            ? "Sends a zero-AI-cost weekly highlights email (new posts, lessons, and activity) so quiet and handed-off members stay in the loop and return. Quiet weeks are skipped automatically."
+            : "Weekly community digest emails are paused for this community."
+        }
+      >
+        <SettingsSwitch
+          label="Weekly community digest ($0 AI)"
+          checked={weeklyDigestEnabled}
+          disabled={!settings || saving}
+          onChange={(checked) =>
+            void save({ enabled, autoReasons, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled: checked })
+          }
+        />
+      </SettingsRow>
       <SettingsRow
         label="Follow up in active threads"
         help={
@@ -120,7 +160,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           checked={threadFollowupEnabled}
           disabled={!settings || saving}
           onChange={(checked) =>
-            void save({ enabled, autoReasons, autoReplyEnabled, threadFollowupEnabled: checked })
+            void save({ enabled, autoReasons, autoReplyEnabled, threadFollowupEnabled: checked, weeklyDigestEnabled })
           }
         />
       </SettingsRow>
@@ -137,7 +177,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           checked={autoReplyEnabled}
           disabled={!settings || saving}
           onChange={(checked) =>
-            void save({ enabled, autoReasons, autoReplyEnabled: checked, threadFollowupEnabled })
+            void save({ enabled, autoReasons, autoReplyEnabled: checked, threadFollowupEnabled, weeklyDigestEnabled })
           }
         />
       </SettingsRow>
@@ -156,7 +196,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           checked={enabled}
           disabled={!settings || saving}
           onChange={(checked) =>
-            void save({ enabled: checked, autoReasons, autoReplyEnabled, threadFollowupEnabled })
+            void save({ enabled: checked, autoReasons, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled })
           }
         />
       </SettingsRow>

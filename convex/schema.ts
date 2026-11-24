@@ -2032,6 +2032,8 @@ export default defineSchema({
     autoReplyEnabled: v.optional(v.boolean()),
     // Automatic thread follow-up after the guide replies (absent means enabled).
     threadFollowupEnabled: v.optional(v.boolean()),
+    // Zero-AI weekly community digest emails for member re-engagement (absent means enabled).
+    weeklyDigestEnabled: v.optional(v.boolean()),
     communityHeartbeatTier: v.optional(
       v.union(
         v.literal("active"),

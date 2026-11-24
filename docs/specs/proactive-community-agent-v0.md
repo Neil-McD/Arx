@@ -48,6 +48,12 @@ One pipeline joins them:
 - **24-hour unseen email nudge:** a sent proactive check-in still unanswered
   after 24 hours triggers one preference-gated, deduped email nudge back into
   the member's private thread.
+- **Zero-AI weekly digest re-engagement & spend visibility (Nov 24):** the
+  recurring weekly community digest runs on a bounded cron at $0 AI cost
+  (skipping quiet weeks and respecting both founder community toggle and member
+  email preferences) so Cold handed-off members stay in the loop and return.
+  Founders see monthly AI allowance usage split by surface (live chats,
+  proactive heartbeats, briefs) plus 30-day member win-back counts in Settings.
 - **Cards are members only** (no task cards in v0).
 - **The agent drafts the journey and rhythm** from the community's description;
   the founder edits in plain words.
