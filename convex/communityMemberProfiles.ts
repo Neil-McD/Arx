@@ -49,6 +49,20 @@ async function listedMemberships(ctx: any, communityId: any) {
   return [...newest.values()].filter((row) => LISTED_STATES.has(row.state) && !blocked.has(String(row.userId))).slice(0, DIRECTORY_CAP);
 }
 
+// One person's standing here, read directly (never through the directory's
+// cap): their newest membership, if it is still in and they are not blocked.
+async function listedMembershipOf(ctx: any, communityId: any, subjectUserId: any) {
+  const [rows, block] = await Promise.all([
+    ctx.db.query("communityMemberships")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", subjectUserId)).take(20),
+    ctx.db.query("communityBlocks")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", subjectUserId)).first(),
+  ]);
+  if (block && !block.liftedAt) return null;
+  const newest = rows.reduce((best: any, row: any) => (!best || best.createdAt < row.createdAt ? row : best), null);
+  return newest && LISTED_STATES.has(newest.state) ? newest : null;
+}
+
 export type MemberDirectoryRow = {
   membership_id: string | null;
   user_id: string;
@@ -115,8 +129,8 @@ export const getCommunityMemberProfile = query({
     if (args.membershipId) {
       const membership = await ctx.db.get(args.membershipId);
       if (!membership || String(membership.communityId) !== String(args.communityId)) return null;
-      const listed = (await listedMemberships(ctx, args.communityId)).some((row) => String(row._id) === String(membership._id));
-      if (!listed) return null;
+      const listed = await listedMembershipOf(ctx, args.communityId, membership.userId);
+      if (!listed || String(listed._id) !== String(membership._id)) return null;
       subjectId = membership.userId;
       role = membership.role;
       membershipId = String(membership._id);
@@ -128,7 +142,7 @@ export const getCommunityMemberProfile = query({
       if (!target) return null;
       if (String(target._id) !== String(community.ownerId)) {
         // Someone who has left still has posts here; they have no profile here.
-        const membership = (await listedMemberships(ctx, args.communityId)).find((row) => String(row.userId) === String(target._id));
+        const membership = await listedMembershipOf(ctx, args.communityId, target._id);
         if (!membership) return null;
         subjectId = membership.userId;
         role = membership.role;
