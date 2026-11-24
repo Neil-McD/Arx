@@ -37,3 +37,11 @@ export async function moveBrainNote(params: { session: unknown; communityId: str
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
   return await client.mutation("communityMemory:fileCommunityNote" as any, { authSubject, communityId: params.communityId, slug: params.slug, about: params.about });
 }
+
+// The map came back with its lesson links behind the lessons: ask for them to
+// be worked out again (convex/communityLessonLinks.ts). It does nothing when
+// they are already fresh or a rebuild is running.
+export async function refreshBrainLessonLinks(params: { session: unknown; communityId: string }): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
+  await client.mutation("communityLessonLinks:refreshLessonLinks" as any, { authSubject, communityId: params.communityId });
+}

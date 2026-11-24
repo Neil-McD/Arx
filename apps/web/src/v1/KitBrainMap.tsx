@@ -223,6 +223,11 @@ export function KitBrainMap(props: {
       })}
       {/* Branches: what was learned, off its lesson, subject or pod. */}
       {layout.points.map((p) => <path key={`b-${p.id}`} className={cx(dimAll && !lit(p) ? "brain-branch dim" : "brain-branch")} d={curve(p.anchor, p, hashBend(p.id))} strokeWidth={page ? 0.7 + Math.min(1, p.point.use / 10) * 0.8 : 0.7} />)}
+      {/* A lesson that names another lesson or a course. */}
+      {layout.links.map((link) => {
+        const hot = props.selectedId && link.ids.includes(props.selectedId);
+        return <path key={`m-${link.ids.join("|")}`} className={cx(hot ? "brain-mention hot" : dimAll ? "brain-mention dim" : "brain-mention")} d={curve(link.a, link.b, 0.16)} />;
+      })}
       {/* Synapses: what answers read together. */}
       {layout.arcs.map((arc) => {
         const hot = props.selectedId && arc.ids.includes(props.selectedId);

@@ -297,3 +297,18 @@ test("the small map's lens keeps every direction and order, pulls far things in,
   // The same map always draws the same.
   expect(lensLayout(layout, box)).toEqual(small);
 });
+
+test("a lesson that names another lesson or a course sits closer to it, and the link is drawn", () => {
+  const plain = layoutBrain(map({ courses: 4 }), NOW);
+  const linked = map({ courses: 4 });
+  linked.mentions = [{ from: "resource:c0l0", to: "resource:c2l0" }, { from: "resource:c1l1", to: "course:c3" }, { from: "resource:c1l1", to: "resource:gone" }];
+  const layout = layoutBrain(linked, NOW);
+  const gap = (l: ReturnType<typeof layoutBrain>) => {
+    const a = l.lessons.find((x) => x.id === "resource:c0l0")!, b = l.lessons.find((x) => x.id === "resource:c2l0")!;
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  expect(gap(layout)).toBeLessThan(gap(plain));
+  // Two links drawn; the one to something not on the map is dropped.
+  expect(layout.links.map((link) => link.ids.join(">"))).toEqual(["resource:c0l0>resource:c2l0", "resource:c1l1>course:c3"]);
+  expect(plain.links).toEqual([]);
+});

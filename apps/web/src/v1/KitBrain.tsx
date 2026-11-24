@@ -6,10 +6,11 @@
 // the community reads it, and a member is sent only the names of what was
 // learned from posts they can read. With fewer than five learned things
 // there is no map, only the names.
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { brainCanDrawMap, brainFact, brainHasContent, latestLearned, type BrainMap } from "../../../../shared/communityBrain";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
+import { refreshBrainLessonLinks } from "../../../../shared/cloudCommunityBrainGateway";
 import { cx } from "./kit";
 import { KitBrainMap } from "./KitBrainMap";
 import { PanelAction, PanelLearned, PanelPart } from "./KitPanel";
@@ -18,6 +19,10 @@ import { PanelAction, PanelLearned, PanelPart } from "./KitPanel";
 // (pass labSession as the session).
 const LAB_SESSION = {};
 const labMaps = new Map<string, BrainMap>();
+// When each community's lesson links were last asked for, so a stale map
+// asks once, not on every render or from every panel.
+const linkRefreshAsked = new Map<string, number>();
+const LINK_REFRESH_EVERY_MS = 60_000;
 export const labSession: unknown = LAB_SESSION;
 export function rememberBrainMap(communityId: string, podChannelId: string | null, map: BrainMap): void {
   labMaps.set(`${communityId}:${podChannelId ?? ""}`, map);
@@ -34,6 +39,16 @@ export function useBrainMap(session: unknown, communityId: string | null, podCha
   const subject = session && !lab ? resolveAuthSubject(session as AuthSessionLike) : null;
   const { data, error } = useLiveQuery<BrainMap>(session, "communityBrain:getBrainMap",
     subject && communityId ? { authSubject: subject, communityId, ...(podChannelId ? { podChannelId } : {}) } : null);
+  // Its lesson links are behind the lessons: ask once for them to be worked
+  // out again; the map updates by itself when they are.
+  const stale = !lab && !podChannelId && Boolean(data?.mentions_stale);
+  useEffect(() => {
+    if (!stale || !communityId) return;
+    const last = linkRefreshAsked.get(communityId) ?? 0;
+    if (Date.now() - last < LINK_REFRESH_EVERY_MS) return;
+    linkRefreshAsked.set(communityId, Date.now());
+    void refreshBrainLessonLinks({ session, communityId }).catch(() => undefined);
+  }, [stale, communityId, session]);
   if (lab) return { map: labMaps.get(`${communityId ?? ""}:${podChannelId ?? ""}`) ?? null, failed: false, settled: true };
   // settled: it has answered (a map, or the news that it can't be read).
   return { map: data ?? null, failed: Boolean(error) && !data, settled: data !== undefined || Boolean(error) };
