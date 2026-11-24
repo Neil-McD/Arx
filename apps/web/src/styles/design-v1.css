@@ -3814,9 +3814,10 @@
 }
 :root[data-design="v1"] .analytics-v1-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px 12px;
   margin-top: 34px;
 }
 :root[data-design="v1"] .analytics-v1-chart { margin-top: 10px; }
@@ -3831,6 +3832,7 @@
    header line, on the page's left edge. An empty row takes no room. */
 :root[data-design="v1"] .community-page-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin: 0 0 24px;
@@ -4283,8 +4285,25 @@
   max-width: 100%;
 }
 
+:root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-row {
+  gap: 12px;
+}
+
 :root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-row-control {
   flex-wrap: wrap;
+}
+
+:root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+:root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-segment {
+  min-width: 44px;
+  padding: 0 10px;
+  white-space: nowrap;
+  flex: none;
 }
 
 /* Members on a phone, two layers as on a narrow window: picking someone

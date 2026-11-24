@@ -665,6 +665,20 @@ export function KitClassroom(props: {
               <summary aria-label={`More for ${lesson.title}`}><Icon name="more" /></summary>
               <div role="menu">
                 <button type="button" role="menuitem" onClick={(event) => { closeMenu(event); startRenamingLesson(lesson); }}><Icon name="pen" />Rename</button>
+                {open.lessons.length > 1 && index > 0 ? (
+                  <button type="button" role="menuitem" onClick={(event) => {
+                    closeMenu(event);
+                    const next = courseOrderAfterMove(open.lessons.map((entry) => entry.id), index, -1);
+                    if (next) void editingTools.reorder(open.course.id, next);
+                  }}><Icon name="back" />Move up</button>
+                ) : null}
+                {open.lessons.length > 1 && index < open.lessons.length - 1 ? (
+                  <button type="button" role="menuitem" onClick={(event) => {
+                    closeMenu(event);
+                    const next = courseOrderAfterMove(open.lessons.map((entry) => entry.id), index, 1);
+                    if (next) void editingTools.reorder(open.course.id, next);
+                  }}><Icon name="arrow" />Move down</button>
+                ) : null}
                 {editingTools.move ? courses.filter((entry) => entry.course.id !== open.course.id).map((entry) => (
                   <button key={entry.course.id} type="button" role="menuitem" onClick={(event) => { closeMenu(event); void moveLesson(lesson.id, entry.course.id); }}><Icon name="arrow" /><span>Move to {entry.course.name}</span></button>
                 )) : null}
@@ -989,11 +1003,17 @@ export function KitClassroom(props: {
             const at = courses.findIndex((entry) => entry.course.id === course.id);
             return (
               <div key={course.id} className={cx("kcard", courseDrag.held === course.id && "gap")} {...(canDrag ? courseDrag.item(course.id) : null)}>
-              {/* Held by its grip and dropped where it should go; the arrow keys move it one place. */}
+              {/* Held by its grip and dropped where it should go; on touch/narrow screens, simple one-tap move buttons replace drag. */}
               {canDrag ? (
-                <button type="button" className={cx("kgrip", "oncard")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
-                  onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
-                  {...courseDrag.grip(course.id)}><GripDots /></button>
+                <>
+                  <button type="button" className={cx("kgrip", "oncard")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
+                    onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
+                    {...courseDrag.grip(course.id)}><GripDots /></button>
+                  <div className={cx("kcard-order")} role="group" aria-label={`Reorder ${course.name}`}>
+                    <button type="button" aria-label={`Move ${course.name} earlier`} disabled={movingCourse || at <= 0} onClick={() => void moveCourse(at, -1)}>↑</button>
+                    <button type="button" aria-label={`Move ${course.name} later`} disabled={movingCourse || at >= courses.length - 1} onClick={() => void moveCourse(at, 1)}>↓</button>
+                  </div>
+                </>
               ) : null}
               {props.canManage && course.module_status === "draft" ? <span className={cx("kdraft")}>Draft</span> : null}
               <button type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
