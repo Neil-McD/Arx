@@ -315,7 +315,7 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     const w = hub.label.length * HUB_CHAR_W;
     const right = ux >= -0.2;
     let spot = at;
-    for (let out = far + 20; out <= far + 20 + 16 * 6; out += 16) {
+    for (let out = far + 12; out <= far + 12 + 10 * 8; out += 10) {
       spot = { x: at.x + ux * out, y: at.y + uy * out };
       // Straight up or down, the name is centred on its cluster.
       if (Math.abs(ux) < 0.45) spot = { x: spot.x + (right ? -w / 2 : w / 2), y: spot.y };

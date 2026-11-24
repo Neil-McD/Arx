@@ -98,7 +98,7 @@ export function KitBrainMap(props: {
     }
     return gaps;
   }, [layout, page]);
-  const lessonR = (lesson: { r: number; courseKey: string }) => page ? Math.max(1.8, lesson.r * 1.3 * Math.min(1, scale))
+  const lessonR = (lesson: { r: number; courseKey: string }) => page ? Math.max(1.8, lesson.r * 1.05 * Math.min(1, scale))
     : Math.max(1.2, Math.min(smallDot * 0.9, (lessonGap.get(lesson.courseKey) ?? Infinity) / 2.8));
   const podR = 44 * scale;
   // The marks' sizes: the page's, or a panel's in pixels.
@@ -215,7 +215,7 @@ export function KitBrainMap(props: {
       </defs>
 
       {/* Fibres: the courses. */}
-      {layout.fibres.map((fibre) => <path key={fibre.key} className={cx(`brain-fibre ${fibre.kind}${dimAll ? " dim" : ""}`)} d={fibrePath(fibre.path)} />)}
+      {layout.fibres.map((fibre) => <path key={fibre.key} className={cx(`brain-fibre ${fibre.kind}${dimAll ? " dim" : ""}`)} d={fibre.kind === "trunk" ? curve(fibre.path[0], fibre.path[1], hashBend(fibre.key) * 0.7) : fibrePath(fibre.path)} />)}
       {/* Spokes to subjects and pods. */}
       {layout.hubs.filter((hub) => hub.kind !== "course").map((hub) => {
         const gap = reading === "gaps" && gapKeys.has(hub.key);
@@ -270,7 +270,7 @@ export function KitBrainMap(props: {
       })}
 
       {/* A course's own node, in the middle of its lessons. */}
-      {layout.courses.map((course) => <circle key={`c-${course.key}`} className={cx(dimAll ? "brain-course dim" : "brain-course")} cx={course.x} cy={course.y} r={page ? 4.2 * dot : Math.max(1.6, smallDot * 0.8)} />)}
+      {layout.courses.map((course) => <circle key={`c-${course.key}`} className={cx(dimAll ? "brain-course dim" : "brain-course")} cx={course.x} cy={course.y} r={page ? 5.4 * dot : Math.max(2.2, smallDot * 1.15)} />)}
 
       {/* Hubs: subjects and pods are cells; a course is named outside its ring. */}
       {layout.hubs.map((hub) => {
