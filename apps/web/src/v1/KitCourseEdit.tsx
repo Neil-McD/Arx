@@ -60,6 +60,7 @@ export function KitCourseInline(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [framingOpen, setFramingOpen] = useState(false);
+  const [pendingFrame, setPendingFrame] = useState<{ focusX: number; focusY: number; zoom: number } | null>(null);
   const [frameDraft, setFrameDraft] = useState(() => ({
     focusX: clampCoverFocus(course.banner_focus_x),
     focusY: clampCoverFocus(course.banner_focus_y),
@@ -79,6 +80,7 @@ export function KitCourseInline(props: {
       if (result.ok) { setField(null); props.onRenameEnd?.(); } else setError(result.message);
     } finally {
       setBusy(false);
+      setPendingFrame(null);
     }
   };
   const openFraming = () => {
@@ -104,6 +106,7 @@ export function KitCourseInline(props: {
     if (!frameDirtyRef.current || !course.banner_url) return;
     frameDirtyRef.current = false;
     const next = frameDraftRef.current;
+    setPendingFrame(next);
     void send(courseEditPatch({
       name: course.name,
       description: course.description_md ?? "",
@@ -151,7 +154,7 @@ export function KitCourseInline(props: {
           <StableFramedMedia
             className={cx("kinline-cover-media")}
             imageUrl={course.banner_url}
-            frame={framingOpen ? frameDraft : {
+            frame={framingOpen ? frameDraft : pendingFrame ?? {
               focusX: course.banner_focus_x,
               focusY: course.banner_focus_y,
               zoom: course.banner_zoom,

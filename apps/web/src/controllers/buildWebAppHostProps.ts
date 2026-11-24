@@ -82,12 +82,16 @@ export function buildWebAppGlobalOverlayProps(params: {
   completePendingCommunityLaunch: any;
   appToast: Parameters<typeof buildWebGlobalOverlayHostProps>[0]["appToast"];
 }) {
+  const hostProfile = params.canonicalSessionUserId
+    ? (params.savedProfilesByUserId[params.canonicalSessionUserId] ?? null)
+    : null;
   const hostName = params.canonicalSessionUserId
     ? params.displayName(params.canonicalSessionUserId)
     : null;
-  const hostAvatarUrl = params.canonicalSessionUserId
-    ? (params.savedProfilesByUserId[params.canonicalSessionUserId]?.avatar_url ?? null)
-    : null;
+  const hostAvatarUrl = hostProfile?.avatar_url ?? null;
+  const hostAvatarFocusX = hostProfile?.avatar_focus_x ?? null;
+  const hostAvatarFocusY = hostProfile?.avatar_focus_y ?? null;
+  const hostAvatarZoom = hostProfile?.avatar_zoom ?? null;
 
   return buildWebGlobalOverlayHostProps({
     communityModalHostProps: {
@@ -97,6 +101,9 @@ export function buildWebAppGlobalOverlayProps(params: {
         ...params.communityModalHostProps.createModal,
         hostName,
         hostAvatarUrl,
+        hostAvatarFocusX,
+        hostAvatarFocusY,
+        hostAvatarZoom,
       },
     },
     builderOfferProps: {
@@ -113,6 +120,9 @@ export function buildWebAppGlobalOverlayProps(params: {
           community: params.pendingLaunchCommunity,
           hostName,
           hostAvatarUrl,
+          hostAvatarFocusX,
+          hostAvatarFocusY,
+          hostAvatarZoom,
           ensureSession: params.ensureSession,
           onComplete: params.completePendingCommunityLaunch,
         }

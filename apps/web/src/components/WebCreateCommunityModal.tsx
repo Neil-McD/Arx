@@ -35,6 +35,9 @@ type WebCreateCommunityModalProps = {
   onChangeSlugEdited: (value: boolean) => void;
   hostName?: string | null;
   hostAvatarUrl?: string | null;
+  hostAvatarFocusX?: number | null;
+  hostAvatarFocusY?: number | null;
+  hostAvatarZoom?: number | null;
 };
 
 export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
@@ -53,6 +56,9 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
         titleId="builder-create-title"
         hostName={props.hostName ?? null}
         hostAvatarUrl={props.hostAvatarUrl ?? null}
+        hostAvatarFocusX={props.hostAvatarFocusX ?? null}
+        hostAvatarFocusY={props.hostAvatarFocusY ?? null}
+        hostAvatarZoom={props.hostAvatarZoom ?? null}
         isPaidSetup={props.isPaidSetup}
         hasSession={props.hasSession}
         isDismissible={props.isDismissible}

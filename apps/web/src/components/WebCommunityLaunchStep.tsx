@@ -12,13 +12,22 @@ type LaunchCommunity = {
   name: string;
   one_liner?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url?: string | null;
+  banner_focus_x?: number | null;
+  banner_focus_y?: number | null;
+  banner_zoom?: number | null;
 };
 
 export type WebCommunityLaunchStepProps = {
   community: LaunchCommunity;
   hostName: string | null;
   hostAvatarUrl: string | null;
+  hostAvatarFocusX?: number | null;
+  hostAvatarFocusY?: number | null;
+  hostAvatarZoom?: number | null;
   ensureSession: () => Promise<unknown | null>;
   // Marks setup finished and opens the community.
   onComplete: () => Promise<boolean>;
@@ -145,10 +154,19 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
           name: props.community.name,
           oneLiner: String(props.community.one_liner ?? ""),
           avatarUrl: props.community.avatar_url ?? null,
+          avatarFocusX: props.community.avatar_focus_x ?? null,
+          avatarFocusY: props.community.avatar_focus_y ?? null,
+          avatarZoom: props.community.avatar_zoom ?? null,
           bannerUrl: props.community.banner_url ?? null,
+          bannerFocusX: props.community.banner_focus_x ?? null,
+          bannerFocusY: props.community.banner_focus_y ?? null,
+          bannerZoom: props.community.banner_zoom ?? null,
           monthlyCents,
           hostName: props.hostName,
           hostAvatarUrl: props.hostAvatarUrl,
+          hostAvatarFocusX: props.hostAvatarFocusX ?? null,
+          hostAvatarFocusY: props.hostAvatarFocusY ?? null,
+          hostAvatarZoom: props.hostAvatarZoom ?? null,
         }}
         listed={listed}
         saving={saving}

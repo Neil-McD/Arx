@@ -75,6 +75,9 @@ type CommunityCreateModalHostProps = {
   // Design v1's preview card: who will host it (set where the profile is known).
   hostName?: string | null;
   hostAvatarUrl?: string | null;
+  hostAvatarFocusX?: number | null;
+  hostAvatarFocusY?: number | null;
+  hostAvatarZoom?: number | null;
 };
 
 export type WebCommunityModalHostPropsShape = {
