@@ -1,4 +1,5 @@
 import { House, Inbox } from "lucide-react";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebMobileBottomRailProps = {
@@ -28,7 +29,6 @@ function PhoneTabs({ communityShell }: WebMobileBottomRailProps) {
   if (inConversation) return null;
   const community = communityShell.activeCommunity;
   const communityName = String(community?.name ?? "").trim() || "Community";
-  const logo = String(community?.avatar_url ?? "").trim();
   const unread = communityShell.directMessagesUnreadCount;
   const unreadDisplay = unread > 99 ? "99+" : String(unread);
   const hasCommunityAttention = Boolean(
@@ -62,9 +62,19 @@ function PhoneTabs({ communityShell }: WebMobileBottomRailProps) {
         {tab(
           "community",
           communityName,
-          logo ? <img className="mobile-phone-tab-logo" src={logo} alt="" /> : (
-            <span className="mobile-phone-tab-logo is-letter" aria-hidden="true">{communityName.slice(0, 1).toUpperCase()}</span>
-          ),
+          <CommunityAvatar
+            communityId={community?.id}
+            visualIdentity={community?.visual_identity}
+            name={communityName}
+            imageUrl={community?.avatar_url}
+            focusX={community?.avatar_focus_x}
+            focusY={community?.avatar_focus_y}
+            zoom={community?.avatar_zoom}
+            className="mobile-phone-tab-logo"
+            fallbackClassName="is-letter"
+            alt=""
+            aria-hidden
+          />,
           {
             ariaLabel: hasCommunityAttention ? `${communityName}, updates available` : communityName,
             badge: hasCommunityAttention ? <span className="mobile-phone-tab-dot" aria-hidden="true" /> : null,

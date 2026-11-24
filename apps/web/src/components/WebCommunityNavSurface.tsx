@@ -93,9 +93,12 @@ export function WebCommunityNavSurface({
             onOpenDiscover={communityShell.onOpenDiscover}
             onCreateCommunity={communityShell.onOpenCommunityCreateCta}
             cover={{
+              communityId: communityShell.activeCommunity.id,
+              visualIdentity: communityShell.activeCommunity.visual_identity,
               bannerUrl: communityShell.activeCommunity.banner_url ?? null,
               focusX: communityShell.activeCommunity.banner_focus_x,
               focusY: communityShell.activeCommunity.banner_focus_y,
+              zoom: communityShell.activeCommunity.banner_zoom,
             }}
           />
         ) : null

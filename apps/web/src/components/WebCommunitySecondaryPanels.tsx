@@ -5,8 +5,8 @@ import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import type { WebCommunityAnalyticsSection as WebCommunityAnalyticsSectionType } from "./WebCommunityAnalyticsSection";
 import type { WebCommunityAiAgentSection as WebCommunityAiAgentSectionType } from "./WebCommunityAiAgentSection";
-import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
-import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
+import type { WebCommunityAvatarEditorModal as WebCommunityAvatarEditorModalType } from "./WebCommunityAvatarEditorModal";
+import type { WebCommunityBannerEditorModal as WebCommunityBannerEditorModalType } from "./WebCommunityBannerEditorModal";
 import type { WebCommunityEventsSection as WebCommunityEventsSectionType } from "./WebCommunityEventsSection";
 import type { WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
 import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
@@ -35,6 +35,12 @@ const WebCommunityKnowledgePanel = lazy(() =>
 const WebCommunitySettingsSection = lazy(() =>
   resilientImport(() => import("./WebCommunitySettingsSection")).then((module) => ({ default: module.WebCommunitySettingsSection })),
 );
+const WebCommunityAvatarEditorModal = lazy(() =>
+  resilientImport(() => import("./WebCommunityAvatarEditorModal")).then((module) => ({ default: module.WebCommunityAvatarEditorModal })),
+);
+const WebCommunityBannerEditorModal = lazy(() =>
+  resilientImport(() => import("./WebCommunityBannerEditorModal")).then((module) => ({ default: module.WebCommunityBannerEditorModal })),
+);
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
@@ -55,13 +61,13 @@ export type WebCommunitySecondaryPanelsProps = {
     setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
-  avatarEditor: Omit<ComponentProps<typeof WebCommunityAvatarEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
+  avatarEditor: Omit<ComponentProps<typeof WebCommunityAvatarEditorModalType>, "isOpen" | "onDirty" | "onClose"> & {
     isSettingsTabActive: boolean;
     isCommunityAvatarFocusModalOpen: boolean;
     markCommunitySettingsDirty: () => void;
     setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
   };
-  bannerEditor: Omit<ComponentProps<typeof WebCommunityBannerEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
+  bannerEditor: Omit<ComponentProps<typeof WebCommunityBannerEditorModalType>, "isOpen" | "onDirty" | "onClose"> & {
     isSettingsTabActive: boolean;
     isCommunityBannerFocusModalOpen: boolean;
     markCommunitySettingsDirty: () => void;
@@ -97,14 +103,14 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
     },
   };
 
-  const avatarEditorModalProps: ComponentProps<typeof WebCommunityAvatarEditorModal> = {
+  const avatarEditorModalProps: ComponentProps<typeof WebCommunityAvatarEditorModalType> = {
     ...props.avatarEditor,
     isOpen: props.avatarEditor.isSettingsTabActive && props.avatarEditor.isCommunityAvatarFocusModalOpen,
     onDirty: props.avatarEditor.markCommunitySettingsDirty,
     onClose: () => props.avatarEditor.setIsCommunityAvatarFocusModalOpen(false),
   };
 
-  const bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModal> = {
+  const bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModalType> = {
     ...props.bannerEditor,
     isOpen: props.bannerEditor.isSettingsTabActive && props.bannerEditor.isCommunityBannerFocusModalOpen,
     onDirty: props.bannerEditor.markCommunitySettingsDirty,
@@ -116,8 +122,16 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "settings" ? (
         <>
           {renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
-          <WebCommunityAvatarEditorModal {...avatarEditorModalProps} />
-          <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
+          {avatarEditorModalProps.isOpen ? (
+            <Suspense fallback={null}>
+              <WebCommunityAvatarEditorModal {...avatarEditorModalProps} />
+            </Suspense>
+          ) : null}
+          {bannerEditorModalProps.isOpen ? (
+            <Suspense fallback={null}>
+              <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
+            </Suspense>
+          ) : null}
         </>
       ) : null}
 

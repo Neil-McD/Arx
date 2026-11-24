@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
 import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
 import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityTypes";
+import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
 import { buildPolynetMcpSetupForOrigin } from "../../../../../shared/polynetMcpSetup";
 import { tryCopyTextToClipboard } from "../../../../../shared/chatUi";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
@@ -169,7 +170,18 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
             href={`/c/${community.slug}`}
             onClick={() => captureProductAnalyticsEvent("community_card_opened", { community_id: community.id, placement: "home" })}
           >
-            <span className="showcase-banner" style={{ backgroundImage: `url(${community.banner_url})` }} />
+            <StableFramedMedia
+              className="showcase-banner"
+              imageUrl={community.banner_url}
+              frame={{
+                focusX: community.banner_focus_x,
+                focusY: community.banner_focus_y,
+                zoom: community.banner_zoom,
+              }}
+              alt=""
+              loading="lazy"
+              aria-hidden
+            />
             <span className="showcase-body">
               <strong>{community.name}</strong>
               <span>{community.one_liner}</span>
