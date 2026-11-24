@@ -26,6 +26,7 @@ import { groupInteractionFeed } from "../components/groupInteractionFeed";
 import { EmojiPickerButton } from "../components/communityInteractionRowParts";
 import { MemberAvatarStack, type MemberAvatarStackFace } from "../components/MemberAvatarStack";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
+import { ChannelFeedSkeleton } from "../components/WebLoadingSkeleton";
 import { Icon, cx } from "./kit";
 
 function KitReactions(props: {
@@ -85,12 +86,7 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
     );
   }
   if (props.isLoadingRoots && props.roots.length === 0 && props.activityEvents.length === 0) {
-    return (
-      <div key="loading" className="community-interaction-state" aria-live="polite">
-        <div>Loading messages…</div>
-        <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
-      </div>
-    );
+    return <ChannelFeedSkeleton key="loading" />;
   }
 
   if (props.roots.length === 0 && props.activityEvents.length === 0) {

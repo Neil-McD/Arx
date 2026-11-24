@@ -5,6 +5,7 @@ import {
   Users,
 } from "lucide-react";
 import { CommunityThreadHeader } from "./CommunityThreadHeader";
+import { ThreadRepliesSkeleton } from "./WebLoadingSkeleton";
 import { KitApp, usePhoneLayout } from "../v1/kit";
 import { KitChannelFeed } from "../v1/KitChannelFeed";
 import {
@@ -807,10 +808,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 <button type="button" onClick={() => props.onRetryReplies(selectedRoot.root.id)}>Retry</button>
               </div>
             ) : props.isLoadingReplies && props.replies.length === 0 ? (
-              <div className="community-interaction-state" aria-live="polite">
-                <div>Loading replies...</div>
-                <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
-              </div>
+              <ThreadRepliesSkeleton />
             ) : props.replies.length === 0 ? (
               <div className="community-interaction-drawer-empty">No replies yet.</div>
             ) : (

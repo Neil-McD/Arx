@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChannelFeedSkeleton } from "./WebLoadingSkeleton";
 
 export function WebCommunityInteractionBootstrap(props: {
   mainComposer?: ReactNode;
@@ -11,25 +12,11 @@ export function WebCommunityInteractionBootstrap(props: {
       aria-live="polite"
     >
       <div className="community-interaction-main">
-        <div className="community-chat-page-loading-shell">
-          <div
-            className={`community-chat-page-loading-card${
-              props.quiet ? " is-quiet" : ""
-            }`}
-          >
-            {!props.quiet ? (
-              <>
-                <div className="community-chat-page-loading-title">Opening community…</div>
-                <div className="community-chat-page-loading-copy">
-                  Resolving the selected community and preparing chat.
-                </div>
-              </>
-            ) : null}
-            <div
-              className="community-chat-page-loading-progress web-skeleton-pill"
-              aria-hidden="true"
-            />
-          </div>
+        <div className="community-interaction-feed-scroll">
+          {!props.quiet ? (
+            <span className="web-loading-sr">Opening community…</span>
+          ) : null}
+          <ChannelFeedSkeleton label={null} quiet={props.quiet} />
         </div>
         <div className="community-interaction-main-composer">
           {props.mainComposer ?? (
