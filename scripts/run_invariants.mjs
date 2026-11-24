@@ -12,6 +12,7 @@ const INVARIANT_CHECKS = [
   "check:no-uncalled-functions",
   "check:convex-client-operation-integrity-proof",
   "check:forbidden-patterns",
+  "check:canonical-media-guard",
   "check:one-community-lens",
   "check:one-agent-identity",
 

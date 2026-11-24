@@ -14,7 +14,8 @@ const { WebAccountMenu } = await import("../apps/web/src/components/WebAccountMe
 const { MentionAutocompleteMenu } = await import("../apps/web/src/components/communityMentionAutocomplete");
 const { PanelPeople } = await import("../apps/web/src/v1/KitPanel");
 const { CourseCover } = await import("../apps/web/src/v1/KitClassroom");
-const { KitCourseInline } = await import("../apps/web/src/v1/KitCourseEdit");
+const { KitCourseInline, courseEditPatch } = await import("../apps/web/src/v1/KitCourseEdit");
+const { WebCommunityBannerEditorModal } = await import("../apps/web/src/components/WebCommunityBannerEditorModal");
 import { clampCoverFocus, clampCoverZoom, computeCoverFrameLayout, measureFramedMediaViewport } from "../shared/coverFrameUi";
 import type { DiscoverCommunitySnapshot } from "../shared/communityTypes";
 import type { WebCommunityShellProps } from "../apps/web/src/components/webShellChromeShared";
@@ -341,5 +342,53 @@ describe("canonical community logos, banners, and user avatars", () => {
     );
     expect(inlineHtml).toContain("stable-framed-media");
     expect(inlineHtml).not.toContain("background-image");
+    expect(inlineHtml).toContain("Reframe cover");
+
+    const inlineNoCoverHtml = renderToStaticMarkup(
+      React.createElement(KitCourseInline, {
+        course: { ...course, banner_url: null },
+        coverClassName: "kcover klist-cover knocover",
+        stats: "2 of 4 done",
+        onSave: async () => ({ ok: true as const }),
+      }),
+    );
+    expect(inlineNoCoverHtml).not.toContain("Reframe cover");
+
+    expect(
+      courseEditPatch({
+        name: "  Foundations  ",
+        description: "Start here.",
+        cover: { kind: "frame", focusX: 0.25, focusY: 0.75, zoom: 1.8 },
+      }),
+    ).toEqual({
+      name: "Foundations",
+      description: "Start here.",
+      cover: { kind: "frame", focusX: 0.25, focusY: 0.75, zoom: 1.8 },
+    });
+  });
+
+  it("supports custom title, hint, and aspectRatio in WebCommunityBannerEditorModal for pod and course covers", () => {
+    const podModalHtml = renderToStaticMarkup(
+      React.createElement(WebCommunityBannerEditorModal, {
+        isOpen: true,
+        bannerUrl: "https://cdn.example.com/pod-cover.png",
+        focusX: 0.4,
+        focusY: 0.6,
+        zoom: 1.5,
+        title: "Adjust pod cover framing",
+        imageAlt: "Pod cover preview",
+        hint: "Drag the image to frame it inside the pod cover.",
+        aspectRatio: "16 / 7",
+        onChangeFocusX: () => {},
+        onChangeFocusY: () => {},
+        onChangeZoom: () => {},
+        onDirty: () => {},
+        onClose: () => {},
+      }),
+    );
+    expect(podModalHtml).toContain("Adjust pod cover framing");
+    expect(podModalHtml).toContain("Drag the image to frame it inside the pod cover.");
+    expect(podModalHtml).toContain("aspect-ratio:16 / 7");
+    expect(podModalHtml).toContain('value="150"');
   });
 });

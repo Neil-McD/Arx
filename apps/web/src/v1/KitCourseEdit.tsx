@@ -1,14 +1,25 @@
 // Design system v1, Knowledge: a course's name, the line about it and its
-// cover are changed in the page. No pop-up, and no crop step: a new cover is
-// centred.
-import { useRef, useState } from "react";
+// cover are changed in the page. A new cover starts centred and can be
+// reframed on demand through the shared cover framing modal.
+import { lazy, Suspense, useRef, useState } from "react";
+import { clampCoverFocus, clampCoverZoom } from "../../../../shared/coverFrameUi";
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { cx, Icon } from "./kit";
 
+const WebCommunityBannerEditorModal = lazy(() =>
+  import("../components/WebCommunityBannerEditorModal").then((mod) => ({
+    default: mod.WebCommunityBannerEditorModal,
+  })),
+);
+
 const COVER_DATA_URL_CHAR_LIMIT = 1_200_000;
 
-export type CourseCoverChange = { kind: "keep" } | { kind: "remove" } | { kind: "new"; dataUrl: string };
+export type CourseCoverChange =
+  | { kind: "keep" }
+  | { kind: "remove" }
+  | { kind: "new"; dataUrl: string; focusX?: number; focusY?: number; zoom?: number }
+  | { kind: "frame"; focusX: number; focusY: number; zoom: number };
 export type CourseEditPatch = { name: string; description: string; cover: CourseCoverChange };
 
 // What Save sends: the trimmed words, and the cover only as a change.
@@ -48,6 +59,15 @@ export function KitCourseInline(props: {
   const [value, setValue] = useState(props.startRenaming ? course.name : "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [framingOpen, setFramingOpen] = useState(false);
+  const [frameDraft, setFrameDraft] = useState(() => ({
+    focusX: clampCoverFocus(course.banner_focus_x),
+    focusY: clampCoverFocus(course.banner_focus_y),
+    zoom: clampCoverZoom(course.banner_zoom),
+  }));
+  const frameDirtyRef = useRef(false);
+  const frameDraftRef = useRef(frameDraft);
+  frameDraftRef.current = frameDraft;
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const send = async (patch: CourseEditPatch | null) => {
@@ -60,6 +80,35 @@ export function KitCourseInline(props: {
     } finally {
       setBusy(false);
     }
+  };
+  const openFraming = () => {
+    if (!course.banner_url || busy) return;
+    const initial = {
+      focusX: clampCoverFocus(course.banner_focus_x),
+      focusY: clampCoverFocus(course.banner_focus_y),
+      zoom: clampCoverZoom(course.banner_zoom),
+    };
+    frameDraftRef.current = initial;
+    frameDirtyRef.current = false;
+    setFrameDraft(initial);
+    setError(null);
+    setFramingOpen(true);
+  };
+  const updateFrameDraft = (patch: Partial<{ focusX: number; focusY: number; zoom: number }>) => {
+    const next = { ...frameDraftRef.current, ...patch };
+    frameDraftRef.current = next;
+    setFrameDraft(next);
+  };
+  const closeFraming = () => {
+    setFramingOpen(false);
+    if (!frameDirtyRef.current || !course.banner_url) return;
+    frameDirtyRef.current = false;
+    const next = frameDraftRef.current;
+    void send(courseEditPatch({
+      name: course.name,
+      description: course.description_md ?? "",
+      cover: { kind: "frame", focusX: next.focusX, focusY: next.focusY, zoom: next.zoom },
+    }));
   };
   const commit = () => {
     if (!field || busy) return;
@@ -102,7 +151,7 @@ export function KitCourseInline(props: {
           <StableFramedMedia
             className={cx("kinline-cover-media")}
             imageUrl={course.banner_url}
-            frame={{
+            frame={framingOpen ? frameDraft : {
               focusX: course.banner_focus_x,
               focusY: course.banner_focus_y,
               zoom: course.banner_zoom,
@@ -116,10 +165,50 @@ export function KitCourseInline(props: {
         {field === "name" ? input("Course name", 80) : <button type="button" className={cx("kinline-name")} onClick={() => start("name")} title="Rename the course">{course.name}</button>}
         {field === "about" ? input("One line about this course", 160)
           : <button type="button" className={cx("kinline-about", about ? "" : "empty")} onClick={() => start("about")}>{about || "Add a line about it"}</button>}
-        <em role={error ? "alert" : undefined}>{error ?? (props.onOpenStats && props.stats
-          ? <StatsButton stats={props.stats} open={Boolean(props.statsOpen)} onClick={props.onOpenStats} />
-          : props.stats)}</em>
+        <em className={cx("kinline-meta")} role={error ? "alert" : undefined}>
+          {error ?? (
+            <>
+              {props.onOpenStats && props.stats
+                ? <StatsButton stats={props.stats} open={Boolean(props.statsOpen)} onClick={props.onOpenStats} />
+                : props.stats}
+              {course.banner_url ? (
+                <>
+                  {props.stats ? <span aria-hidden="true">·</span> : null}
+                  <button
+                    type="button"
+                    className={cx("kinline-stats")}
+                    disabled={busy}
+                    onClick={openFraming}
+                    title="Adjust course cover framing"
+                  >
+                    Reframe cover
+                  </button>
+                </>
+              ) : null}
+            </>
+          )}
+        </em>
       </span>
+      {framingOpen && course.banner_url ? (
+        <Suspense fallback={null}>
+          <WebCommunityBannerEditorModal
+            isOpen
+            bannerUrl={course.banner_url}
+            focusX={frameDraft.focusX}
+            focusY={frameDraft.focusY}
+            zoom={frameDraft.zoom}
+            title="Adjust course cover framing"
+            imageAlt="Course cover preview"
+            hint="Drag the image to frame it inside the course cover."
+            aspectRatio="16 / 9"
+            onChangeFocusX={(focusX) => updateFrameDraft({ focusX })}
+            onChangeFocusY={(focusY) => updateFrameDraft({ focusY })}
+            onChangeZoom={(zoom) => updateFrameDraft({ zoom })}
+            onDirty={() => { frameDirtyRef.current = true; }}
+            onClose={closeFraming}
+          />
+        </Suspense>
+      ) : null}
     </>
   );
 }
