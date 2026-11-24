@@ -6964,20 +6964,23 @@
    @Polynet mention, and inline like it too, so a chip never makes its line
    taller or shifts the words around it. */
 .entity-chip {
-  display: inline;
-  padding: 1px 5px;
+  /* One whole box that sits in the sentence at the sentence's own weight and
+     moves to the next line as a unit. Only a name longer than the line wraps
+     inside it. Its progress or time lives in the card, not on the chip. */
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 5px;
   border-radius: 5px;
   background: var(--accent-agent-surface, rgba(167, 139, 250, 0.12));
   color: var(--accent-agent-foreground, #c4b2fc);
-  font-weight: 500;
+  font-weight: inherit;
+  line-height: 1.3;
+  vertical-align: baseline;
   text-decoration: none;
-  /* A long name wraps like the words around it; the tint carries onto each
-     line (box-decoration-break), so nothing runs past a narrow column. */
   white-space: normal;
   overflow-wrap: anywhere;
   cursor: pointer;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
 }
 .entity-chip:hover,
 .entity-chip:focus-visible {
@@ -7002,15 +7005,9 @@
    opens the thing. */
 .entity-chip-wrap {
   position: relative;
-  display: inline;
-}
-.entity-chip-fact {
-  margin-left: 5px;
-  padding-left: 5px;
-  border-left: 1px solid color-mix(in srgb, var(--accent-agent, #a78bfa) 30%, transparent);
-  opacity: 0.8;
-  font-weight: 400;
-  white-space: nowrap;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
 }
 .entity-card {
   position: absolute;
@@ -7069,6 +7066,38 @@
   height: 100%;
   border-radius: 2px;
   background: color-mix(in srgb, var(--text-primary) 72%, transparent);
+}
+.entity-card-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px -6px 0;
+}
+.entity-card-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.entity-card-item:hover,
+.entity-card-item:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+.entity-card-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entity-card-item-fact {
+  flex: none;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: 12px;
+  white-space: nowrap;
 }
 .entity-card-action {
   margin-top: 2px;
