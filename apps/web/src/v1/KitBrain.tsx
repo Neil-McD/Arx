@@ -7,11 +7,11 @@
 // learned from posts they can read. With fewer than five learned things
 // there is no map, only the names.
 import { type ReactNode } from "react";
-import { brainFact, latestLearned, type BrainMap } from "../../../../shared/communityBrain";
+import { brainCanDrawMap, brainFact, brainHasContent, latestLearned, type BrainMap } from "../../../../shared/communityBrain";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import { cx } from "./kit";
-import { BRAIN_MAP_MIN_POINTS, KitBrainMap } from "./KitBrainMap";
+import { KitBrainMap } from "./KitBrainMap";
 import { PanelAction, PanelLearned, PanelPart } from "./KitPanel";
 
 // The design lab draws panels from examples: it puts one here to be found
@@ -52,7 +52,7 @@ export function learnedWhen(iso: string, now: number): string {
 // The small map: no words, nothing in it to pick. With somewhere to open,
 // the whole map is the way there.
 export function PanelBrainMap(props: { map: BrainMap; now: number; onOpen?: () => void; label?: string }) {
-  if (props.map.points.length < BRAIN_MAP_MIN_POINTS) return null;
+  if (!brainCanDrawMap(props.map)) return null;
   const drawing = <KitBrainMap map={props.map} size="panel" now={props.now} />;
   return props.onOpen
     ? <button type="button" className={cx("brainmini")} onClick={props.onOpen} aria-label={props.label ?? "Open the community brain"}>{drawing}</button>
@@ -60,10 +60,10 @@ export function PanelBrainMap(props: { map: BrainMap; now: number; onOpen?: () =
 }
 
 // The panels' "community brain" part: the count, the small map, the latest
-// names, and Open. Nothing learned and nothing more to say: no part.
+// names, and Open. Nothing in the brain and nothing more to say: no part.
 export function PanelBrain(props: { map: BrainMap | null; now: number; max?: number; onOpen?: () => void; children?: ReactNode }) {
   const { map } = props;
-  if (!map || (!map.counts.learned && !props.children)) return null;
+  if (!map || (!brainHasContent(map) && !props.children)) return null;
   return (
     <PanelPart label="The community brain" action={props.onOpen ? <PanelAction onClick={props.onOpen}>Open</PanelAction> : null}>
       <PanelBrainMap map={map} now={props.now} onOpen={props.onOpen} />

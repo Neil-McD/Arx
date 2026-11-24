@@ -35,7 +35,8 @@ import { PanelBrain, labSession, rememberBrainMap } from "./KitBrain";
 import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
-import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
+import { KitBrainMap, type BrainReading } from "./KitBrainMap";
+import { brainCanDrawMap } from "../../../../shared/communityBrain";
 import { KitBrainPageFrame, KitBrainPageView, NoteActions } from "./KitBrainPage";
 import { KitEventsList, eventClock } from "./KitEventsList";
 import { KitEventForm } from "./KitEventForm";
@@ -421,7 +422,7 @@ function BrainLab() {
       <Rail index={1} label="Panel size">
         {(["community", "yours", "gaps"] as const).map((r) => (
           <PanelPart key={r} label={r === "community" ? "The community brain" : r === "yours" ? "Yours" : "Gaps"} fact={r === "community" ? `${map.counts.learned} learned · ${map.counts.this_week} this week` : null}>
-            {map.points.length >= BRAIN_MAP_MIN_POINTS ? <KitBrainMap map={r === "community" ? memberView : map} size="panel" reading={r} now={now} /> : <PanelLine dim>Under five things: the list instead.</PanelLine>}
+            {brainCanDrawMap(map) ? <KitBrainMap map={r === "community" ? memberView : map} size="panel" reading={r} now={now} /> : <PanelLine dim>Under three things: the list instead.</PanelLine>}
           </PanelPart>
         ))}
         <PanelLine dim>Picked: {picked ?? "nothing"}</PanelLine>

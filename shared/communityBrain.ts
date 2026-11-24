@@ -9,6 +9,9 @@
 export const BRAIN_POINTS_MAX = 150;
 export const BRAIN_ARCS_MAX = 12;
 export const BRAIN_FRESH_MS = 7 * 24 * 60 * 60_000;
+// The fewest drawable nodes (lessons, learned notes, and pods) worth a map;
+// fewer, and a list says more.
+export const BRAIN_MAP_MIN_NODES = 3;
 
 // Where a learned thing hangs: a lesson, a subject, a pod (on the
 // community's map), or nowhere yet.
@@ -104,11 +107,40 @@ export function subjectsOf(notes: Array<Pick<BrainNoteInput, "at" | "createdAt">
     .sort((a, b) => a.first_at.localeCompare(b.first_at) || a.name.localeCompare(b.name));
 }
 
+// Total drawable knowledge nodes on a map: learned/taught notes, published
+// course lessons, and visible pods.
+export function brainNodeCount(map: BrainMap): number {
+  return map.points.length + map.counts.lessons + map.pods.length;
+}
+
+// Whether a community or pod has any knowledge worth projecting in the brain
+// panel or opening on the brain page.
+export function brainHasContent(map: BrainMap | null | undefined): boolean {
+  if (!map) return false;
+  return map.counts.learned > 0 || map.counts.lessons > 0 || map.points.length > 0 || map.pods.length > 0;
+}
+
+// Whether a map has enough nodes to draw the visual network instead of a list.
+export function brainCanDrawMap(map: BrainMap | null | undefined): boolean {
+  return Boolean(map && brainNodeCount(map) >= BRAIN_MAP_MIN_NODES);
+}
+
 // What a panel says of a map in a few words, under it: "14 learned · 7 new
-// this week", or "14 learned" in a quiet week.
+// this week", "14 learned" in a quiet week, or course/lesson counts when the
+// community has published courses before notes accumulate.
 export function brainFact(map: BrainMap): string | null {
-  if (!map.counts.learned) return null;
-  return map.counts.this_week ? `${map.counts.learned} learned · ${map.counts.this_week} new this week` : `${map.counts.learned} learned`;
+  if (map.counts.learned > 0) {
+    return map.counts.this_week ? `${map.counts.learned} learned · ${map.counts.this_week} new this week` : `${map.counts.learned} learned`;
+  }
+  if (map.counts.lessons > 0) {
+    const courses = `${map.counts.courses} ${map.counts.courses === 1 ? "course" : "courses"}`;
+    const lessons = `${map.counts.lessons} ${map.counts.lessons === 1 ? "lesson" : "lessons"}`;
+    return `${courses} · ${lessons}`;
+  }
+  if (map.pods.length > 0) {
+    return `${map.pods.length} ${map.pods.length === 1 ? "pod" : "pods"}`;
+  }
+  return null;
 }
 
 // The latest things learned that this viewer may read by name (the map

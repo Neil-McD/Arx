@@ -36,6 +36,7 @@ import type { CommunityResource, CommunityResourceModule } from "../components/c
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { CourseCatalogSkeleton } from "../components/WebLoadingSkeleton";
+import { brainHasContent } from "../../../../shared/communityBrain";
 import { PanelBrain, useBrainMap } from "./KitBrain";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -88,6 +89,20 @@ function coverTint(id: string): (typeof COVER_TINTS)[number] {
   let hash = 0;
   for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
   return COVER_TINTS[hash % COVER_TINTS.length];
+}
+
+function coverStyle(course: Pick<CommunityResourceModule, "banner_url" | "banner_focus_x" | "banner_focus_y"> | null | undefined) {
+  return course?.banner_url
+    ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` }
+    : undefined;
+}
+
+function CourseCover(props: { course: CommunityResourceModule; extra?: string }) {
+  return (
+    <span className={cx("kcover", props.extra ?? "", props.course.banner_url ? "" : coverTint(props.course.id))} style={coverStyle(props.course)}>
+      {props.course.banner_url ? null : <Icon name="book" />}
+    </span>
+  );
 }
 
 function firstLine(markdown: string | null): string {
@@ -484,8 +499,8 @@ export function KitClassroom(props: {
         ))}
       </PanelPart>
     ) : null,
-    // Nothing learned and no unread files: no part, so an empty panel closes.
-    brain && (brain.counts.learned || guideSources.some(sourceFailed)) ? (
+    // Nothing in the brain and no unread files: no part, so an empty panel closes.
+    brain && (brainHasContent(brain) || guideSources.some(sourceFailed)) ? (
       <PanelBrain key="brain" map={brain} now={now} onOpen={props.onOpenBrain}>
         {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
       </PanelBrain>
@@ -699,7 +714,7 @@ export function KitClassroom(props: {
     </>
   ) : null;
   const togglePeople = open && props.canManage ? () => setPeopleFor(peopleCourse ? null : open.course.id) : undefined;
-  const openCoverStyle = open?.course.banner_url ? { backgroundImage: `url(${JSON.stringify(open.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(open.course.banner_focus_x ?? 0.5) * 100}% ${(open.course.banner_focus_y ?? 0.5) * 100}%` } : undefined;
+  const openCoverStyle = coverStyle(open?.course);
   // The floating lesson panel: the course, how far along, its lessons.
   // The top of the lesson panel: the course's cover, name and where things
   // stand. A host changes them here, in place.
@@ -711,9 +726,7 @@ export function KitClassroom(props: {
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : (
           <>
-            <span className={cx("kcover", "klist-cover", open.course.banner_url ? "" : coverTint(open.course.id))} style={openCoverStyle}>
-              {open.course.banner_url ? null : <Icon name="book" />}
-            </span>
+            <CourseCover course={open.course} extra="klist-cover" />
             <span><b>{open.course.name}</b><em>{togglePeople ? <StatsButton stats={courseProgressWords} open={Boolean(peopleCourse)} onClick={togglePeople} /> : courseProgressWords}</em></span>
           </>
         )}
@@ -915,23 +928,32 @@ export function KitClassroom(props: {
         ) : null}
 
         {/* Builders: the way into what the guide answers from, where notes,
-            links and files are added. Shown at every width. */}
+            links and files are added. Shown at every width; Community brain
+            sits beside it (and for members on narrow windows with no rail). */}
         {/* A builder's row holds its place from the first draw (the count
             fills in), so the courses under it don't move when notes arrive. */}
-        {props.onOpenGuideMemory && (canWriteNotes || (props.canManage && !notesAnswered)) ? (
-          <div className={cx("kbtns")}><div className={cx("kbtns-row")}>
-            <button type="button" className={cx("btn sm")} disabled={!canWriteNotes} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows{canWriteNotes ? ` · ${notes.length + guideSources.length}` : ""}</button>
-          </div></div>
-        ) : null}
+        {(() => {
+          const showGuideMemory = Boolean(props.onOpenGuideMemory && (canWriteNotes || (props.canManage && !notesAnswered)));
+          const showBrain = Boolean(props.onOpenBrain && (brainHasContent(brain) || (!wide && liveCourses.some((entry) => entry.lessons.length > 0))) && (!wide || showGuideMemory));
+          if (!showGuideMemory && !showBrain) return null;
+          return (
+            <div className={cx("kbtns")}><div className={cx("kbtns-row")}>
+              {showGuideMemory ? (
+                <button type="button" className={cx("btn sm")} disabled={!canWriteNotes} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows{canWriteNotes ? ` · ${notes.length + guideSources.length}` : ""}</button>
+              ) : null}
+              {showBrain ? (
+                <button type="button" className={cx("btn sm")} onClick={() => props.onOpenBrain?.()}>Community brain</button>
+              ) : null}
+            </div></div>
+          );
+        })()}
 
         {!props.loaded && courses.length === 0 ? <CourseCatalogSkeleton /> : null}
 
         {here ? (
           <div className={cx("khero-wrap")}>
           <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
-            <span className={cx("kcover", "khero-cover", here.course.banner_url ? "" : coverTint(here.course.id))} style={here.course.banner_url ? { backgroundImage: `url(${JSON.stringify(here.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(here.course.banner_focus_x ?? 0.5) * 100}% ${(here.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
-              {here.course.banner_url ? null : <Icon name="book" />}
-            </span>
+            <CourseCover course={here.course} extra="khero-cover" />
             <span className={cx("khero-body")}>
               <span className={cx("khero-eye")}>{here.done > 0 ? "Continue" : "Start here"}{courses.length > 1 ? ` · Course ${hereAt + 1} of ${courses.length}` : ""}</span>
               <b>{here.course.name}</b>
@@ -975,9 +997,7 @@ export function KitClassroom(props: {
               ) : null}
               {props.canManage && course.module_status === "draft" ? <span className={cx("kdraft")}>Draft</span> : null}
               <button type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
-                <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
-                  {course.banner_url ? null : <Icon name="book" />}
-                </span>
+                <CourseCover course={course} />
                 <b><i className={cx("knum")}>{shelf.from + position}</i><span>{course.name}</span></b>
                 {/* One line: where it stands on the left, how long it is on the right. */}
                 <span className={cx("kmeta")}>
