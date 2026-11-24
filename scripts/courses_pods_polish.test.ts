@@ -178,4 +178,12 @@ describe("next slice: pods dropdown, pod knowledge cleanup, real avatars, clicka
     expect(homeRail).toContain('cx("av s")');
     expect(channelRail).toContain('cx("av s")');
   });
+
+  it("supports one-tap step reordering for courses and lessons on touch screens", async () => {
+    const { courseOrderAfterMove } = await import("../apps/web/src/v1/KitClassroom");
+    expect(courseOrderAfterMove(["a", "b", "c"], 1, -1)).toEqual(["b", "a", "c"]);
+    expect(courseOrderAfterMove(["a", "b", "c"], 1, 1)).toEqual(["a", "c", "b"]);
+    expect(courseOrderAfterMove(["a", "b", "c"], 0, -1)).toBeNull();
+    expect(courseOrderAfterMove(["a", "b", "c"], 2, 1)).toBeNull();
+  });
 });
