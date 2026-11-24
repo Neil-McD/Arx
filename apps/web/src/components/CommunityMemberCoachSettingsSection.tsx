@@ -41,7 +41,7 @@ export function CommunityMemberCoachSettingsSection(props: {
     };
   }, [props.communityId]);
 
-  const save = async (next: { enabled: boolean; autoReasons: MemberCoachReason[] }) => {
+  const save = async (next: { enabled: boolean; autoReasons: MemberCoachReason[]; autoReplyEnabled: boolean }) => {
     if (saving) return;
     setSaving(true);
     setError(null);
@@ -54,6 +54,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           communityId: props.communityId,
           enabled: next.enabled,
           autoReasons: next.autoReasons,
+          autoReplyEnabled: next.autoReplyEnabled,
         }),
       );
     } catch {
@@ -65,11 +66,12 @@ export function CommunityMemberCoachSettingsSection(props: {
 
   const enabled = settings ? settings.enabled : true;
   const autoReasons = settings?.auto_reasons ?? [];
+  const autoReplyEnabled = Boolean(settings?.auto_reply_enabled);
   const toggleAutoReason = (reason: MemberCoachReason, checked: boolean) => {
     const next = checked
       ? [...new Set<MemberCoachReason>([...autoReasons, reason])]
       : autoReasons.filter((item) => item !== reason);
-    void save({ enabled, autoReasons: next });
+    void save({ enabled, autoReasons: next, autoReplyEnabled });
   };
 
   const statusNote = settings && settings.sent_this_week > 0
@@ -77,7 +79,22 @@ export function CommunityMemberCoachSettingsSection(props: {
     : "";
 
   return (
-    <SettingsGroup label="Member check-ins">
+    <SettingsGroup label="Proactive guide">
+      <SettingsRow
+        label="Auto-reply to unanswered questions"
+        help={
+          autoReplyEnabled
+            ? "Cited replies from lessons and community or pod notes post automatically during daytime hours (up to 3 per day community-wide, 1 per pod)."
+            : 'Drafts wait in "Your guide suggests" on Home until you post them. Turn on to post cited replies automatically during daytime hours.'
+        }
+      >
+        <SettingsSwitch
+          label="Auto-reply to unanswered questions"
+          checked={autoReplyEnabled}
+          disabled={!settings || saving}
+          onChange={(checked) => void save({ enabled, autoReasons, autoReplyEnabled: checked })}
+        />
+      </SettingsRow>
       <SettingsRow
         label="Prepare member check-ins"
         help={
@@ -92,7 +109,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           label="Prepare member check-ins"
           checked={enabled}
           disabled={!settings || saving}
-          onChange={(checked) => void save({ enabled: checked, autoReasons })}
+          onChange={(checked) => void save({ enabled: checked, autoReasons, autoReplyEnabled })}
         />
       </SettingsRow>
       {enabled ? (

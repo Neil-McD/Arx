@@ -474,6 +474,8 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     idempotencyKey: v.string(),
     text: v.optional(v.string()),
     founderBootstrap: v.optional(v.boolean()),
+    // Set by server-side proactive auto-replies when there is no interactive user session.
+    trustedOwnerReply: v.optional(v.literal(true)),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
     mentions: v.optional(
@@ -513,6 +515,13 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         founderDisplayName: founderIdentity.displayName,
         communityName: community.name,
       });
+    } else if (args.trustedOwnerReply === true) {
+      if (!args.rootId) throw new Error("community_trusted_owner_reply_root_required");
+      const community = await ctx.db.get(args.communityId);
+      if (!community || String(community.ownerId) !== String(args.userId)) {
+        throw new Error("community_trusted_owner_reply_owner_required");
+      }
+      sponsorUserId = args.userId;
     } else {
       sponsorUserId = await resolveUserIdForAuthenticatedRequest({
         ctx,

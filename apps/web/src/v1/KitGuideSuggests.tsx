@@ -14,8 +14,9 @@ export function replyDraftTitle(draft: Pick<ReplyDraftView, "author">): string {
   return `A reply to ${draft.author}'s question is ready`;
 }
 
-export function replyDraftDetail(draft: Pick<ReplyDraftView, "question" | "channel" | "hours_waiting">): string {
-  return `“${draft.question}” in #${draft.channel} · no answer for ${replyDraftWaited(draft.hours_waiting)}.`;
+export function replyDraftDetail(draft: Pick<ReplyDraftView, "question" | "channel" | "is_pod" | "hours_waiting">): string {
+  const place = draft.is_pod ? draft.channel : `#${draft.channel}`;
+  return `“${draft.question}” in ${place} · no answer for ${replyDraftWaited(draft.hours_waiting)}.`;
 }
 
 export function coachDraftTitle(draft: Pick<MemberCoachDraftView, "member_name">): string {
@@ -90,7 +91,7 @@ export function GuideSuggests(props: {
                       ? <Btn small disabled={busy} onClick={() => setEditing(draft.text)}>Edit</Btn>
                       : <Btn small disabled={busy} onClick={() => { setEditing(null); setError(null); }}>Cancel</Btn>}
                     {editing === null ? <Btn small txt disabled={busy} onClick={() => props.onSkip(draft.id)}>Skip</Btn> : null}
-                    <small>Posts in #{draft.channel} as your guide</small>
+                    <small>Posts in {draft.is_pod ? draft.channel : `#${draft.channel}`} as your guide</small>
                   </div>
                 </div>
               ) : null}
