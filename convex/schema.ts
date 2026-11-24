@@ -190,6 +190,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
+    .index("by_status", ["status"])
     .index("by_community", ["communityId"])
     .index("by_provider_subscription", ["providerSubscriptionId"]),
 
@@ -1992,6 +1993,63 @@ export default defineSchema({
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
+  // Proactive Member Coach settings per community (docs/specs/proactive-community-agent-v0.md,
+  // slice 1). Starts in draft mode (autoReasons: []); owners may turn auto-send on per reason.
+  communityMemberCoachSettings: defineTable({
+    communityId: v.id("communities"),
+    enabled: v.boolean(),
+    autoReasons: v.array(
+      v.union(
+        v.literal("quiet_newcomer"),
+        v.literal("course_stall"),
+        v.literal("quiet_member"),
+      ),
+    ),
+    nextScanAt: v.optional(v.number()),
+    scanCursorCreatedAt: v.optional(v.number()),
+    leaseUntil: v.optional(v.number()),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_enabled_nextScanAt", ["enabled", "nextScanAt"]),
+
+  // Proactive Member Coach drafts and delivery receipts: one row per judged
+  // member signal. Drafts wait on the owner's Home ("Your guide suggests");
+  // approved or auto-sent messages land in the member's private Agent thread.
+  communityMemberCoachDrafts: defineTable({
+    communityId: v.id("communities"),
+    memberUserId: v.id("users"),
+    reason: v.union(
+      v.literal("quiet_newcomer"),
+      v.literal("course_stall"),
+      v.literal("quiet_member"),
+    ),
+    dedupeKey: v.string(),
+    signalSummary: v.string(),
+    status: v.union(
+      v.literal("waiting"),
+      v.literal("sent"),
+      v.literal("skipped"),
+      v.literal("judge_skipped"),
+    ),
+    deliveryMode: v.optional(v.union(v.literal("approved"), v.literal("auto"))),
+    text: v.optional(v.string()),
+    sentText: v.optional(v.string()),
+    skipReason: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+    threadMessageKey: v.optional(v.string()),
+    decidedByUserId: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_member_createdAt", ["communityId", "memberUserId", "createdAt"])
+    .index("by_community_member_dedupe", ["communityId", "memberUserId", "dedupeKey"]),
+
   // What the guide asked a person before doing something for them in their
   // private talk (shared/operationCatalog.ts, guideAskFor): the exact call,
   // held until they answer above the box where they type. Yes runs it as them.
@@ -2722,6 +2780,7 @@ export default defineSchema({
     communityId: v.id("communities"),
     userId: v.id("users"),
     muted: v.boolean(),
+    coachMuted: v.optional(v.boolean()),
     mutedUntil: v.optional(v.number()),
     chatLastSeenSeq: v.optional(v.number()),
     // Timestamp boundary for the canonical chat "new messages" divider (roots order by created_at).

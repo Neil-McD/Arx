@@ -57,6 +57,10 @@ crons.interval(
 // The founder's daily brief: due when the founder's local hour arrives.
 crons.interval("send due founder briefs", { minutes: 15 },
   (internal as any).communityFounderBrief.processDueFounderBriefsInternal, {});
+// Proactive Member Coach: hourly bounded scan for quiet newcomers, stalled
+// course learners, and quiet members (draft mode by default, auto per reason).
+crons.interval("process due member coach scans", { minutes: 60 },
+  (internal as any).communityMemberCoach.processDueMemberCoachScansInternal, {});
 // The guide's memory reviews schedule themselves per community; this only
 // re-schedules one whose job was lost (convex/agentWork.ts).
 crons.interval("repair lost memory reviews", { hours: 24 },

@@ -1,7 +1,7 @@
 import { CommunityMyPlanSection } from "./CommunityMyPlanSection";
 import { CommunityConnectedAppsSection } from "./CommunityConnectedAppsSection";
 import { CommunityPlansSection } from "./CommunityPlansSection";
-import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { SettingsButton, SettingsGroup, SettingsNote, SettingsPageHead, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 import { STRIPE_CONNECT_COUNTRIES, formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import type { DragEvent } from "react";
@@ -21,7 +21,64 @@ import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAiRulesEditor } from "./WebCommunityAiRulesEditor";
 import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import { platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
-import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
+import { getMyMemberCoachPreference, setMyMemberCoachPreference } from "../../../../shared/cloudCommunityMemberCoachGateway";
+import type { MemberCoachPreferenceView } from "../../../../shared/communityMemberCoachTypes";
+
+const CommunityFounderBriefSection = lazy(() =>
+  import("./CommunityFounderBriefSection").then((m) => ({ default: m.CommunityFounderBriefSection })),
+);
+const CommunityMemberCoachSettingsSection = lazy(() =>
+  import("./CommunityMemberCoachSettingsSection").then((m) => ({ default: m.CommunityMemberCoachSettingsSection })),
+);
+
+function MemberCoachPreferenceRow(props: {
+  communityId: string;
+  session: unknown;
+  ensureSession: (session: any) => Promise<any | null>;
+}) {
+  const [pref, setPref] = useState<MemberCoachPreferenceView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setPref(null);
+    setError(null);
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        const loaded = session ? await getMyMemberCoachPreference({ session, communityId: props.communityId }) : null;
+        if (!cancelled) setPref(loaded);
+      } catch {
+        if (!cancelled) setError("Couldn't load check-in preference.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [props.communityId]);
+  const toggle = async (checked: boolean) => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) throw new Error("not_signed_in");
+      setPref(await setMyMemberCoachPreference({ session, communityId: props.communityId, coachMuted: checked }));
+    } catch {
+      setError("That didn't save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <SettingsRow
+      label="Pause guide check-ins"
+      help={error ? <span className="settings-v1-error" role="alert">{error}</span>
+        : "Stop the community guide from starting private check-in messages with you."}
+    >
+      <SettingsSwitch label="Pause guide check-ins" checked={Boolean(pref?.coach_muted)} disabled={!pref || saving}
+        onChange={(checked) => void toggle(checked)} />
+    </SettingsRow>
+  );
+}
 import { discoverListingGap } from "../../../../shared/communityDiscoverListing";
 import { FormGroupsSkeleton } from "./WebLoadingSkeleton";
 
@@ -465,6 +522,11 @@ function CommunityMemberSettingsSection({
           <SettingsSwitch label="Mute this community" checked={state.communityMemberMuted} disabled={state.isLoadingCommunityMemberSettings}
             onChange={(checked) => void actions.handleToggleCommunityMute(checked)} />
         </SettingsRow>
+        <MemberCoachPreferenceRow
+          communityId={activeCommunity.id}
+          session={session}
+          ensureSession={ensureSession}
+        />
       </SettingsGroup>
       <GuideAllowedSettings communityId={activeCommunity.id} session={session} />
       <CommunityMyPlanSection communityId={activeCommunity.id} session={session} ensureSession={ensureSession} />
@@ -691,11 +753,18 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               />
             ) : null}
             {selectedSettingsPane === "agent" && isOwnerSettingsLayer ? (
-              <CommunityFounderBriefSection
-                communityId={resolvedActiveCommunity.id}
-                session={props.session}
-                ensureSession={props.ensureSession}
-              />
+              <Suspense fallback={null}>
+                <CommunityFounderBriefSection
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
+                />
+                <CommunityMemberCoachSettingsSection
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
+                />
+              </Suspense>
             ) : null}
           </div>
         </div>
