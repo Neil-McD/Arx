@@ -24,6 +24,7 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { validateProfileHandle } from "../shared/profileHandle";
 import { FACT_LABELS, FACT_ORDER, planFor } from "../shared/communityMemberRecords";
 import { isPeopleFact as isPeopleFactLike } from "../shared/memberOntology";
+import { readMemberCourseProgress, type MemberCourseProgressSummary } from "./communityLessonProgress";
 
 import { personViewFor, type LensFamily, type PersonView } from "../shared/lens";
 
@@ -39,6 +40,7 @@ export type PersonFacts = {
   // What they stated or approved, newest first within each kind.
   shared: Array<{ kind: string; label: string; body: string }>;
   joined_at?: string | null;
+  course_progress?: MemberCourseProgressSummary[];
   plan?: string;
   state?: string;
   notes?: Array<{ body: string; at: string }>;
@@ -104,6 +106,7 @@ export async function readPersonFacts(ctx: any, args: { communityId: any; subjec
   };
   if (args.lens === "member") return person;
   person.joined_at = membership ? iso(membership.activatedAt ?? membership.createdAt) : null;
+  person.course_progress = await readMemberCourseProgress(ctx, args.communityId, user._id);
   if (args.lens === "self") return person;
 
   const subscription = membership ? await latestSubscription(ctx, membership._id) : null;

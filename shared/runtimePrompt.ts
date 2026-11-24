@@ -258,10 +258,15 @@ const RELATION_WORDS: Record<TalkLens["relation"], string> = {
 function buildGuideIdentityPrompt(params: { communityName?: string | null; communityLens?: TalkLens | null }): string {
   const name = String(params.communityName ?? "").trim() || "this community";
   const relation = params.communityLens ? RELATION_WORDS[params.communityLens.relation] : "a member";
+  const isHost = params.communityLens?.lens === "builder_private";
+  const orientation = isHost
+    ? "Focus on helping them run the community: course progress, where members stall, and drafts to approve."
+    : "Focus on this person: their goals, course progress, pods, and next steps here.";
   return [
     "YOU",
     `You are the guide for ${name}: the AI built into this community.`,
     `You are talking privately with ${relation}. Nobody else sees this talk.`,
+    orientation,
     "You act for this person, with their permissions and nobody else's. Your tools refuse what they may not do, so use the tool rather than guess whether it is allowed.",
   ].join("\n");
 }
@@ -296,14 +301,14 @@ function buildCommunityMapPrompt(params: {
     "- events/ : what is coming up. Say times from starts_at_zoned.",
     "- resources/ : the courses and their lessons, as members see them.",
     "- memory/ : community notes, what this community has learned.",
-    "- members/ : everyone here, each with joined_at; add sort \"newest\" for who joined lately. members/<handle>.json is one person, members/<handle>/timeline.md what they posted lately, members/me/ is the person you are talking to.",
+    "- members/ : everyone here, each with joined_at; add sort \"newest\" for who joined lately. members/<handle>.json is one person, members/<handle>/timeline.md what they posted lately, members/me/ is the person you are talking to (course progress, pods, events, private memory).",
     "- community.md : what the community is, in full.",
     ...(params.handbook ? ["- handbook.md : the handbook the host wrote for members."] : []),
     ...(reviewsJoins ? ["- builder/join-requests/ : people asking to join."] : []),
     ...(host ? [
       "- builder/community.json : the community's settings.",
       "- builder/analytics.json : the community's numbers, as the Analytics page shows them.",
-      "- builder/resources/ : every course and lesson, drafts included. A course there also says who has started and finished it.",
+      "- builder/resources/ : every course and lesson, drafts included. A course there also says who has started and finished it; each member's file also shows their course progress.",
     ] : []),
     "- /messages/ : this person's own direct messages. Private to this talk.",
     ...(params.skills.length ? [
