@@ -21,6 +21,7 @@ import { MessageLinkMedia } from "./MessageLinkMedia";
 import { PdfDocumentCard } from "./PdfDocumentCard";
 import { isPdfDocument, safeDocumentUrl } from "../../../../shared/messagePdf";
 import { ChannelFeedSkeleton } from "./WebLoadingSkeleton";
+import { Icon } from "../v1/kit";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import { MemberAvatarStack, type MemberAvatarStackFace } from "./MemberAvatarStack";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
@@ -1040,6 +1041,28 @@ export type CommunityInteractionFeedListProps = WebCommunityInteractionProjectio
   onCancelEdit: () => void;
 };
 
+export function PendingMessageStatus(props: {
+  pending?: "sending" | "failed" | null;
+  idempotencyKey?: string | null;
+  onRetrySend?: (idempotencyKey: string) => void;
+  onDiscardPending?: (idempotencyKey: string) => void;
+}) {
+  if (props.pending === "sending") {
+    return <span className="community-interaction-sending-spinner" role="status" aria-label="Sending message" />;
+  }
+  if (props.pending === "failed") {
+    const key = props.idempotencyKey ?? "";
+    return (
+      <div className="community-interaction-pending-status is-failed">
+        <span>Failed to send.</span>
+        <button type="button" onClick={() => key && props.onRetrySend?.(key)}>Retry</button>
+        <button type="button" onClick={() => key && props.onDiscardPending?.(key)}>Discard</button>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function MemberArrivalsRow(props: {
   events: CommunityInteractionFeedListProps["activityEvents"];
   profilesByUserId: Record<string, UserProfile>;
@@ -1184,37 +1207,32 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                   : null;
                 const badge = agentBadgeLabel(first.root.actor_type);
                 const chip = kindChipLabel(first.root.kind);
+                const isGuide = first.root.actor_type === "community_agent";
+                const groupHoverCard = {
+                  userId: first.root.actor_user_id,
+                  label,
+                  seed: first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id,
+                  profile,
+                  getAvatarColor: props.getAvatarColor,
+                  getInitials: props.getInitials,
+                  currentUserId: props.currentUserId,
+                  onOpenProfile: props.onOpenProfile,
+                  onMessageUser: props.onMessageUser,
+                };
                 return (
                   <Fragment key={segment.key}>
                     {dividerBefore}
                     <div className="community-interaction-group" data-actor-type={first.root.actor_type}>
                     <div className="community-interaction-group-gutter">
-                      <ProfileHoverCard
-                        userId={first.root.actor_user_id}
-                        label={label}
-                        seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
-                        profile={profile}
-                        getAvatarColor={props.getAvatarColor}
-                        getInitials={props.getInitials}
-                        currentUserId={props.currentUserId}
-                        onOpenProfile={props.onOpenProfile}
-                        onMessageUser={props.onMessageUser}
-                      />
+                      {isGuide ? (
+                        <span className="community-interaction-guide-avatar" aria-hidden="true"><Icon name="spark" /></span>
+                      ) : (
+                        <ProfileHoverCard {...groupHoverCard} />
+                      )}
                     </div>
                     <div className="community-interaction-group-body">
                       <div className="community-interaction-meta-row">
-                        <ProfileHoverCard
-                          userId={first.root.actor_user_id}
-                          label={label}
-                          seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
-                          profile={profile}
-                          getAvatarColor={props.getAvatarColor}
-                          getInitials={props.getInitials}
-                          currentUserId={props.currentUserId}
-                          onOpenProfile={props.onOpenProfile}
-                          onMessageUser={props.onMessageUser}
-                          triggerClassName="community-interaction-author-trigger"
-                        >
+                        <ProfileHoverCard {...groupHoverCard} triggerClassName="community-interaction-author-trigger">
                           <span className="community-interaction-author">{label}</span>
                         </ProfileHoverCard>
                         {badge ? <span className="community-interaction-badge">{badge}</span> : null}
@@ -1222,9 +1240,12 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                           <span className="community-interaction-badge is-host">host</span>
                         ) : null}
                         {chip ? <span className="community-interaction-kind">{chip}</span> : null}
+                        {first.root.via_ai ? (
+                          <span className="community-interaction-kind" title="Posted through their own AI">via AI</span>
+                        ) : null}
                         <span>{props.formatChatTime(first.root.created_at)}</span>
                       </div>
-                      {segment.bundles.map((bundle) => {
+                      {segment.bundles.map((bundle, bundleIndex) => {
                         const root = bundle.root;
                         const body = stripSharedAttachmentSummary(
                           bundleText(bundle.content_blocks, root.content_summary),
@@ -1302,6 +1323,7 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                                   }`}
                                 >
                                   <InteractionContent
+                                    fromGuide={root.actor_type === "community_agent"}
                                     text={body}
                                     renderTextWithLinks={props.renderTextWithLinks}
                                     mentionContext={{
@@ -1336,21 +1358,17 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                                 {root.edited_at ? (
                                   <span className="community-interaction-edited">(edited)</span>
                                 ) : null}
+                                {root.via_ai && bundleIndex > 0 ? (
+                                  <span className="community-interaction-edited" title="Posted through their own AI">via AI</span>
+                                ) : null}
                               </>
                             )}
-                            {bundle.pending === "sending" ? (
-                              <span className="community-interaction-sending-spinner" role="status" aria-label="Sending message" />
-                            ) : bundle.pending === "failed" ? (
-                              <div className="community-interaction-pending-status is-failed">
-                                <span>Failed to send.</span>
-                                <button type="button" onClick={() => props.onRetrySend?.(root.idempotency_key)}>
-                                  Retry
-                                </button>
-                                <button type="button" onClick={() => props.onDiscardPending?.(root.idempotency_key)}>
-                                  Discard
-                                </button>
-                              </div>
-                            ) : null}
+                            <PendingMessageStatus
+                              pending={bundle.pending}
+                              idempotencyKey={root.idempotency_key}
+                              onRetrySend={props.onRetrySend}
+                              onDiscardPending={props.onDiscardPending}
+                            />
                             {hasFooter ? (
                               <div className="community-interaction-footer">
                                 <ReactionSummary
@@ -1358,6 +1376,13 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                                   viewerEmojis={root.viewer_emojis}
                                   onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
                                 />
+                                {root.reaction_summary.length > 0 && props.onToggleReaction ? (
+                                  <EmojiPickerButton
+                                    className="community-interaction-reaction-add"
+                                    label="Add reaction"
+                                    onPick={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                                  />
+                                ) : null}
                                 {threadTypers.length > 0 ? (
                                   <div className="community-interaction-thread-row">
                                     <ActorAvatar

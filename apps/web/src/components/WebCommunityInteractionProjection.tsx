@@ -148,6 +148,7 @@ import {
   InteractionBody,
   InteractionContent,
   MessageActions,
+  PendingMessageStatus,
   ProfileHoverCard,
   TypingIndicator,
   actorLabel,
@@ -716,19 +717,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
       {props.profilePanel ? (
         <aside className="community-interaction-drawer" aria-label="Profile">
-          <div className="community-interaction-drawer-back">
-            <button
-              className="back-to-workspace"
-              type="button"
-              onClick={props.onCloseProfile}
-              title="Back"
-            >
-              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span className="back-path">profile</span>
-            </button>
-          </div>
+          <CommunityThreadHeader
+            title="Profile"
+            closeLabel="Close profile"
+            onClose={() => props.onCloseProfile?.()}
+          />
           <div className="community-interaction-drawer-scroll">{props.profilePanel}</div>
         </aside>
       ) : selectedRoot ? (
@@ -930,18 +923,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             ) : null}
                           </>
                         )}
-                        {bundle.pending === "sending" ? (
-                          <span className="community-interaction-sending-spinner" role="status" aria-label="Sending message" />
-                        ) : bundle.pending === "failed" ? (
-                          <div className="community-interaction-pending-status is-failed">
-                            <span>Failed to send.</span>
-                            <button type="button" onClick={() => props.onRetrySend?.(reply.idempotency_key)}>
-                              Retry
-                            </button>
-                            <button type="button" onClick={() => props.onDiscardPending?.(reply.idempotency_key)}>
-                              Discard
-                            </button>
-                          </div>
+                        {bundle.pending ? (
+                          <PendingMessageStatus
+                            pending={bundle.pending}
+                            idempotencyKey={reply.idempotency_key}
+                            onRetrySend={props.onRetrySend}
+                            onDiscardPending={props.onDiscardPending}
+                          />
                         ) : reply.reaction_summary.length > 0 ? (
                           <div className="community-interaction-reply-reactions">
                             <ReactionSummary
