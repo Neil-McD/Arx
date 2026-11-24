@@ -4627,3 +4627,19 @@
 :root[data-design="v1"] .brain-lesson-read :is(.resource-viewer-header, .resource-viewer-title-row, .resource-viewer-title) { display: none; }
 :root[data-design="v1"] .brain-lesson-read .resource-viewer-prose { font-size: 14px; line-height: 1.6; }
 :root[data-design="v1"] .brain-lesson-read .resource-viewer-embed { margin: 0 0 12px; border-radius: 10px; overflow: hidden; }
+
+/* The community in the brain's side panel: a profile card, its banner with
+   the logo sitting on its lower edge. */
+:root[data-design="v1"] .brain-card-top { position: relative; margin: 0 0 30px; }
+:root[data-design="v1"] .brain-card-banner { position: relative; display: block; width: 100%; aspect-ratio: 16 / 7; overflow: hidden; border-radius: 10px; background: var(--bg-card, #16171a); }
+:root[data-design="v1"] .brain-card-banner-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+:root[data-design="v1"] .brain-card-logo { position: absolute; left: 14px; bottom: -26px; width: 56px; height: 56px; border-radius: 14px; overflow: hidden; border: 3px solid var(--bg, #111214); background: var(--bg-card, #16171a); font-size: 18px; }
+/* A course's lessons: the tick in its own column, so the titles line up. */
+:root[data-design="v1"] .brain-tick { display: inline-block; width: 16px; flex: none; color: var(--text-secondary, #9a9da5); }
+
+/* A pod's outside page: its cover over the name, and its About under the bullets. */
+:root[data-design="v1"] .pod-cover { position: relative; display: block; width: 100%; aspect-ratio: 16 / 7; overflow: hidden; border-radius: 10px; margin: 0 0 14px; background: var(--bg-card, #16171a); }
+:root[data-design="v1"] .pod-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+:root[data-design="v1"] .pod-about { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 16px; color: var(--text-secondary, #a3a6ad); font-size: 14px; line-height: 1.6; white-space: pre-line; }
+:root[data-design="v1"] .pod-about p { margin: 0; }
+:root[data-design="v1"] .pod-card-cover { position: relative; display: block; width: calc(100% + 32px); margin: -16px -16px 10px; aspect-ratio: 16 / 6; overflow: hidden; border-radius: 9px 9px 0 0; }

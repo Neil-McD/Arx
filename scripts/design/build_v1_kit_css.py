@@ -343,6 +343,9 @@ css += """
 .app .brain-progress{display:flex;flex-direction:column;gap:6px;margin:4px 0 14px;font-size:12.5px;color:var(--ink3)}
 .app .brain-progress-bar{display:block;height:3px;border-radius:2px;background:rgba(var(--w),.1);overflow:hidden}
 .app .brain-progress-bar>span{display:block;height:100%;border-radius:2px;background:var(--ink)}
+/* The pod editor's cover: a small preview beside its buttons. */
+.app .podform-cover{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.app .podform-cover img{width:96px;aspect-ratio:16/7;object-fit:cover;border-radius:6px}
 @media (prefers-reduced-motion:reduce){.app .brainside{animation:none}}
 .app .brainside .sub2{white-space:normal;line-height:1.45}
 .app .brainside .acts{margin-top:2px;flex-wrap:wrap}

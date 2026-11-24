@@ -33,6 +33,9 @@ import { KitPodLanding } from "../v1/KitPodLanding";
 import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
 import { podShown, recallPod, takePodPagePreview } from "../v1/podMemory";
 import { podRhythmText } from "../v1/KitPodCall";
+import { KitBrainMap } from "../v1/KitBrainMap";
+import { brainCanDrawMap, type BrainMap } from "../../../../shared/communityBrain";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { roomDot, type RoomAttention } from "../../../../shared/podsAttentionDot";
 
 export type WebCommunityPodsSectionProps = {
@@ -149,6 +152,17 @@ const planPrice = (plan: CloudPlanOffer) => {
   return "$" + value.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: digits }) + "/month";
 };
 
+// What a pod knows, as its shape only (convex/communityBrain.ts
+// getPodBrainShape): dots and how they hang together, never a name or a word.
+function PodShape(props: { session: unknown; communityId: string | null | undefined; channelId: string }) {
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const { data } = useLiveQuery<BrainMap>(props.session, "communityBrain:getPodBrainShape",
+    subject && props.communityId ? { authSubject: subject, communityId: props.communityId, podChannelId: props.channelId } : null);
+  const [now] = useState(() => Date.now());
+  if (!data || !brainCanDrawMap(data)) return null;
+  return <div className={cx("brainmini")}><KitBrainMap map={data} size="panel" now={now} /></div>;
+}
+
 // A pod's pitch, for someone not in it: what it is, what you get, its hosts,
 // how you get in (a plan that includes it, its own price, or asking), and the
 // one button. Never who is in it or what is said. On the Pods page it fills
@@ -258,11 +272,16 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
   return (
     <div className={cx(props.inline ? "podpage land" : "land")}>
       {back}
+      {page.cover?.url ? (
+        <StableFramedMedia className="pod-cover" imageClassName="pod-cover-img" imageUrl={page.cover.url}
+          frame={{ focusX: page.cover.focus_x, focusY: page.cover.focus_y, zoom: 1 }} alt="" aria-hidden />
+      ) : null}
       <header>
         <h2>{page.name}</h2>
         {page.purpose ? <p className={cx("land-p")}>{page.purpose}</p> : null}
         {page.what_you_get.length ? <ul className={cx("podget")}>{page.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul> : null}
       </header>
+      {page.about_md?.trim() ? <div className="pod-about">{page.about_md.trim().split(/\n{2,}/).map((part, index) => <p key={index}>{part}</p>)}</div> : null}
       <PanelPart label="The way in">
         {rhythm ? <PanelLine>{rhythm}</PanelLine> : null}
         <PanelLine fact={price}>Price</PanelLine>
@@ -270,6 +289,7 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
       </PanelPart>
       {page.knows ? (
         <PanelPart label="What this pod knows" fact="for its members">
+          <PodShape session={props.session} communityId={props.communityId} channelId={page.channel_id} />
           <PanelLine>{page.knows >= 99 ? "99+" : page.knows} {page.knows === 1 ? "thing" : "things"} learned</PanelLine>
         </PanelPart>
       ) : null}
@@ -553,6 +573,10 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                   return (
                     <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podout podsel" : "podcard podout")} aria-current={selected === pod.slug ? "true" : undefined}
                       onClick={() => { if (props.podSlug !== pod.slug) props.onNavigate({ kind: "pod", slug: pod.slug }); }}>
+                      {pod.cover?.url ? (
+                        <StableFramedMedia className="pod-card-cover" imageClassName="pod-cover-img" imageUrl={pod.cover.url}
+                          frame={{ focusX: pod.cover.focus_x, focusY: pod.cover.focus_y, zoom: 1 }} alt="" aria-hidden loading="lazy" />
+                      ) : null}
                       <span className={cx("podname")}><Icon name="lock" />{pod.name}</span>
                       <span className={cx("podpurpose")}>{pod.purpose}</span>
                       {pod.included_with?.length ? <span className={cx("podprice")}>Included with {pod.included_with.join(" or ")}</span>

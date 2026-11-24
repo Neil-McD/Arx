@@ -14,6 +14,9 @@ export type CloudPodPaymentState = "paying" | "leaving" | "payment_problem";
 
 export type CloudPodPerson = { user_id: string; name: string; avatar_url?: string | null };
 
+// A pod's cover image and its focus point (0 to 1).
+export type CloudPodCover = { url: string; focus_x: number; focus_y: number } | null;
+
 // A pod's own page (/c/:slug/pods/:podSlug), as this viewer may see it.
 export type CloudPodPage =
   | { kind: "not_found" }
@@ -25,6 +28,8 @@ export type CloudPodPage =
     name: string;
     purpose: string;
     what_you_get: string[];
+    about_md?: string;
+    cover?: CloudPodCover;
     hosts: string[];
     host_people?: CloudPodPerson[];
     visibility: "listed" | "hidden";
@@ -64,6 +69,7 @@ export type CloudOutsidePod = {
   slug: string;
   name: string;
   purpose: string;
+  cover?: CloudPodCover;
   hosts: string[];
   seats_left: number | null;
   price: CloudPodPrice;
@@ -82,6 +88,8 @@ export type CloudPodDetail = {
   seats: number | null;
   price: CloudPodPrice;
   what_you_get: string[];
+  about_md?: string;
+  cover?: CloudPodCover;
   // The pod's next call, with its link.
   next_call: { event_id: string; title: string; starts_at: string; url: string | null; recurrence_frequency: string } | null;
   slug: string;
@@ -117,7 +125,9 @@ export async function fetchCloudPod(params: { session: unknown; communityId: str
   return await convex.query("communityPods:getPod" as any, { authSubject, communityId: params.communityId, channelId: params.channelId });
 }
 
-export async function saveCloudPodDetails(params: { session: unknown; communityId: string; channelId: string; purpose?: string; visibility?: "listed" | "hidden"; seats?: number; whatYouGet?: string[] }): Promise<void> {
+// bannerStorageId: a cover just uploaded, or null to take it away.
+export async function saveCloudPodDetails(params: { session: unknown; communityId: string; channelId: string; purpose?: string; visibility?: "listed" | "hidden"; seats?: number; whatYouGet?: string[];
+  about?: string; bannerStorageId?: string | null; bannerFocusX?: number; bannerFocusY?: number }): Promise<void> {
   const { client: convex, authSubject } = await client(params.session);
   const { session: _session, ...rest } = params;
   await convex.mutation("communityPods:savePodDetails" as any, { authSubject, ...rest });

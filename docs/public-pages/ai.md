@@ -19,7 +19,7 @@ https://www.polynet.ai/runtime/mcp
 
 You need a Polynet account. The first time, your AI app opens a Polynet sign-in page; sign in and approve.
 
-**Claude (claude.ai, desktop and phone).** Open Settings, then Connectors, and choose "Add custom connector". Name it Polynet, paste the address above and press Connect. Once Polynet is listed in Claude's directory, you can add it from there instead.
+**Claude (claude.ai, desktop and phone).** Polynet is in Claude's connector directory: open Settings, then Connectors, find Polynet and press Connect. You can also choose "Add custom connector", name it Polynet, paste the address above and press Connect.
 
 **ChatGPT.** Add a custom connector (in ChatGPT's settings, under Apps) with the address above, then sign in. Once Polynet is listed in ChatGPT's app directory, you can add it from there instead.
 
