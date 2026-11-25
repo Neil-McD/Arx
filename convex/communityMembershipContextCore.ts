@@ -14,6 +14,7 @@ import {
   nextPodCall,
 } from "./communityEvents";
 import { readMemberCourseProgress } from "./communityLessonProgress";
+import { readMemberOwnJourneySummary } from "./communityMemberJourney";
 import { isHost, podRecord } from "./communityPods";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readBoundedMemberOrientationFacts } from "./memberOntologyCore";
@@ -134,12 +135,20 @@ export async function resolveSelfCommunityMembershipContext(args: {
   const active = communityMembershipRowIsActive(membership) ? membership : null;
   if (!isOwner && !active) throw new Error("community_member_not_found");
   const nowMs = Date.now();
-  const [profile, factPage, courseProgress, pods, upcomingEvents] = await Promise.all([
+  const [profile, factPage, courseProgress, pods, upcomingEvents, journey] = await Promise.all([
     resolveUserProfileDisplayProjection(args.ctx, args.actorUserId),
     readBoundedMemberOrientationFacts(args.ctx, { subjectUserId: args.actorUserId, communityId: args.communityId }),
     readMemberCourseProgress(args.ctx, args.communityId, args.actorUserId),
     readMemberOwnPods(args.ctx, args.communityId, args.actorUserId, nowMs),
     readMemberUpcomingCommunityEvents(args.ctx, args.communityId, nowMs),
+    !isOwner && active
+      ? readMemberOwnJourneySummary(args.ctx, {
+          communityId: args.communityId,
+          userId: args.actorUserId,
+          membership: active,
+          nowMs,
+        })
+      : Promise.resolve(null),
   ]);
   return {
     read_at: toIsoString(nowMs),
@@ -164,5 +173,6 @@ export async function resolveSelfCommunityMembershipContext(args: {
     course_progress: courseProgress,
     pods,
     upcoming_events: upcomingEvents,
+    ...(journey ? { journey } : {}),
   };
 }

@@ -79,9 +79,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
   `communityMemberRecords` (Members for people who manage members: plan and price per person, money states,
   past members, one member's record with host-only notes and who did what; docs/design/members-invariants.md),
-  `communityMemberJourney` (Member Journey Board: ordered plain-English stages, member cards with derived health
-  status, privacy-safe agent outcome notes, and founder instructions read by the proactive Member Coach;
-  `apps/web/src/v1/KitMembersBoard.tsx`),
+  `communityMemberJourney` (Member Journey Board: ordered plain-English stages, activation checkpoints, member cards with derived health
+  status, logged wins, privacy-safe agent outcome notes, and founder instructions; mounted across all three agent lenses via
+  `members/me/context.md`, silent `member_private` coaching context, `builder/journey.json`, `members/<handle>.json` for builders,
+  and 7 builder-only MCP/Guide action tools `community.journey.*`; `apps/web/src/v1/KitMembersBoard.tsx`),
   `communityMemberProfiles` (Members for members: who is here, and the one profile of a person that channels and Members both open, `apps/web/src/v1/KitProfile.tsx`),
   `memberEntryDestination`, `platformHomeCommunity`, `communityPeople` (one person, one action, from someone's
   own AI).

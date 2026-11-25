@@ -25,6 +25,7 @@ import { validateProfileHandle } from "../shared/profileHandle";
 import { FACT_LABELS, FACT_ORDER, planFor } from "../shared/communityMemberRecords";
 import { isPeopleFact as isPeopleFactLike } from "../shared/memberOntology";
 import { readMemberCourseProgress, type MemberCourseProgressSummary } from "./communityLessonProgress";
+import { readMemberJourneySummaryForBuilder, type BuilderMemberJourneySummary } from "./communityMemberJourney";
 
 import { personViewFor, type LensFamily, type PersonView } from "../shared/lens";
 
@@ -44,6 +45,7 @@ export type PersonFacts = {
   plan?: string;
   state?: string;
   notes?: Array<{ body: string; at: string }>;
+  journey?: BuilderMemberJourneySummary | null;
 };
 
 const FACTS_CAP = 40;
@@ -123,6 +125,16 @@ export async function readPersonFacts(ctx: any, args: { communityId: any; subjec
     .withIndex("by_community_subject_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("subjectUserId", user._id))
     .order("desc").take(NOTES_SHOWN);
   person.notes = notes.map((note: any) => ({ body: String(note.body), at: iso(note.createdAt) ?? "" }));
+  if (!isOwner && membership) {
+    person.journey = await readMemberJourneySummaryForBuilder(ctx, {
+      communityId: args.communityId,
+      userId: user._id,
+      membership,
+      subscription,
+      presence,
+      nowMs: Date.now(),
+    });
+  }
   return person;
 }
 

@@ -221,6 +221,7 @@ async function executeRetrievalAgentLoop(
     })
   ).packet;
   let memberIdentityContextMd: string | null = null;
+  let memberCoachingContextMd: string | null = null;
   let memberIdentityContextStatus: MemberIdentityContextStatus = "not_applicable";
   // A private Ask answers the asker, so "now" is in the asker's own timezone.
   // A community-bound conversation never loads the global profile: UTC there.
@@ -271,6 +272,27 @@ async function executeRetrievalAgentLoop(
       // Identity context improves personalization but must never block a member turn.
       memberIdentityContextMd = null;
       memberIdentityContextStatus = "error";
+    }
+  }
+  // Silent member coaching focus (stage goal, next steps, wins, and any private
+  // host note) is loaded ONLY for a member's own private talk with the hosted
+  // Guide (member_private) — never for builders, public mentions, or MCP.
+  if (
+    params.communityId &&
+    params.invocationSurface === "member_agent_dock" &&
+    !communityConversation &&
+    params.communityLens?.lens === "member_private"
+  ) {
+    try {
+      memberCoachingContextMd = await params.ctx.runQuery(
+        (internal as any).communityMemberJourney.readMemberGuideCoachingContextInternal,
+        {
+          communityId: params.communityId as any,
+          userId: params.userId as any,
+        },
+      );
+    } catch {
+      memberCoachingContextMd = null;
     }
   }
   // In a community's private talk with no profile zone, "now" is in the
@@ -358,6 +380,7 @@ async function executeRetrievalAgentLoop(
     invocationSurface: params.invocationSurface,
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
+    memberCoachingContextMd,
     communityMemoryMd,
     communitySoulMd,
     personalMemoryMd,

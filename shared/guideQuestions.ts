@@ -162,6 +162,18 @@ export function announcementQuestion(args: {
   return `Post this @everybody announcement in ${channel}? Every member will be notified in the app.`;
 }
 
+export function journeyStageRemoveQuestion(args: {
+  stageName: string;
+  memberCount: number;
+  fallbackStageName: string;
+}): string {
+  if (args.memberCount <= 0) {
+    return `Remove the "${args.stageName}" stage from the Member Board?`;
+  }
+  const who = args.memberCount === 1 ? "1 member on it" : `${args.memberCount} members on it`;
+  return `Remove the "${args.stageName}" stage from the Member Board? ${who} will move to "${args.fallbackStageName}".`;
+}
+
 export function changeResultLine(args: { operation: string; succeeded: number; asked: number }): string {
   const gone = args.operation === "community.members.ban" ? "banned" : args.operation === "community.members.remove" ? "removed" : null;
   if (gone) {
@@ -174,6 +186,7 @@ export function changeResultLine(args: { operation: string; succeeded: number; a
   if (args.operation === "community.course.delete") return "It was deleted.";
   if (args.operation === "community.event.cancel") return "The event was cancelled.";
   if (args.operation === "community.announcement.post") return "The announcement was posted.";
+  if (args.operation === "community.journey.remove_stage") return "The stage was removed from the Member Board.";
   if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
   if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
   return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;

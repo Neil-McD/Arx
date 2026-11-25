@@ -68,6 +68,34 @@ const TEXT = (what: string, max: number): PlatformOperationJsonSchema => ({ type
 const MEMBERS: PlatformOperationJsonSchema = { type: "array", minItems: 1, maxItems: 50,
   items: { type: "string", minLength: 1, maxLength: 180 },
   description: "The people, each by their handle from the members listing (such as priya-shah), or a user:<id> ref. Look them up first; don't guess." };
+const MEMBER: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 180,
+  description: "The person's handle from the members listing (such as priya-shah), or a user:<id> ref. Look them up first; don't guess." };
+const JOURNEY_STAGE_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name"],
+  properties: {
+    key: { type: "string", minLength: 1, maxLength: 48, description: "Existing stage key from builder/journey.json when updating a stage; omit for a new stage." },
+    name: TEXT("The stage's name (up to 48 characters).", 48),
+    goal: { type: "string", maxLength: 240, description: "One plain line describing what members are working toward in this stage." },
+    checkpoints: {
+      type: "array",
+      maxItems: 6,
+      description: "Optional activation checkpoints for this stage (up to 6).",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label"],
+        properties: {
+          key: { type: "string", minLength: 1, maxLength: 48, description: "Checkpoint key; omit for a new custom milestone." },
+          label: TEXT("Short checkpoint label (up to 64 characters).", 64),
+          kind: { type: "string", enum: ["first_post", "regular_posts", "first_lesson", "shared_goal", "custom"],
+            description: "Built-in signal (first_post, regular_posts, first_lesson, shared_goal) or custom." },
+        },
+      },
+    },
+  },
+};
 const EVENT: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 64,
   description: "The event's parent_event_id from the events listing." };
 // The guide's only: pictures the person attached in their private talk, by
@@ -313,6 +341,53 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Lift the ban on people so they can ask to join again.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
     (a) => call("community.members.unban", a, { members: a.members })),
+  // Member Board (owners and admins).
+  tool("polynet_move_member_stage", "community.journey.move_stage", "Move members on the board",
+    "Move one or more active members to another stage on the Member Board. Read builder/journey.json first for stage keys and current placement.",
+    { community: COMMUNITY, members: MEMBERS, stage: TEXT("Stage key or exact stage name from builder/journey.json.", 64) },
+    ["community", "members", "stage"],
+    (a) => call("community.journey.move_stage", a, { members: a.members, stage: a.stage })),
+  tool("polynet_set_member_status", "community.journey.set_status", "Set a member's board status",
+    "Pin a status (needs_you, stuck, on_track, quiet, done) for one or more members on the Member Board, or pass auto to return to automatic status.",
+    { community: COMMUNITY, members: MEMBERS,
+      status: { type: "string", enum: ["needs_you", "stuck", "on_track", "quiet", "done", "auto"],
+        description: "Status to pin, or auto to clear a manual override." } },
+    ["community", "members", "status"],
+    (a) => call("community.journey.set_status", a, { members: a.members, status: a.status })),
+  tool("polynet_set_member_milestone", "community.journey.set_milestone", "Set a member's milestone",
+    "Mark a Member Board checkpoint or custom milestone done or undone for one active member.",
+    { community: COMMUNITY, member: MEMBER,
+      milestone: TEXT("Checkpoint key or label from builder/journey.json.", 64),
+      done: { type: "boolean", description: "true marks it complete (default), false unchecks it." },
+      label: TEXT("Optional label when recording a custom milestone.", 64) },
+    ["community", "member", "milestone"],
+    (a) => call("community.journey.set_milestone", a, { member: a.member, milestone: a.milestone, done: a.done !== false, ...only(a, ["label"]) })),
+  tool("polynet_record_member_win", "community.journey.record_win", "Record a member win",
+    "Log a concrete win or outcome on an active member's board card, or remove one by id. Give text or remove_outcome_id, not both.",
+    { community: COMMUNITY, member: MEMBER,
+      text: TEXT("A concrete win or outcome to log (up to 180 characters).", 180),
+      remove_outcome_id: { type: "string", minLength: 1, maxLength: 80, description: "Id of a logged win from builder/journey.json to remove." } },
+    ["community", "member"],
+    (a) => call("community.journey.record_win", a, { member: a.member, ...only(a, ["text", "remove_outcome_id"]) })),
+  tool("polynet_set_member_guide_note", "community.journey.set_guide_note", "Set a coaching note for a member",
+    "Write, update, or clear the private coaching note that steers your community's AI guide for one active member. Empty text clears it.",
+    { community: COMMUNITY, member: MEMBER,
+      note: { type: "string", maxLength: 500, description: "Private coaching focus for your community's AI guide (up to 500 characters); empty clears it." } },
+    ["community", "member", "note"],
+    (a) => call("community.journey.set_guide_note", a, { member: a.member, note: a.note })),
+  tool("polynet_update_journey_stages", "community.journey.save_stages", "Update member board stages",
+    "Add, rename, reorder, or edit goals and checkpoints of Member Board stages (2 to 8 stages). Read builder/journey.json first and keep every existing stage key; removing a stage uses polynet_remove_journey_stage.",
+    { community: COMMUNITY,
+      stages: { type: "array", minItems: 2, maxItems: 8, items: JOURNEY_STAGE_SCHEMA, description: "All Member Board stages in order." } },
+    ["community", "stages"],
+    (a) => call("community.journey.save_stages", a, { stages: a.stages })),
+  tool("polynet_remove_journey_stage", "community.journey.remove_stage", "Remove a member board stage",
+    "Delete one stage from the Member Board and move any members on it to another stage (or the first remaining stage). At least 2 stages must remain. The person is asked first, every time.",
+    { community: COMMUNITY,
+      stage: TEXT("Stage key or exact stage name from builder/journey.json to remove.", 64),
+      move_to_stage: TEXT("Optional stage key or name for members currently on the removed stage; defaults to the first remaining stage.", 64) },
+    ["community", "stage"],
+    (a) => call("community.journey.remove_stage", a, { stage: a.stage, ...only(a, ["move_to_stage"]) })),
   // The operations are spelled out here: left to "as builder/resources/
   // describes", the guide guessed at names (create_lesson) and was refused.
   tool("polynet_publish_course", "community.course.publish", "Publish or unpublish a course",
@@ -470,6 +545,8 @@ export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
   "polynet_create_event", "polynet_update_event", "polynet_cancel_event", "polynet_announce",
   "polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_unban_members", "polynet_change_courses",
   "polynet_add_lesson", "polynet_edit_lesson", "polynet_edit_course", "polynet_order_lessons", "polynet_order_courses",
+  "polynet_move_member_stage", "polynet_set_member_status", "polynet_set_member_milestone",
+  "polynet_record_member_win", "polynet_set_member_guide_note", "polynet_update_journey_stages",
 ]);
 // Tools whose effect leaves the chat: by email (event reminders, cancellations,
 // announcements, the "you're in" email), or to the public (a community's name,
@@ -485,6 +562,7 @@ export const ACTION_TOOLS_THAT_EMAIL = new Set([
 export const ACTION_TOOLS_THAT_ADD = new Set([
   "polynet_post", "polynet_reply", "polynet_reply_message", "polynet_create_channel", "polynet_create_event", "polynet_announce",
   "polynet_change_courses", "polynet_create_course", "polynet_add_lesson", "polynet_remember",
+  "polynet_record_member_win",
 ]);
 
 // A named tool as an MCP tool. What asks every time, destroys, or is listed

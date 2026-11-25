@@ -6,22 +6,28 @@
 // Manager-only (owners and admins): members and moderators fail closed.
 // Founders see outcomes and their own instructions, NEVER members' private words.
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   communityMembershipRowIsActive,
+  getActiveCommunityBlock,
+  getUniqueCommunityMembershipByPair,
   readCommunityActiveMemberCount,
   requireCommunityManager,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { factVisibleToHost, moneyFor, planFor } from "../shared/communityMemberRecords";
+import type { CommunityMemberJourneySelfSummary } from "../shared/communityMemberSelfContext";
 import {
   DEFAULT_JOURNEY_STAGES,
+  JOURNEY_CARD_STATUSES,
+  JOURNEY_CARD_STATUS_SORT_RANK,
   MAX_AGENT_OUTCOME_CHARS,
   MAX_CARD_OUTCOMES,
   MAX_CHECKPOINT_LABEL_CHARS,
   MAX_JOURNEY_STAGES,
   MAX_STAGE_CHECKPOINTS,
+  MIN_JOURNEY_STAGES,
   defaultStageKeyForMember,
   deriveMemberJourneyStatus,
   evaluateStageCheckpoints,
@@ -31,8 +37,10 @@ import {
   normalizeJourneyStages,
   normalizeOutcomeText,
   normalizeStageCheckpoints,
+  renderMemberGuideCoachingContext,
   slugifyJourneyStageKey,
   type JourneyCardStatus,
+  type JourneyMilestoneSource,
   type JourneyStageDefinition,
 } from "../shared/communityMemberJourney";
 
@@ -343,6 +351,288 @@ export async function recordMemberJourneyCoachOutcome(
   });
 }
 
+async function computeCommunityMemberJourneyBoard(
+  ctx: any,
+  args: { communityId: any; community: any; nowMs: number },
+) {
+  const { nowMs, community } = args;
+  const [{ stages, autoAdvanceEnabled }, activeRosterRows, pricePoints, goalFacts, waitingCoachDrafts, sentCoachDrafts] =
+    await Promise.all([
+      readStagesForCommunity(ctx, args.communityId),
+      // Filter to active memberships via index BEFORE applying the board cap so
+      // historical churned rows never push active members off the board.
+      ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_state_createdAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("state", "active"),
+        )
+        .order("desc")
+        .take(BOARD_MEMBER_CAP + 2),
+      ctx.db
+        .query("communityPricePoints")
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .take(100),
+      ctx.db
+        .query("memberFacts")
+        .withIndex("by_community_kind", (q: any) =>
+          q.eq("communityId", args.communityId).eq("kind", "goal"),
+        )
+        .take(GOALS_SCAN_CAP),
+      ctx.db
+        .query("communityMemberCoachDrafts")
+        .withIndex("by_community_status_createdAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("status", "waiting"),
+        )
+        .order("desc")
+        .take(COACH_OUTCOME_SCAN_CAP),
+      ctx.db
+        .query("communityMemberCoachDrafts")
+        .withIndex("by_community_status_sentAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("status", "sent"),
+        )
+        .order("desc")
+        .take(COACH_OUTCOME_SCAN_CAP),
+    ]);
+
+  const ownerId = String(community.ownerId);
+  const nonOwnerActive: Array<Record<string, any>> = activeRosterRows.filter(
+    (row: any) => communityMembershipRowIsActive(row) && String(row.userId) !== ownerId,
+  );
+  const capped = nonOwnerActive.length > BOARD_MEMBER_CAP;
+  const activeMemberships: Array<Record<string, any>> = nonOwnerActive.slice(0, BOARD_MEMBER_CAP);
+
+  const validStageKeys = new Set(stages.map((stage) => stage.key));
+
+  const priceById = new Map<string, any>();
+  for (const point of pricePoints) {
+    priceById.set(String(point._id), {
+      id: String(point._id),
+      name: point.name,
+      amountBaseUnits: point.amountBaseUnits,
+      currency: point.currency,
+      currencyDecimals: point.currencyDecimals,
+      billingPeriod: point.billingPeriod,
+    });
+  }
+
+  const goalByUserId = new Map<string, string>();
+  const goalUpdatedByUserId = new Map<string, number>();
+  for (const fact of goalFacts) {
+    if (!factVisibleToHost(fact)) continue;
+    const key = String(fact.userId);
+    const prevAt = goalUpdatedByUserId.get(key) ?? 0;
+    if (Number(fact.updatedAt ?? 0) >= prevAt) {
+      goalUpdatedByUserId.set(key, Number(fact.updatedAt ?? 0));
+      goalByUserId.set(key, String(fact.body ?? "").trim().slice(0, 140));
+    }
+  }
+
+  const coachDraftsByUserId = new Map<string, any[]>();
+  for (const check of [...waitingCoachDrafts, ...sentCoachDrafts]) {
+    const key = String(check.memberUserId);
+    const list = coachDraftsByUserId.get(key);
+    if (list) list.push(check);
+    else coachDraftsByUserId.set(key, [check]);
+  }
+
+  const cards = await Promise.all(
+    activeMemberships.map(async (membership: any) => {
+      const userIdStr = String(membership.userId);
+      const memberDrafts = coachDraftsByUserId.get(userIdStr) ?? [];
+      const sentDrafts = memberDrafts.filter((check: any) => check.status === "sent");
+      const sentThreadIds = sentDrafts
+        .map((check: any) => (typeof check.threadId === "string" ? check.threadId : ""))
+        .filter(Boolean);
+
+      const [userRaw, profile, storedCard, subRows, presence, participation, lastGuideReplyAt] = await Promise.all([
+        ctx.db.get(membership.userId),
+        resolveUserProfileDisplayProjection(ctx, membership.userId),
+        ctx.db
+          .query("communityMemberJourneyCards")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", membership.userId),
+          )
+          .unique(),
+        ctx.db
+          .query("communitySubscriptions")
+          .withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id))
+          .take(5),
+        ctx.db
+          .query("communityPresence")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", membership.userId),
+          )
+          .unique(),
+        readMemberParticipationSignals(ctx, args.communityId, membership.userId),
+        sentDrafts.length > 0
+          ? readLastMemberGuideReplyAt(ctx, {
+              communityId: args.communityId,
+              userId: membership.userId,
+              draftThreadIds: sentThreadIds,
+            })
+          : Promise.resolve(null),
+      ]);
+      const user: any = userRaw;
+
+      subRows.sort((a: any, b: any) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0));
+      const subscription = subRows.find((row: any) => row.status !== "ended") ?? subRows[0] ?? null;
+      const point = subscription?.pricePointId ? priceById.get(String(subscription.pricePointId)) ?? null : null;
+      const plan = planFor({ isOwner: false, accessSource: membership.accessSource, pricePoint: point });
+      const money = moneyFor({ membershipState: membership.state, subscription });
+      const moneyKind = money?.kind === "on_hold" || money?.kind === "cancelling" ? money.kind : null;
+
+      const joinedAtMs = typeof membership.createdAt === "number" ? membership.createdAt : null;
+      const bestActiveAt = Math.max(
+        typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0,
+        typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0,
+        participation.lastParticipationAtMs ?? 0,
+      );
+      const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
+
+      const stageKey =
+        storedCard && validStageKeys.has(storedCard.stageKey)
+          ? String(storedCard.stageKey)
+          : defaultStageKeyForMember({
+              stages,
+              joinedAtMs,
+              lastActiveAtMs,
+              participationCount: participation.participationCount,
+              nowMs,
+            });
+
+      let latestCoachSummary: { summary: string; at: number } | null = null;
+      let unansweredCoachCount = 0;
+      for (const check of memberDrafts) {
+        const at = Number(check.sentAt ?? check.createdAt ?? 0);
+        const sentAt = Number(check.sentAt ?? check.createdAt ?? 0);
+        const replied =
+          check.status === "sent" &&
+          typeof lastGuideReplyAt === "number" &&
+          sentAt > 0 &&
+          lastGuideReplyAt >= sentAt;
+        if (check.status === "sent" && !replied) {
+          unansweredCoachCount += 1;
+        }
+        if (!latestCoachSummary || at > latestCoachSummary.at) {
+          latestCoachSummary = {
+            summary: formatCoachOutcomeSummary({
+              status: check.status,
+              reason: check.reason,
+              sentAt: check.sentAt ?? null,
+              createdAt: check.createdAt,
+              replied,
+            }),
+            at,
+          };
+        }
+      }
+
+      const statusOverride = (storedCard?.statusOverride ?? null) as JourneyCardStatus | null;
+      const status = deriveMemberJourneyStatus({
+        statusOverride,
+        stageKey,
+        stages,
+        moneyKind,
+        lastActiveAtMs,
+        joinedAtMs,
+        unansweredCoachCount,
+        nowMs,
+      });
+
+      const storedOutcomeAt = typeof storedCard?.agentOutcomeAt === "number" ? storedCard.agentOutcomeAt : 0;
+      const coachAt = latestCoachSummary?.at ?? 0;
+      const agentOutcome =
+        latestCoachSummary && coachAt >= storedOutcomeAt
+          ? latestCoachSummary.summary
+          : storedCard?.agentOutcomeNote
+            ? String(storedCard.agentOutcomeNote)
+            : latestCoachSummary?.summary ?? null;
+      const agentOutcomeAt = Math.max(storedOutcomeAt, coachAt) || null;
+
+      const currentStage = stages.find((entry) => entry.key === stageKey) ?? stages[0] ?? null;
+      const workingOn = goalByUserId.get(userIdStr) ?? null;
+      const evaluatedCheckpoints = evaluateStageCheckpoints({
+        checkpoints: currentStage?.checkpoints ?? [],
+        postsCount: participation.postsCount,
+        lessonsDoneCount: participation.lessonsDoneCount,
+        hasSharedGoal: Boolean(workingOn),
+        completedMilestones: storedCard?.completedMilestones,
+      });
+      const checkpointsView = evaluatedCheckpoints.map((cp) => ({
+        key: cp.key,
+        label: cp.label,
+        kind: cp.kind,
+        done: cp.done,
+        auto: cp.auto,
+        completed_at: iso(cp.completedAtMs),
+      }));
+      const checkpointsDone = checkpointsView.filter((cp) => cp.done).length;
+      const rawOutcomes = Array.isArray(storedCard?.outcomes) ? storedCard.outcomes : [];
+      const outcomesView = [...rawOutcomes]
+        .sort((a: any, b: any) => Number(b.at ?? 0) - Number(a.at ?? 0))
+        .slice(0, MAX_CARD_OUTCOMES)
+        .map((item: any) => ({
+          id: String(item.id),
+          text: String(item.text),
+          at: iso(item.at) ?? new Date(nowMs).toISOString(),
+          source: (item.source ?? "founder") as JourneyMilestoneSource,
+        }));
+      const latestOutcome = outcomesView[0]
+        ? { text: outcomesView[0].text, at: outcomesView[0].at }
+        : null;
+
+      return {
+        membership_id: String(membership._id),
+        db_user_id: userIdStr,
+        user_id: String(user?.authSubject ?? "").trim() || userIdStr,
+        name: profile?.display_name || user?.displayName || user?.handle || "Member",
+        handle: user?.handle ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+        avatar_focus_x: profile?.avatar_focus_x ?? 0.5,
+        avatar_focus_y: profile?.avatar_focus_y ?? 0.5,
+        avatar_zoom: profile?.avatar_zoom ?? 1,
+        role: membership.role as "owner" | "admin" | "moderator" | "member",
+        plan_label: plan.label,
+        money_kind: moneyKind,
+        stage_key: stageKey,
+        stage_name: currentStage?.name ?? stageKey,
+        status,
+        status_is_manual: Boolean(statusOverride),
+        founder_instruction: normalizeFounderInstruction(storedCard?.founderInstruction),
+        founder_instruction_updated_at: iso(storedCard?.founderInstructionUpdatedAt),
+        agent_outcome: agentOutcome,
+        agent_outcome_at: iso(agentOutcomeAt),
+        working_on: workingOn,
+        activity_summary: formatMemberActivitySummary({
+          postsCount: participation.postsCount,
+          lessonsDoneCount: participation.lessonsDoneCount,
+          lessonsCapped: participation.lessonsCapped,
+        }),
+        checkpoints: checkpointsView,
+        checkpoints_done: checkpointsDone,
+        checkpoints_total: checkpointsView.length,
+        outcomes: outcomesView,
+        latest_outcome: latestOutcome,
+        joined_at: iso(joinedAtMs),
+        last_active_at: iso(lastActiveAtMs),
+      };
+    }),
+  );
+
+  const totalActiveMembers = Math.max(
+    cards.length,
+    (readCommunityActiveMemberCount(community) ?? cards.length) - 1,
+  );
+
+  return {
+    stages,
+    auto_advance_enabled: autoAdvanceEnabled,
+    cards,
+    total_active_members: totalActiveMembers,
+    capped,
+  };
+}
+
 export const getCommunityMemberJourneyBoard = query({
   args: {
     authSubject: v.optional(v.string()),
@@ -358,280 +648,939 @@ export const getCommunityMemberJourneyBoard = query({
       communityId: args.communityId,
       userId: actorUserId,
     });
+    const board = await computeCommunityMemberJourneyBoard(ctx, {
+      communityId: args.communityId,
+      community,
+      nowMs: Date.now(),
+    });
+    return {
+      stages: board.stages,
+      auto_advance_enabled: board.auto_advance_enabled,
+      cards: board.cards.map(({ db_user_id: _dbUserId, stage_name: _stageName, ...card }) => card),
+      total_active_members: board.total_active_members,
+      capped: board.capped,
+    };
+  },
+});
+
+// Canonical builder/journey.json snapshot for owners and admins through the
+// Official Polynet MCP and Studio Guide chat. Re-enforces requireCommunityManager
+// directly; never exposes any member's private 1:1 conversation words.
+export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
     const nowMs = Date.now();
-    const [{ stages, autoAdvanceEnabled }, activeRosterRows, pricePoints, goalFacts, waitingCoachDrafts, sentCoachDrafts] =
-      await Promise.all([
-        readStagesForCommunity(ctx, args.communityId),
-        // Filter to active memberships via index BEFORE applying the board cap so
-        // historical churned rows never push active members off the board.
-        ctx.db
-          .query("communityMemberships")
-          .withIndex("by_community_state_createdAt", (q: any) =>
-            q.eq("communityId", args.communityId).eq("state", "active"),
-          )
-          .order("desc")
-          .take(BOARD_MEMBER_CAP + 2),
-        ctx.db
-          .query("communityPricePoints")
-          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .take(100),
-        ctx.db
-          .query("memberFacts")
-          .withIndex("by_community_kind", (q: any) =>
-            q.eq("communityId", args.communityId).eq("kind", "goal"),
-          )
-          .take(GOALS_SCAN_CAP),
-        ctx.db
-          .query("communityMemberCoachDrafts")
-          .withIndex("by_community_status_createdAt", (q: any) =>
-            q.eq("communityId", args.communityId).eq("status", "waiting"),
-          )
-          .order("desc")
-          .take(COACH_OUTCOME_SCAN_CAP),
-        ctx.db
-          .query("communityMemberCoachDrafts")
-          .withIndex("by_community_status_sentAt", (q: any) =>
-            q.eq("communityId", args.communityId).eq("status", "sent"),
-          )
-          .order("desc")
-          .take(COACH_OUTCOME_SCAN_CAP),
-      ]);
-
-    const ownerId = String(community.ownerId);
-    const nonOwnerActive = activeRosterRows.filter(
-      (row: any) => communityMembershipRowIsActive(row) && String(row.userId) !== ownerId,
-    );
-    const capped = nonOwnerActive.length > BOARD_MEMBER_CAP;
-    const activeMemberships = nonOwnerActive.slice(0, BOARD_MEMBER_CAP);
-
-    const validStageKeys = new Set(stages.map((stage) => stage.key));
-
-    const priceById = new Map<string, any>();
-    for (const point of pricePoints) {
-      priceById.set(String(point._id), {
-        id: String(point._id),
-        name: point.name,
-        amountBaseUnits: point.amountBaseUnits,
-        currency: point.currency,
-        currencyDecimals: point.currencyDecimals,
-        billingPeriod: point.billingPeriod,
-      });
-    }
-
-    const goalByUserId = new Map<string, string>();
-    const goalUpdatedByUserId = new Map<string, number>();
-    for (const fact of goalFacts) {
-      if (!factVisibleToHost(fact)) continue;
-      const key = String(fact.userId);
-      const prevAt = goalUpdatedByUserId.get(key) ?? 0;
-      if (Number(fact.updatedAt ?? 0) >= prevAt) {
-        goalUpdatedByUserId.set(key, Number(fact.updatedAt ?? 0));
-        goalByUserId.set(key, String(fact.body ?? "").trim().slice(0, 140));
+    const board = await computeCommunityMemberJourneyBoard(ctx, {
+      communityId: args.communityId,
+      community,
+      nowMs,
+    });
+    const byStage: Record<string, number> = Object.fromEntries(board.stages.map((stage) => [stage.key, 0]));
+    const byStatus: Record<JourneyCardStatus, number> = {
+      needs_you: 0,
+      stuck: 0,
+      on_track: 0,
+      quiet: 0,
+      done: 0,
+    };
+    const firstStageKey = board.stages[0]?.key ?? null;
+    const lastStageKey = board.stages[board.stages.length - 1]?.key ?? null;
+    let readyToAdvanceCount = 0;
+    let activatedCount = 0;
+    for (const card of board.cards) {
+      byStage[card.stage_key] = (byStage[card.stage_key] ?? 0) + 1;
+      const cardStatus = card.status as JourneyCardStatus;
+      byStatus[cardStatus] = (byStatus[cardStatus] ?? 0) + 1;
+      if (firstStageKey && card.stage_key !== firstStageKey) activatedCount += 1;
+      if (
+        card.checkpoints_total > 0 &&
+        card.checkpoints_done >= card.checkpoints_total &&
+        card.stage_key !== lastStageKey
+      ) {
+        readyToAdvanceCount += 1;
       }
     }
+    const activatedPct = board.cards.length > 0 ? Math.round((activatedCount / board.cards.length) * 100) : 0;
+    // Sort cards by highest actionability first (needs_you -> stuck -> ready_to_advance -> on_track -> done -> quiet)
+    // so large communities always surface the highest-priority members within the 24 KB canonical JSON budget.
+    const sortedCards = [...board.cards].sort((left, right) => {
+      const leftRank = JOURNEY_CARD_STATUS_SORT_RANK[left.status as JourneyCardStatus] ?? 9;
+      const rightRank = JOURNEY_CARD_STATUS_SORT_RANK[right.status as JourneyCardStatus] ?? 9;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      const leftReady = left.checkpoints_total > 0 && left.checkpoints_done >= left.checkpoints_total && left.stage_key !== lastStageKey ? 0 : 1;
+      const rightReady = right.checkpoints_total > 0 && right.checkpoints_done >= right.checkpoints_total && right.stage_key !== lastStageKey ? 0 : 1;
+      if (leftReady !== rightReady) return leftReady - rightReady;
+      return String(right.last_active_at ?? "").localeCompare(String(left.last_active_at ?? ""));
+    });
 
-    const coachDraftsByUserId = new Map<string, any[]>();
-    for (const check of [...waitingCoachDrafts, ...sentCoachDrafts]) {
-      const key = String(check.memberUserId);
-      const list = coachDraftsByUserId.get(key);
-      if (list) list.push(check);
-      else coachDraftsByUserId.set(key, [check]);
+    const projectedCards = sortedCards.map((card) => {
+      const readyToAdvance =
+        card.checkpoints_total > 0 &&
+        card.checkpoints_done >= card.checkpoints_total &&
+        card.stage_key !== lastStageKey;
+      return {
+        member_ref: `user:${card.db_user_id}`,
+        handle: card.handle,
+        name: card.name,
+        role: card.role,
+        plan_label: card.plan_label,
+        ...(card.money_kind ? { money_kind: card.money_kind } : {}),
+        stage_key: card.stage_key,
+        stage_name: card.stage_name,
+        status: card.status,
+        status_is_manual: card.status_is_manual,
+        checkpoints_done: card.checkpoints_done,
+        checkpoints_total: card.checkpoints_total,
+        ready_to_advance: readyToAdvance,
+        ...(card.checkpoints.length
+          ? {
+              checkpoints_remaining: card.checkpoints.filter((cp) => !cp.done).map((cp) => cp.key),
+            }
+          : {}),
+        ...(card.latest_outcome ? { latest_outcome: card.latest_outcome } : {}),
+        ...(card.outcomes.length ? { outcomes: card.outcomes.slice(0, 3) } : {}),
+        ...(card.founder_instruction ? { founder_instruction: card.founder_instruction } : {}),
+        ...(card.agent_outcome ? { agent_outcome: card.agent_outcome } : {}),
+        ...(card.working_on ? { working_on: card.working_on } : {}),
+        ...(card.activity_summary ? { activity_summary: card.activity_summary } : {}),
+        joined_at: card.joined_at,
+        last_active_at: card.last_active_at,
+      };
+    });
+
+    // Enforce a hard budget safely below CANONICAL_JSON_DOCUMENT_MAX_CHARS (24,000)
+    // so builder/journey.json ALWAYS stays valid, parseable JSON even with 200 members.
+    const BUILDER_JOURNEY_JSON_BUDGET_CHARS = 22_000;
+    const buildPayload = (cardsSlice: typeof projectedCards, cardsTruncated: boolean) => ({
+      read_at: new Date(nowMs).toISOString(),
+      stages: board.stages,
+      summary: {
+        total_active_members: board.total_active_members,
+        shown_members: cardsSlice.length,
+        capped: board.capped || cardsTruncated,
+        cards_truncated: cardsTruncated,
+        activated_pct: activatedPct,
+        ready_to_advance_count: readyToAdvanceCount,
+        by_stage: byStage,
+        by_status: byStatus,
+      },
+      cards: cardsSlice,
+      ...(cardsTruncated
+        ? { note: "Showing highest-priority members first. Read members/<handle>.json for full journey details on any specific member." }
+        : {}),
+    });
+
+    let kept = projectedCards.length;
+    let payload = buildPayload(projectedCards, false);
+    if ((JSON.stringify(payload, null, 2)?.length ?? 0) > BUILDER_JOURNEY_JSON_BUDGET_CHARS) {
+      let low = 0;
+      let high = projectedCards.length;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        const candidate = buildPayload(projectedCards.slice(0, mid), mid < projectedCards.length);
+        if ((JSON.stringify(candidate, null, 2)?.length ?? 0) <= BUILDER_JOURNEY_JSON_BUDGET_CHARS) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+      kept = low;
+      payload = buildPayload(projectedCards.slice(0, kept), kept < projectedCards.length);
+    }
+    return payload;
+  },
+});
+
+export type BuilderMemberJourneySummary = {
+  stage_key: string;
+  stage_name: string;
+  status: JourneyCardStatus;
+  status_is_manual: boolean;
+  checkpoints_done: number;
+  checkpoints_total: number;
+  ready_to_advance: boolean;
+  checkpoints: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    done: boolean;
+    auto: boolean;
+    completed_at: string | null;
+  }>;
+  founder_instruction: string | null;
+  agent_outcome: string | null;
+  outcomes: Array<{ id: string; text: string; at: string; source: JourneyMilestoneSource }>;
+};
+
+// Member-safe own coaching context for members/me/context.md (member_private and
+// member_own_ai). Strictly excludes CRM health labels, founder instructions,
+// check-in tracking metadata, and all other members.
+export async function readMemberOwnJourneySummary(
+  ctx: any,
+  args: { communityId: any; userId: any; membership: any; nowMs: number },
+): Promise<CommunityMemberJourneySelfSummary | null> {
+  if (!args.membership || !communityMembershipRowIsActive(args.membership)) return null;
+  const [config, storedCard, participation, goalRows] = await Promise.all([
+    readStagesForCommunity(ctx, args.communityId),
+    ctx.db
+      .query("communityMemberJourneyCards")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
+      )
+      .unique(),
+    readMemberParticipationSignals(ctx, args.communityId, args.userId),
+    ctx.db
+      .query("memberFacts")
+      .withIndex("by_user_community", (q: any) =>
+        q.eq("userId", args.userId).eq("communityId", args.communityId),
+      )
+      .filter((q: any) => q.eq(q.field("kind"), "goal"))
+      .take(10),
+  ]);
+  const validStageKeys = new Set(config.stages.map((stage) => stage.key));
+  const stageKey =
+    storedCard && validStageKeys.has(storedCard.stageKey)
+      ? String(storedCard.stageKey)
+      : await resolveDerivedStageKeyForMember(ctx, {
+          communityId: args.communityId,
+          userId: args.userId,
+          stages: config.stages,
+          membership: args.membership,
+          participation,
+          nowMs: args.nowMs,
+        });
+  const stage = config.stages.find((entry) => entry.key === stageKey) ?? config.stages[0] ?? null;
+  if (!stage) return null;
+  const hasSharedGoal = goalRows.some((fact: any) => fact.kind === "goal" && factVisibleToHost(fact));
+  const evaluated = evaluateStageCheckpoints({
+    checkpoints: stage.checkpoints,
+    postsCount: participation.postsCount,
+    lessonsDoneCount: participation.lessonsDoneCount,
+    hasSharedGoal,
+    completedMilestones: storedCard?.completedMilestones,
+  });
+  const rawOutcomes = Array.isArray(storedCard?.outcomes) ? storedCard.outcomes : [];
+  const recentWins = [...rawOutcomes]
+    .sort((a: any, b: any) => Number(b.at ?? 0) - Number(a.at ?? 0))
+    .slice(0, 5)
+    .map((item: any) => ({
+      text: String(item.text ?? "").slice(0, 180),
+      at: iso(item.at) ?? new Date(args.nowMs).toISOString(),
+    }))
+    .filter((item) => Boolean(item.text));
+  return {
+    stage_name: stage.name,
+    stage_goal: stage.goal,
+    checkpoints_done: evaluated.filter((cp) => cp.done).map((cp) => cp.label),
+    checkpoints_remaining: evaluated.filter((cp) => !cp.done).map((cp) => cp.label),
+    recent_wins: recentWins,
+  };
+}
+
+// Per-member journey summary attached to members/<handle>.json ONLY under the
+// builder lens (owners & admins). Never called for member or self views.
+export async function readMemberJourneySummaryForBuilder(
+  ctx: any,
+  args: {
+    communityId: any;
+    userId: any;
+    membership: any;
+    subscription: any | null;
+    presence: any | null;
+    nowMs: number;
+  },
+): Promise<BuilderMemberJourneySummary | null> {
+  if (!args.membership || !communityMembershipRowIsActive(args.membership)) return null;
+  const [config, storedCard, userRaw, participation, goalRows, memberDrafts] = await Promise.all([
+    readStagesForCommunity(ctx, args.communityId),
+    ctx.db
+      .query("communityMemberJourneyCards")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
+      )
+      .unique(),
+    ctx.db.get(args.userId),
+    readMemberParticipationSignals(ctx, args.communityId, args.userId),
+    ctx.db
+      .query("memberFacts")
+      .withIndex("by_user_community", (q: any) =>
+        q.eq("userId", args.userId).eq("communityId", args.communityId),
+      )
+      .filter((q: any) => q.eq(q.field("kind"), "goal"))
+      .take(10),
+    ctx.db
+      .query("communityMemberCoachDrafts")
+      .withIndex("by_community_member_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("memberUserId", args.userId),
+      )
+      .order("desc")
+      .take(10),
+  ]);
+  const user: any = userRaw;
+  const joinedAtMs = typeof args.membership.createdAt === "number" ? args.membership.createdAt : null;
+  const bestActiveAt = Math.max(
+    typeof args.presence?.lastSeenAt === "number" ? args.presence.lastSeenAt : 0,
+    typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0,
+    participation.lastParticipationAtMs ?? 0,
+  );
+  const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
+  const validStageKeys = new Set(config.stages.map((stage) => stage.key));
+  const stageKey =
+    storedCard && validStageKeys.has(storedCard.stageKey)
+      ? String(storedCard.stageKey)
+      : defaultStageKeyForMember({
+          stages: config.stages,
+          joinedAtMs,
+          lastActiveAtMs,
+          participationCount: participation.participationCount,
+          nowMs: args.nowMs,
+        });
+  const stage = config.stages.find((entry) => entry.key === stageKey) ?? config.stages[0] ?? null;
+  if (!stage) return null;
+
+  const activeDrafts = memberDrafts.filter((row: any) => row.status === "waiting" || row.status === "sent");
+  const sentDrafts = activeDrafts.filter((row: any) => row.status === "sent");
+  const lastGuideReplyAt =
+    sentDrafts.length > 0
+      ? await readLastMemberGuideReplyAt(ctx, {
+          communityId: args.communityId,
+          userId: args.userId,
+          draftThreadIds: sentDrafts
+            .map((check: any) => (typeof check.threadId === "string" ? check.threadId : ""))
+            .filter(Boolean),
+        })
+      : null;
+  let latestCoachSummary: { summary: string; at: number } | null = null;
+  let unansweredCoachCount = 0;
+  for (const check of activeDrafts) {
+    const at = Number(check.sentAt ?? check.createdAt ?? 0);
+    const replied =
+      check.status === "sent" &&
+      typeof lastGuideReplyAt === "number" &&
+      at > 0 &&
+      lastGuideReplyAt >= at;
+    if (check.status === "sent" && !replied) unansweredCoachCount += 1;
+    if (!latestCoachSummary || at > latestCoachSummary.at) {
+      latestCoachSummary = {
+        summary: formatCoachOutcomeSummary({
+          status: check.status,
+          reason: check.reason,
+          sentAt: check.sentAt ?? null,
+          createdAt: check.createdAt,
+          replied,
+        }),
+        at,
+      };
+    }
+  }
+  const money = moneyFor({ membershipState: args.membership.state, subscription: args.subscription });
+  const moneyKind = money?.kind === "on_hold" || money?.kind === "cancelling" ? money.kind : null;
+  const statusOverride = (storedCard?.statusOverride ?? null) as JourneyCardStatus | null;
+  const status = deriveMemberJourneyStatus({
+    statusOverride,
+    stageKey,
+    stages: config.stages,
+    moneyKind,
+    lastActiveAtMs,
+    joinedAtMs,
+    unansweredCoachCount,
+    nowMs: args.nowMs,
+  });
+  const storedOutcomeAt = typeof storedCard?.agentOutcomeAt === "number" ? storedCard.agentOutcomeAt : 0;
+  const coachAt = latestCoachSummary?.at ?? 0;
+  const agentOutcome =
+    latestCoachSummary && coachAt >= storedOutcomeAt
+      ? latestCoachSummary.summary
+      : storedCard?.agentOutcomeNote
+        ? String(storedCard.agentOutcomeNote)
+        : latestCoachSummary?.summary ?? null;
+  const hasSharedGoal = goalRows.some((fact: any) => fact.kind === "goal" && factVisibleToHost(fact));
+  const evaluated = evaluateStageCheckpoints({
+    checkpoints: stage.checkpoints,
+    postsCount: participation.postsCount,
+    lessonsDoneCount: participation.lessonsDoneCount,
+    hasSharedGoal,
+    completedMilestones: storedCard?.completedMilestones,
+  });
+  const checkpointsView = evaluated.map((cp) => ({
+    key: cp.key,
+    label: cp.label,
+    kind: cp.kind,
+    done: cp.done,
+    auto: cp.auto,
+    completed_at: iso(cp.completedAtMs),
+  }));
+  const checkpointsDone = checkpointsView.filter((cp) => cp.done).length;
+  const lastStageKey = config.stages[config.stages.length - 1]?.key ?? null;
+  const rawOutcomes = Array.isArray(storedCard?.outcomes) ? storedCard.outcomes : [];
+  const outcomes = [...rawOutcomes]
+    .sort((a: any, b: any) => Number(b.at ?? 0) - Number(a.at ?? 0))
+    .slice(0, MAX_CARD_OUTCOMES)
+    .map((item: any) => ({
+      id: String(item.id),
+      text: String(item.text),
+      at: iso(item.at) ?? new Date(args.nowMs).toISOString(),
+      source: (item.source ?? "founder") as JourneyMilestoneSource,
+    }));
+  return {
+    stage_key: stageKey,
+    stage_name: stage.name,
+    status,
+    status_is_manual: Boolean(statusOverride),
+    checkpoints_done: checkpointsDone,
+    checkpoints_total: checkpointsView.length,
+    ready_to_advance:
+      checkpointsView.length > 0 &&
+      checkpointsDone >= checkpointsView.length &&
+      stageKey !== lastStageKey,
+    checkpoints: checkpointsView,
+    founder_instruction: normalizeFounderInstruction(storedCard?.founderInstruction),
+    agent_outcome: agentOutcome,
+    outcomes,
+  };
+}
+
+// Silent coaching focus for the hosted community AI in a member's own private
+// talk (member_private ONLY). Re-verifies active non-owner unblocked membership;
+// never exposed to MCP (member_own_ai) or public channel mentions.
+export const readMemberGuideCoachingContextInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args): Promise<string | null> => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) === String(args.userId)) return null;
+    const [membership, block] = await Promise.all([
+      getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: args.userId }),
+      getActiveCommunityBlock({ ctx, communityId: args.communityId, userId: args.userId }),
+    ]);
+    if (!membership || !communityMembershipRowIsActive(membership) || block) return null;
+    const nowMs = Date.now();
+    const [summary, storedCard] = await Promise.all([
+      readMemberOwnJourneySummary(ctx, {
+        communityId: args.communityId,
+        userId: args.userId,
+        membership,
+        nowMs,
+      }),
+      ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", args.communityId).eq("userId", args.userId),
+        )
+        .unique(),
+    ]);
+    return renderMemberGuideCoachingContext({
+      stageGoal: summary?.stage_goal ?? null,
+      checkpointsDone: summary?.checkpoints_done ?? [],
+      checkpointsRemaining: summary?.checkpoints_remaining ?? [],
+      recentWins: summary?.recent_wins ?? [],
+      founderInstruction: normalizeFounderInstruction(storedCard?.founderInstruction),
+    });
+  },
+});
+
+function resolveStageSelector(
+  stages: readonly JourneyStageDefinition[],
+  selector: string,
+): JourneyStageDefinition | null {
+  const cleaned = String(selector ?? "").trim();
+  if (!cleaned) return null;
+  const lower = cleaned.toLowerCase();
+  const byKey = stages.find((stage) => stage.key.toLowerCase() === lower);
+  if (byKey) return byKey;
+  const byName = stages.find((stage) => stage.name.trim().toLowerCase() === lower);
+  if (byName) return byName;
+  const slugged = slugifyJourneyStageKey(cleaned, 0);
+  return stages.find((stage) => stage.key === slugged) ?? null;
+}
+
+// Used by askPersonFirst in convex/polynetCanonicalExecutor.ts to build an
+// accurate Yes/No confirmation card before removing a Member Board stage.
+export const describeJourneyStageRemovalInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    stage: v.string(),
+    moveToStage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const { stages } = await readStagesForCommunity(ctx, args.communityId);
+    const target = resolveStageSelector(stages, args.stage);
+    if (!target) return { ok: false as const, code: "journey_stage_not_found" as const };
+    if (stages.length <= MIN_JOURNEY_STAGES) {
+      return { ok: false as const, code: "journey_stages_count_invalid" as const };
+    }
+    const remaining = stages.filter((entry) => entry.key !== target.key);
+    let fallback = remaining[0]!;
+    if (args.moveToStage !== undefined && args.moveToStage.trim()) {
+      const requestedFallback = resolveStageSelector(remaining, args.moveToStage);
+      if (!requestedFallback) {
+        return { ok: false as const, code: "journey_fallback_stage_not_found" as const };
+      }
+      fallback = requestedFallback;
+    }
+    const board = await computeCommunityMemberJourneyBoard(ctx, {
+      communityId: args.communityId,
+      community,
+      nowMs: Date.now(),
+    });
+    const memberCount = board.cards.filter((card) => card.stage_key === target.key).length;
+    return {
+      ok: true as const,
+      stageKey: target.key,
+      stageName: target.name,
+      fallbackStageKey: fallback.key,
+      fallbackStageName: fallback.name,
+      memberCount,
+    };
+  },
+});
+
+async function applyCardPatchForMember(
+  ctx: any,
+  args: {
+    actorUserId: any;
+    communityId: any;
+    community: any;
+    stages: JourneyStageDefinition[];
+    targetUserId: any;
+    nowMs: number;
+    source: JourneyMilestoneSource;
+    stageKey?: string;
+    statusOverride?: JourneyCardStatus | "auto";
+    founderInstruction?: string;
+    toggleMilestone?: { key: string; label?: string; completed: boolean };
+    addOutcomeText?: string;
+    removeOutcomeId?: string;
+  },
+) {
+  if (String(args.targetUserId) === String(args.community.ownerId)) {
+    throw new Error("community_owner_not_on_board");
+  }
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx,
+    communityId: args.communityId,
+    userId: args.targetUserId,
+  });
+  if (!membership || !communityMembershipRowIsActive(membership)) {
+    throw new Error("community_member_not_found");
+  }
+  const validKeys = new Set(args.stages.map((stage) => stage.key));
+  if (args.stageKey !== undefined && !validKeys.has(args.stageKey)) {
+    throw new Error("journey_stage_not_found");
+  }
+  const existing = await ctx.db
+    .query("communityMemberJourneyCards")
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", args.communityId).eq("userId", args.targetUserId),
+    )
+    .unique();
+
+  const nextStageKey =
+    args.stageKey ??
+    (existing && validKeys.has(existing.stageKey)
+      ? existing.stageKey
+      : await resolveDerivedStageKeyForMember(ctx, {
+          communityId: args.communityId,
+          userId: args.targetUserId,
+          stages: args.stages,
+          membership,
+          nowMs: args.nowMs,
+        }));
+  const nextStatusOverride: JourneyCardStatus | undefined =
+    args.statusOverride === undefined
+      ? existing?.statusOverride
+      : args.statusOverride === "auto"
+        ? undefined
+        : args.statusOverride;
+  const hasInstructionUpdate = args.founderInstruction !== undefined;
+  const nextInstruction = hasInstructionUpdate
+    ? normalizeFounderInstruction(args.founderInstruction)
+    : normalizeFounderInstruction(existing?.founderInstruction);
+
+  let nextCompletedMilestones = Array.isArray(existing?.completedMilestones)
+    ? [...existing.completedMilestones]
+    : undefined;
+  let milestoneKeyApplied: string | null = null;
+  if (args.toggleMilestone) {
+    const milestoneKey = slugifyJourneyStageKey(args.toggleMilestone.key, 0);
+    milestoneKeyApplied = milestoneKey;
+    const current = nextCompletedMilestones ?? [];
+    const without = current.filter((row: any) => String(row.key) !== milestoneKey);
+    if (args.toggleMilestone.completed) {
+      const cleanLabel = args.toggleMilestone.label
+        ? String(args.toggleMilestone.label).replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS)
+        : undefined;
+      without.push({
+        key: milestoneKey,
+        ...(cleanLabel ? { label: cleanLabel } : {}),
+        completedAt: args.nowMs,
+        source: args.source,
+      });
+    }
+    const configuredKeys = new Set(args.stages.flatMap((stage) => stage.checkpoints.map((cp) => cp.key)));
+    const maxStoredMilestones = Math.max(64, MAX_JOURNEY_STAGES * MAX_STAGE_CHECKPOINTS);
+    if (without.length > maxStoredMilestones) {
+      const active = without.filter((row: any) => configuredKeys.has(String(row.key)));
+      const historical = without.filter((row: any) => !configuredKeys.has(String(row.key)));
+      const remainingSlots = Math.max(0, maxStoredMilestones - active.length);
+      nextCompletedMilestones = [...historical.slice(-remainingSlots), ...active];
+    } else {
+      nextCompletedMilestones = without;
+    }
+  }
+
+  let nextOutcomes = Array.isArray(existing?.outcomes) ? [...existing.outcomes] : undefined;
+  let addedOutcome: { id: string; text: string; at: string; source: JourneyMilestoneSource } | null = null;
+  let removedOutcomeId: string | null = null;
+  if (args.removeOutcomeId) {
+    const beforeLen = (nextOutcomes ?? []).length;
+    nextOutcomes = (nextOutcomes ?? []).filter(
+      (item: any) => String(item.id) !== String(args.removeOutcomeId),
+    );
+    if (nextOutcomes.length === beforeLen) {
+      throw new Error("journey_outcome_not_found");
+    }
+    removedOutcomeId = String(args.removeOutcomeId);
+  }
+  if (args.addOutcomeText !== undefined) {
+    const text = normalizeOutcomeText(args.addOutcomeText);
+    if (!text) throw new Error("journey_outcome_text_required");
+    const id =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `out_${args.nowMs}_${Math.random().toString(36).slice(2, 8)}`;
+    nextOutcomes = [
+      { id, text, at: args.nowMs, source: args.source },
+      ...(nextOutcomes ?? []),
+    ].slice(0, MAX_CARD_OUTCOMES);
+    addedOutcome = { id, text, at: new Date(args.nowMs).toISOString(), source: args.source };
+  }
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      stageKey: nextStageKey,
+      statusOverride: nextStatusOverride,
+      ...(hasInstructionUpdate
+        ? {
+            founderInstruction: nextInstruction ?? undefined,
+            founderInstructionUpdatedAt: nextInstruction ? args.nowMs : undefined,
+          }
+        : {}),
+      ...(args.toggleMilestone ? { completedMilestones: nextCompletedMilestones } : {}),
+      ...(args.addOutcomeText !== undefined || args.removeOutcomeId
+        ? { outcomes: nextOutcomes }
+        : {}),
+      updatedByUserId: args.actorUserId,
+      updatedAt: args.nowMs,
+    });
+  } else {
+    await ctx.db.insert("communityMemberJourneyCards", {
+      communityId: args.communityId,
+      userId: args.targetUserId,
+      stageKey: nextStageKey,
+      ...(nextStatusOverride ? { statusOverride: nextStatusOverride } : {}),
+      ...(nextInstruction
+        ? { founderInstruction: nextInstruction, founderInstructionUpdatedAt: args.nowMs }
+        : {}),
+      ...(nextCompletedMilestones?.length ? { completedMilestones: nextCompletedMilestones } : {}),
+      ...(nextOutcomes?.length ? { outcomes: nextOutcomes } : {}),
+      updatedByUserId: args.actorUserId,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+
+  const stageObj = args.stages.find((entry) => entry.key === nextStageKey) ?? null;
+  return {
+    stage_key: nextStageKey,
+    stage_name: stageObj?.name ?? nextStageKey,
+    status_override: nextStatusOverride ?? null,
+    founder_instruction: nextInstruction,
+    ...(milestoneKeyApplied ? { milestone_key: milestoneKeyApplied, done: Boolean(args.toggleMilestone?.completed) } : {}),
+    ...(addedOutcome ? { outcome: addedOutcome } : {}),
+    ...(removedOutcomeId ? { removed_outcome_id: removedOutcomeId } : {}),
+  };
+}
+
+// Builder-only Member Board actions invoked via Official Polynet MCP or Studio
+// Guide chat through convex/communityOperations.ts (atomic with receipt).
+export const applyJourneyOperationForTrustedManagerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    operation: v.string(),
+    input: v.any(),
+    source: v.union(v.literal("mcp"), v.literal("agent")),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const input = (args.input && typeof args.input === "object" ? args.input : {}) as Record<string, unknown>;
+    const nowMs = Date.now();
+    const { stages, autoAdvanceEnabled } = await readStagesForCommunity(ctx, args.communityId);
+
+    const parseUserRef = (raw: unknown): any | null => {
+      const match = typeof raw === "string" ? /^user:([A-Za-z0-9]+)$/.exec(raw.trim()) : null;
+      return match ? ctx.db.normalizeId("users", match[1]) : null;
+    };
+
+    if (args.operation === "community.journey.move_stage" || args.operation === "community.journey.set_status") {
+      const rawMembers = Array.isArray(input.members) ? input.members : [];
+      if (rawMembers.length === 0 || rawMembers.length > 50) {
+        throw new Error("journey_members_invalid");
+      }
+      let targetStage: JourneyStageDefinition | null = null;
+      let statusOverride: JourneyCardStatus | "auto" | undefined = undefined;
+      if (args.operation === "community.journey.move_stage") {
+        targetStage = resolveStageSelector(stages, String(input.stage ?? ""));
+        if (!targetStage) throw new Error("journey_stage_not_found");
+      } else {
+        const rawStatus = String(input.status ?? "");
+        if (rawStatus !== "auto" && !(JOURNEY_CARD_STATUSES as readonly string[]).includes(rawStatus)) {
+          throw new Error("journey_status_invalid");
+        }
+        statusOverride = rawStatus as JourneyCardStatus | "auto";
+      }
+      const results: Array<Record<string, unknown>> = [];
+      let succeeded = 0;
+      let failed = 0;
+      for (const rawRef of rawMembers) {
+        const ref = String(rawRef);
+        const targetUserId = parseUserRef(rawRef);
+        if (!targetUserId) {
+          failed += 1;
+          results.push({ member: ref, ok: false, code: "member_not_found", message: "They aren't an active member of this community." });
+          continue;
+        }
+        try {
+          const updated = await applyCardPatchForMember(ctx, {
+            actorUserId: args.userId,
+            communityId: args.communityId,
+            community,
+            stages,
+            targetUserId,
+            nowMs,
+            source: args.source,
+            ...(targetStage ? { stageKey: targetStage.key } : {}),
+            ...(statusOverride !== undefined ? { statusOverride } : {}),
+          });
+          succeeded += 1;
+          results.push({ member: ref, ok: true, ...updated });
+        } catch (error) {
+          failed += 1;
+          const raw = error instanceof Error ? error.message : "";
+          const code = raw.includes("community_owner_not_on_board") ? "owner_not_on_board" : "member_not_found";
+          const message =
+            code === "owner_not_on_board"
+              ? "The community owner doesn't sit on the Member Board."
+              : "They aren't an active member of this community.";
+          results.push({ member: ref, ok: false, code, message });
+        }
+      }
+      return { results, succeeded, failed };
     }
 
-    const cards = await Promise.all(
-      activeMemberships.map(async (membership: any) => {
-        const userIdStr = String(membership.userId);
-        const memberDrafts = coachDraftsByUserId.get(userIdStr) ?? [];
-        const sentDrafts = memberDrafts.filter((check: any) => check.status === "sent");
-        const sentThreadIds = sentDrafts
-          .map((check: any) => (typeof check.threadId === "string" ? check.threadId : ""))
-          .filter(Boolean);
-
-        const [userRaw, profile, storedCard, subRows, presence, participation, lastGuideReplyAt] = await Promise.all([
-          ctx.db.get(membership.userId),
-          resolveUserProfileDisplayProjection(ctx, membership.userId),
-          ctx.db
-            .query("communityMemberJourneyCards")
-            .withIndex("by_community_user", (q: any) =>
-              q.eq("communityId", args.communityId).eq("userId", membership.userId),
-            )
-            .unique(),
-          ctx.db
-            .query("communitySubscriptions")
-            .withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id))
-            .take(5),
-          ctx.db
-            .query("communityPresence")
-            .withIndex("by_community_user", (q: any) =>
-              q.eq("communityId", args.communityId).eq("userId", membership.userId),
-            )
-            .unique(),
-          readMemberParticipationSignals(ctx, args.communityId, membership.userId),
-          sentDrafts.length > 0
-            ? readLastMemberGuideReplyAt(ctx, {
-                communityId: args.communityId,
-                userId: membership.userId,
-                draftThreadIds: sentThreadIds,
-              })
-            : Promise.resolve(null),
-        ]);
-        const user: any = userRaw;
-
-        subRows.sort((a: any, b: any) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0));
-        const subscription = subRows.find((row: any) => row.status !== "ended") ?? subRows[0] ?? null;
-        const point = subscription?.pricePointId ? priceById.get(String(subscription.pricePointId)) ?? null : null;
-        const plan = planFor({ isOwner: false, accessSource: membership.accessSource, pricePoint: point });
-        const money = moneyFor({ membershipState: membership.state, subscription });
-        const moneyKind = money?.kind === "on_hold" || money?.kind === "cancelling" ? money.kind : null;
-
-        const joinedAtMs = typeof membership.createdAt === "number" ? membership.createdAt : null;
-        const bestActiveAt = Math.max(
-          typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0,
-          typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0,
-          participation.lastParticipationAtMs ?? 0,
-        );
-        const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
-
-        const stageKey =
-          storedCard && validStageKeys.has(storedCard.stageKey)
-            ? String(storedCard.stageKey)
-            : defaultStageKeyForMember({
-                stages,
-                joinedAtMs,
-                lastActiveAtMs,
-                participationCount: participation.participationCount,
-                nowMs,
-              });
-
-        let latestCoachSummary: { summary: string; at: number } | null = null;
-        let unansweredCoachCount = 0;
-        for (const check of memberDrafts) {
-          const at = Number(check.sentAt ?? check.createdAt ?? 0);
-          const sentAt = Number(check.sentAt ?? check.createdAt ?? 0);
-          const replied =
-            check.status === "sent" &&
-            typeof lastGuideReplyAt === "number" &&
-            sentAt > 0 &&
-            lastGuideReplyAt >= sentAt;
-          if (check.status === "sent" && !replied) {
-            unansweredCoachCount += 1;
-          }
-          if (!latestCoachSummary || at > latestCoachSummary.at) {
-            latestCoachSummary = {
-              summary: formatCoachOutcomeSummary({
-                status: check.status,
-                reason: check.reason,
-                sentAt: check.sentAt ?? null,
-                createdAt: check.createdAt,
-                replied,
-              }),
-              at,
-            };
-          }
-        }
-
-        const statusOverride = (storedCard?.statusOverride ?? null) as JourneyCardStatus | null;
-        const status = deriveMemberJourneyStatus({
-          statusOverride,
-          stageKey,
+    if (
+      args.operation === "community.journey.set_milestone" ||
+      args.operation === "community.journey.record_win" ||
+      args.operation === "community.journey.set_guide_note"
+    ) {
+      const targetUserId = parseUserRef(input.member);
+      if (!targetUserId) throw new Error("community_member_not_found");
+      if (args.operation === "community.journey.set_milestone") {
+        const rawMilestone = String(input.milestone ?? "").trim();
+        if (!rawMilestone) throw new Error("journey_milestone_required");
+        const lower = rawMilestone.toLowerCase();
+        const configured = stages
+          .flatMap((stage) => stage.checkpoints)
+          .find((cp) => cp.key.toLowerCase() === lower || cp.label.trim().toLowerCase() === lower);
+        const key = configured ? configured.key : slugifyJourneyStageKey(rawMilestone, 0);
+        const label =
+          typeof input.label === "string" && input.label.trim()
+            ? input.label.trim()
+            : configured?.label ?? rawMilestone;
+        const completed = input.done !== false;
+        const updated = await applyCardPatchForMember(ctx, {
+          actorUserId: args.userId,
+          communityId: args.communityId,
+          community,
           stages,
-          moneyKind,
-          lastActiveAtMs,
-          joinedAtMs,
-          unansweredCoachCount,
+          targetUserId,
           nowMs,
+          source: args.source,
+          toggleMilestone: { key, label, completed },
         });
-
-        const storedOutcomeAt = typeof storedCard?.agentOutcomeAt === "number" ? storedCard.agentOutcomeAt : 0;
-        const coachAt = latestCoachSummary?.at ?? 0;
-        const agentOutcome =
-          latestCoachSummary && coachAt >= storedOutcomeAt
-            ? latestCoachSummary.summary
-            : storedCard?.agentOutcomeNote
-              ? String(storedCard.agentOutcomeNote)
-              : latestCoachSummary?.summary ?? null;
-        const agentOutcomeAt = Math.max(storedOutcomeAt, coachAt) || null;
-
-        const currentStage = stages.find((entry) => entry.key === stageKey) ?? stages[0] ?? null;
-        const workingOn = goalByUserId.get(userIdStr) ?? null;
-        const evaluatedCheckpoints = evaluateStageCheckpoints({
-          checkpoints: currentStage?.checkpoints ?? [],
-          postsCount: participation.postsCount,
-          lessonsDoneCount: participation.lessonsDoneCount,
-          hasSharedGoal: Boolean(workingOn),
-          completedMilestones: storedCard?.completedMilestones,
+        return { member: String(input.member), ...updated };
+      }
+      if (args.operation === "community.journey.record_win") {
+        const hasText = typeof input.text === "string" && input.text.trim().length > 0;
+        const hasRemove = typeof input.remove_outcome_id === "string" && input.remove_outcome_id.trim().length > 0;
+        if (hasText === hasRemove) throw new Error("journey_outcome_input_invalid");
+        const updated = await applyCardPatchForMember(ctx, {
+          actorUserId: args.userId,
+          communityId: args.communityId,
+          community,
+          stages,
+          targetUserId,
+          nowMs,
+          source: args.source,
+          ...(hasText ? { addOutcomeText: String(input.text) } : {}),
+          ...(hasRemove ? { removeOutcomeId: String(input.remove_outcome_id).trim() } : {}),
         });
-        const checkpointsView = evaluatedCheckpoints.map((cp) => ({
-          key: cp.key,
-          label: cp.label,
-          kind: cp.kind,
-          done: cp.done,
-          auto: cp.auto,
-          completed_at: iso(cp.completedAtMs),
-        }));
-        const checkpointsDone = checkpointsView.filter((cp) => cp.done).length;
-        const rawOutcomes = Array.isArray(storedCard?.outcomes) ? storedCard.outcomes : [];
-        const outcomesView = [...rawOutcomes]
-          .sort((a: any, b: any) => Number(b.at ?? 0) - Number(a.at ?? 0))
-          .slice(0, MAX_CARD_OUTCOMES)
-          .map((item: any) => ({
-            id: String(item.id),
-            text: String(item.text),
-            at: iso(item.at) ?? new Date(nowMs).toISOString(),
-            source: (item.source ?? "founder") as "founder" | "app" | "mcp" | "agent",
-          }));
-        const latestOutcome = outcomesView[0]
-          ? { text: outcomesView[0].text, at: outcomesView[0].at }
-          : null;
+        return { member: String(input.member), ...updated };
+      }
+      const note = typeof input.note === "string" ? input.note : "";
+      const updated = await applyCardPatchForMember(ctx, {
+        actorUserId: args.userId,
+        communityId: args.communityId,
+        community,
+        stages,
+        targetUserId,
+        nowMs,
+        source: args.source,
+        founderInstruction: note,
+      });
+      return { member: String(input.member), ...updated };
+    }
 
-        return {
-          membership_id: String(membership._id),
-          user_id: String(user?.authSubject ?? "").trim() || String(membership.userId),
-          name: profile?.display_name || user?.displayName || user?.handle || "Member",
-          handle: user?.handle ?? null,
-          avatar_url: profile?.avatar_url ?? null,
-          avatar_focus_x: profile?.avatar_focus_x ?? 0.5,
-          avatar_focus_y: profile?.avatar_focus_y ?? 0.5,
-          avatar_zoom: profile?.avatar_zoom ?? 1,
-          role: membership.role as "owner" | "admin" | "moderator" | "member",
-          plan_label: plan.label,
-          money_kind: moneyKind,
-          stage_key: stageKey,
-          status,
-          status_is_manual: Boolean(statusOverride),
-          founder_instruction: normalizeFounderInstruction(storedCard?.founderInstruction),
-          founder_instruction_updated_at: iso(storedCard?.founderInstructionUpdatedAt),
-          agent_outcome: agentOutcome,
-          agent_outcome_at: iso(agentOutcomeAt),
-          working_on: workingOn,
-          activity_summary: formatMemberActivitySummary({
-            postsCount: participation.postsCount,
-            lessonsDoneCount: participation.lessonsDoneCount,
-            lessonsCapped: participation.lessonsCapped,
-          }),
-          checkpoints: checkpointsView,
-          checkpoints_done: checkpointsDone,
-          checkpoints_total: checkpointsView.length,
-          outcomes: outcomesView,
-          latest_outcome: latestOutcome,
-          joined_at: iso(joinedAtMs),
-          last_active_at: iso(lastActiveAtMs),
-        };
-      }),
-    );
+    if (args.operation === "community.journey.save_stages") {
+      const normalized = normalizeJourneyStages((Array.isArray(input.stages) ? input.stages : []) as any);
+      if (!normalized.ok) throw new Error(normalized.code);
+      const nextKeys = new Set(normalized.stages.map((stage) => stage.key));
+      const dropped = stages.filter((stage) => !nextKeys.has(stage.key));
+      if (dropped.length > 0) {
+        throw new Error(`journey_stage_removal_requires_tool:${dropped.map((s) => s.name).join(", ")}`);
+      }
+      const existing = await ctx.db
+        .query("communityJourneyConfig")
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          stages: normalized.stages,
+          autoAdvanceEnabled,
+          updatedByUserId: args.userId,
+          updatedAt: nowMs,
+        });
+      } else {
+        await ctx.db.insert("communityJourneyConfig", {
+          communityId: args.communityId,
+          stages: normalized.stages,
+          autoAdvanceEnabled,
+          updatedByUserId: args.userId,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+      return { stages: normalized.stages };
+    }
 
-    const totalActiveMembers = Math.max(
-      cards.length,
-      (readCommunityActiveMemberCount(community) ?? cards.length) - 1,
-    );
+    if (args.operation === "community.journey.remove_stage") {
+      const target = resolveStageSelector(stages, String(input.stage ?? ""));
+      if (!target) throw new Error("journey_stage_not_found");
+      if (stages.length <= MIN_JOURNEY_STAGES) throw new Error("journey_stages_count_invalid");
+      const remaining = stages
+        .filter((entry) => entry.key !== target.key)
+        .map((entry, position) => ({ ...entry, position }));
+      let fallback = remaining[0]!;
+      if (typeof input.move_to_stage === "string" && input.move_to_stage.trim()) {
+        const requested = resolveStageSelector(remaining, input.move_to_stage);
+        if (!requested) throw new Error("journey_fallback_stage_not_found");
+        fallback = requested;
+      }
+      const boardBefore = await computeCommunityMemberJourneyBoard(ctx, {
+        communityId: args.communityId,
+        community,
+        nowMs,
+      });
+      const activeUsersOnRemovedStage = boardBefore.cards
+        .filter((card) => card.stage_key === target.key)
+        .map((card) => card.db_user_id);
 
-    return {
-      stages,
-      auto_advance_enabled: autoAdvanceEnabled,
-      cards,
-      total_active_members: totalActiveMembers,
-      capped,
-    };
+      const existing = await ctx.db
+        .query("communityJourneyConfig")
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          stages: remaining,
+          autoAdvanceEnabled,
+          updatedByUserId: args.userId,
+          updatedAt: nowMs,
+        });
+      } else {
+        await ctx.db.insert("communityJourneyConfig", {
+          communityId: args.communityId,
+          stages: remaining,
+          autoAdvanceEnabled,
+          updatedByUserId: args.userId,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+      const storedCards = await ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId))
+        .take(500);
+      const patchedUserIds = new Set<string>();
+      let movedCardsCount = 0;
+      for (const card of storedCards) {
+        if (card.stageKey === target.key) {
+          await ctx.db.patch(card._id, {
+            stageKey: fallback.key,
+            updatedByUserId: args.userId,
+            updatedAt: nowMs,
+          });
+          patchedUserIds.add(String(card.userId));
+          movedCardsCount += 1;
+        }
+      }
+      // Also move active members who sat on the removed stage via derived placement
+      // (no stored card yet) so the confirmation card's move_to_stage promise holds 100%.
+      for (const userIdStr of activeUsersOnRemovedStage) {
+        if (patchedUserIds.has(userIdStr)) continue;
+        const normalizedUserId = ctx.db.normalizeId("users", userIdStr);
+        if (!normalizedUserId) continue;
+        await ctx.db.insert("communityMemberJourneyCards", {
+          communityId: args.communityId,
+          userId: normalizedUserId,
+          stageKey: fallback.key,
+          updatedByUserId: args.userId,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+        movedCardsCount += 1;
+      }
+      return {
+        removed_stage_key: target.key,
+        removed_stage_name: target.name,
+        moved_to_stage_key: fallback.key,
+        moved_to_stage_name: fallback.name,
+        moved_cards_count: movedCardsCount,
+        stages: remaining,
+      };
+    }
+
+    throw new Error("operation_not_found");
   },
 });
 

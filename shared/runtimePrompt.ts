@@ -122,6 +122,7 @@ export type RuntimePlatformHarnessPromptParams =
     invocationSurface: RuntimeInvocationSurface;
     communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
     memberIdentityContextMd?: string | null;
+    memberCoachingContextMd?: string | null;
     communityMemoryMd?: string | null;
     communitySoulMd?: string | null;
     personalMemoryMd?: string | null;
@@ -311,6 +312,7 @@ function buildCommunityMapPrompt(params: {
     ...(host ? [
       "- builder/community.json : the community's settings.",
       "- builder/analytics.json : the community's numbers, as the Analytics page shows them.",
+      "- builder/journey.json : the Member Board (stages, checkpoints, where each member sits, statuses, wins, and coaching notes).",
       "- builder/resources/ : every course and lesson, drafts included. A course there also says who has started and finished it; each member's file also shows their course progress.",
     ] : []),
     "- /messages/ : this person's own direct messages. Private to this talk.",
@@ -643,6 +645,16 @@ export function buildPlatformHarnessRuntimePromptBundle(
       source: "shared/communityAgentIdentityContext.ts#renderCommunityAgentIdentityContext",
       reason: "bounded deterministic member identity context",
       text: params.memberIdentityContextMd,
+    }),
+    buildRuntimePromptSection({
+      id: "member_coaching_context",
+      layer: "scoped",
+      slot: "context",
+      owner: "community",
+      authority: "community_policy",
+      source: "convex/communityMemberJourney.ts#readMemberGuideCoachingContextInternal",
+      reason: "silent member coaching focus and optional host note for this member's private talk",
+      text: params.memberCoachingContextMd,
     }),
     buildRuntimePromptSection({
       id: "recent_answers",

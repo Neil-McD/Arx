@@ -316,7 +316,7 @@ export const answerGuideQuestion = action({
       // Changing, removing or banning members: done for each person on its own.
       const members = String(input.operation ?? "").startsWith("community.members.");
       if (!execution.ok) result = { status: "failed", line: execution.message, path: null };
-      else if (claimed.kind === "change" || (claimed.kind === "remove" && (members || String(input.operation ?? "") === "community.course.delete"))) {
+      else if (claimed.kind === "change" || (claimed.kind === "remove" && (members || String(input.operation ?? "") === "community.course.delete" || String(input.operation ?? "") === "community.journey.remove_stage"))) {
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const failedAll = members && Number(outcome.succeeded ?? 0) === 0;

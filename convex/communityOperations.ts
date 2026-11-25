@@ -53,6 +53,13 @@ export const applyCommunityOperationInternal = internalMutation({
         ? await ctx.runMutation(refs.communityResources.applyCourseCardForTrustedUserInternal, { ...scope, operation: args.operation, input })
       : args.operation.startsWith("community.channel.")
         ? await ctx.runMutation(refs.communityChannels.applyChannelOperationForTrustedUserInternal, { ...scope, operation: args.operation, input })
+      : args.operation.startsWith("community.journey.")
+        ? await ctx.runMutation(refs.communityMemberJourney.applyJourneyOperationForTrustedManagerInternal, {
+          ...scope,
+          operation: args.operation,
+          input,
+          source: args.principalKind === "community_agent_for_member" ? "agent" : "mcp",
+        })
       : (() => { throw new Error("operation_not_found"); })();
     const value = { ...args.answer, result };
     const completed = await ctx.runMutation(refs.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal, {
