@@ -10,10 +10,11 @@ import {
 } from "../../../../../shared/founderPlan";
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
-import { brainScene, chiefScene, FeatureSection, StatementFigures } from "./LandingScenes";
+import { chiefScene, FeatureSection, StatementFigures } from "./LandingScenes";
 // The real app's kit is heavy, so the preview loads after the hero paints.
 const RealAppPreview = lazy(() => import("./RealAppPreview").then((module) => ({ default: module.RealAppPreview })));
 const GuideScene = lazy(() => import("./GuideScene").then((module) => ({ default: module.GuideScene })));
+const BrainScene = lazy(() => import("./BrainScene").then((module) => ({ default: module.BrainScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -524,7 +525,6 @@ function useReveal(late: unknown) {
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
   const reveal = useReveal(communities.length);
-  const brain = brainScene();
   const chief = chiefScene();
 
   useEffect(() => {
@@ -585,9 +585,10 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           Every member gets a private guide. It answers from your courses, notes and past discussions, at any hour, and points to where the answer lives.
         </FeatureSection>
 
-        <FeatureSection id="brain" title={["A memory", "that builds"]} sceneLabel="A map of what the community knows, beside a list of what it learned this week" {...brain}
-          features={["Community brain map", "Learned from courses and posts", "Memory for each member", "Yours to read and correct"]}>
-          Your best answers stop disappearing. Courses, notes and helpful answers connect into one memory you can see, so what one member solves, the next one finds.
+        <FeatureSection id="brain" title={["Good answers get", "buried in old threads."]} sceneLabel="Try the community brain: pick something it learned, see the posts it came from, and move, correct or remove it"
+          live={<Suspense fallback={<div className="gsc-wait" />}><BrainScene /></Suspense>}
+          features={["A map of what your community knows", "Learns from helpful posts, and shows which", "Move, correct or remove anything it learned", "See what came from you"]}>
+          Polynet keeps them. Helpful answers become notes on one map, filed under your lessons, so what one member figures out, the next one finds.
         </FeatureSection>
 
         <FeatureSection id="chief-of-staff" title={["Morning briefs", "and check-ins"]} sceneLabel="The morning brief, with a drafted check-in for a quiet member who is lit in the members list behind it" {...chief}

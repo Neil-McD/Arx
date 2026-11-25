@@ -17,10 +17,10 @@ import { EVENTS, PREVIEW_COMMUNITY } from "./RealAppPreview";
 type Source = "lesson" | "wins" | "call";
 type AskItem = { question: string; source: Source; before: string; target: EntityTarget; label: string; after: string };
 
-const COURSE = "Build your community, A to Z";
+const COURSE = "Start here";
 
 export const LESSON_TARGET: EntityTarget = {
-  kind: "lesson", name: "Pricing your first cohort", path: "/#guide",
+  kind: "lesson", name: "Pricing your first offer", path: "/#guide",
   facts: { courseName: COURSE, finished: false, hasVideo: true },
 };
 const WINS_TARGET: EntityTarget = {
@@ -33,9 +33,9 @@ export function guideAsks(now: number): AskItem[] {
   const day = new Date(next.at).toLocaleDateString("en-US", { weekday: "long" });
   return [
     {
-      question: "How should I price my first cohort?", source: "lesson",
-      before: "Maya ran two cohorts here. Monthly billing kept more people to the end than one payment. ",
-      target: LESSON_TARGET, label: "Pricing your first cohort", after: " walks through her numbers.",
+      question: "How should I price my first offer?", source: "lesson",
+      before: "Start with one clear result and one price. Priya and Jon both gave their first ten a founding price. ",
+      target: LESSON_TARGET, label: "Pricing your first offer", after: " has three examples from members here.",
     },
     {
       question: "Where do people share what's working?", source: "wins",
@@ -86,24 +86,25 @@ function Chip(props: { target: EntityTarget; label: string; open: boolean; onOpe
 
 // ---------- behind: the place the answer points to ----------
 
+// The preview's own course (RealAppPreview's buildClubBrain), as Dev has it.
 const LESSONS: Array<[title: string, done?: boolean]> = [
-  ["Why a community, why now", true], ["Find your first ten members", true], ["Your first live call", true],
-  ["Pricing your first cohort"], ["Keeping people to the end"], ["From cohort to community"], ["What to measure"],
+  ["Welcome to the club", true], ["Picking your first offer", true], ["Pricing your first offer"], ["Your first ten customers"],
 ];
+const LIT = 2;
 
 function CoursePage(props: { lit: boolean }) {
   return (
     <div className="rpw-page gsc-page">
       <KitApp view="know" part="flow">
-        <p className={cx("lab")} style={{ margin: "0 0 6px" }}>Course · 7 lessons</p>
+        <p className={cx("lab")} style={{ margin: "0 0 6px" }}>Course · 4 lessons</p>
         <h2 className="gsc-h">{COURSE}</h2>
-        <p className={cx("sub")} style={{ margin: "6px 0 22px" }}>3 of 7 done · Hosted by Maya</p>
+        <p className={cx("sub")} style={{ margin: "6px 0 22px" }}>2 of 4 done</p>
         <div className={cx("klrows")}>
           {LESSONS.map(([title, done], index) => {
-            const lit = props.lit && index === 3;
+            const lit = props.lit && index === LIT;
             return (
               <div key={title} className={[cx("kl", lit && "on", done && "d"), lit ? "gsc-lit" : ""].filter(Boolean).join(" ")}>
-                <span className={cx("kdot", done ? "done" : index === 3 ? "now" : "")}>{done ? <Icon name="check" /> : null}</span>
+                <span className={cx("kdot", done ? "done" : index === LIT ? "now" : "")}>{done ? <Icon name="check" /> : null}</span>
                 <span className={cx("kl-t")}>{title}</span>
               </div>
             );
@@ -125,7 +126,7 @@ function WinsPage(props: { lit: boolean }) {
     "Today",
     { who: "Kai", tone: "a5", time: "9:12 am", text: <><span className={cx("at")}>@guide</span> what should a founding seat cost?</> },
     { who: "Guide", tone: "guide", guide: true, time: "9:12 am",
-      text: <>Founding seats here have landed between $29 and $49. <span className="entity-chip is-lesson gsc-static">Pricing your first cohort</span> has Maya's numbers.</> },
+      text: <>Founding seats here have landed between $29 and $49. <span className="entity-chip is-lesson gsc-static">Pricing your first offer</span> has three examples.</> },
   ];
   return (
     <div className="rpw-channel gsc-page">
