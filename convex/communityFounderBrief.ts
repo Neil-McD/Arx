@@ -296,6 +296,7 @@ export function snapshotIsQuiet(snapshot: FounderBriefSnapshot): boolean {
         cos.quietPayingMembers.count > 0 ||
         cos.risingContributors.length > 0 ||
         (cos.journeyPulse?.readyToAdvanceCount ?? 0) > 0 ||
+        (cos.journeyPulse?.needsAttentionCount ?? 0) > 0 ||
         (cos.journeyPulse?.recentWins.length ?? 0) > 0),
   );
   return snapshot.newMembers.count === 0 && snapshot.activity.posts === 0 && snapshot.activity.replies === 0

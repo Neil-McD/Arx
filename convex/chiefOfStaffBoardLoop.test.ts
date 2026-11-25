@@ -293,6 +293,61 @@ describe("Chief of Staff Home stage-move proposals & Daily Brief Board Pulse", (
     expect(
       await asOwner.query(api.communityMemberJourney.listJourneyStageAdvanceProposals, { communityId: w.communityId }),
     ).toEqual([]);
+
+    // 5. Revalidation on approve: if a manager unchecks a milestone after Home loaded a proposal,
+    // approving does NOT advance the member or record a false completion outcome.
+    await asOwner.mutation(api.communityMemberJourney.updateMemberJourneyCard, {
+      communityId: w.communityId,
+      membershipId: w.samMembershipId,
+      stageKey: "active",
+      toggleMilestone: { key: "regular_posts", label: "3+ posts or replies", completed: false },
+    });
+    const staleCheckpointAttempt = await asOwner.mutation(api.communityMemberJourney.approveJourneyStageAdvance, {
+      communityId: w.communityId,
+      membershipId: w.samMembershipId,
+      expectedFromStageKey: "active",
+      targetStageKey: "graduated",
+    });
+    expect(staleCheckpointAttempt).toEqual({ status: "no_longer_ready", stage_key: "active" });
+  });
+
+  test("quiet-day predicate treats Board members marked stuck or needs_you as actionable", () => {
+    const quietWithAttention = {
+      communityName: "Chief Club",
+      memberCount: 5,
+      windowHours: 24,
+      newMembers: { count: 0, names: [] },
+      activity: { posts: 0, replies: 0, activePeople: 0 },
+      week: { joined: 0, activePeople: 0, messages: 0 },
+      busiest: null,
+      highlight: null,
+      unanswered: [],
+      quietNewcomers: { count: 0, names: [] },
+      joinRequestsPending: 0,
+      upcomingEvents: [],
+      chiefOfStaff: {
+        proactiveGuide: {
+          coachDraftsWaiting: 0,
+          replyDraftsWaiting: 0,
+          coachSentInWindow: 0,
+          repliesAutoPostedInWindow: 0,
+        },
+        stalledLearners: [],
+        quietPayingMembers: { count: 0, names: [] },
+        risingContributors: [],
+        podHealth: [],
+        journeyPulse: {
+          readyToAdvanceCount: 0,
+          readyToAdvanceNames: [],
+          needsAttentionCount: 1,
+          needsAttentionNames: ["Jules"],
+          recentWins: [],
+        },
+      },
+    };
+    expect(snapshotIsQuiet(quietWithAttention)).toBe(false);
+    const md = briefMarkdown(deterministicBrief(quietWithAttention));
+    expect(md).toContain("Member Board: 1 member stuck or needing attention: Jules.");
   });
 
   test("Daily Founder Brief includes privacy-safe Board Pulse (ready to advance, needs attention, recent wins) without leaking private chats", async () => {

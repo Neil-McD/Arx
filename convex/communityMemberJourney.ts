@@ -2076,6 +2076,26 @@ export const approveJourneyStageAdvance = mutation({
     if (currentStageKey !== args.expectedFromStageKey) {
       return { status: "already_moved" as const, stage_key: currentStageKey };
     }
+    // Re-evaluate live checkpoint completion and next-stage eligibility at
+    // approval time so a stale Home tab cannot advance a member whose
+    // milestones were unchecked or whose stage checkpoints changed.
+    const liveBoard = await computeCommunityMemberJourneyBoard(ctx, {
+      communityId: args.communityId,
+      community,
+      nowMs,
+    });
+    const liveProposal = extractStageAdvanceProposalsFromBoard(
+      liveBoard,
+      Math.max(liveBoard.cards.length, 1),
+    ).find(
+      (proposal) =>
+        proposal.membership_id === String(args.membershipId) &&
+        proposal.from_stage_key === args.expectedFromStageKey &&
+        proposal.to_stage_key === targetStage.key,
+    );
+    if (!liveProposal) {
+      return { status: "no_longer_ready" as const, stage_key: currentStageKey };
+    }
     const outcomeNote = fromStage
       ? `Moved to ${targetStage.name} after finishing ${fromStage.name} checkpoints`
       : `Moved to ${targetStage.name}`;

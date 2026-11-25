@@ -90,7 +90,7 @@ export async function approveCloudJourneyStageAdvance<SessionT>(params: {
   membershipId: string;
   expectedFromStageKey: string;
   targetStageKey: string;
-}): Promise<{ status: "moved" | "already_moved"; stage_key: string }> {
+}): Promise<{ status: "moved" | "already_moved" | "no_longer_ready"; stage_key: string }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   return (await client.mutation("communityMemberJourney:approveJourneyStageAdvance" as any, {
     authSubject,
@@ -98,7 +98,7 @@ export async function approveCloudJourneyStageAdvance<SessionT>(params: {
     membershipId: params.membershipId,
     expectedFromStageKey: params.expectedFromStageKey,
     targetStageKey: params.targetStageKey,
-  })) as { status: "moved" | "already_moved"; stage_key: string };
+  })) as { status: "moved" | "already_moved" | "no_longer_ready"; stage_key: string };
 }
 
 export async function dismissCloudJourneyStageAdvance<SessionT>(params: {
