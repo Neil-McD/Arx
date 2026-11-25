@@ -1370,6 +1370,50 @@ export default defineSchema({
   })
     .index("by_community_subject_createdAt", ["communityId", "subjectUserId", "createdAt"]),
 
+  // Member Journey Board configuration (docs/specs/proactive-community-agent-v0.md):
+  // Ordered plain-English stages for the community, editable by owners/admins.
+  communityJourneyConfig: defineTable({
+    communityId: v.id("communities"),
+    stages: v.array(
+      v.object({
+        key: v.string(),
+        name: v.string(),
+        goal: v.string(),
+        position: v.number(),
+      }),
+    ),
+    autoAdvanceEnabled: v.optional(v.boolean()),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
+  // Member Journey Board card state per active member: current stage, optional
+  // manual health status override, founder instruction read by the proactive
+  // Chief of Staff on its next check-in, and strictly privacy-safe agent outcome note.
+  communityMemberJourneyCards: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    stageKey: v.string(),
+    statusOverride: v.optional(
+      v.union(
+        v.literal("on_track"),
+        v.literal("stuck"),
+        v.literal("needs_you"),
+        v.literal("done"),
+      ),
+    ),
+    founderInstruction: v.optional(v.string()),
+    founderInstructionUpdatedAt: v.optional(v.number()),
+    agentOutcomeNote: v.optional(v.string()),
+    agentOutcomeAt: v.optional(v.number()),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_stage", ["communityId", "stageKey"]),
+
   communityPricePoints: defineTable({
     communityId: v.id("communities"),
     billingPeriod: v.string(),

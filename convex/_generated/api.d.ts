@@ -93,6 +93,7 @@ import type * as communityLessonProgress from "../communityLessonProgress.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityMaintenance from "../communityMaintenance.js";
 import type * as communityMemberCoach from "../communityMemberCoach.js";
+import type * as communityMemberJourney from "../communityMemberJourney.js";
 import type * as communityMemberProfiles from "../communityMemberProfiles.js";
 import type * as communityMemberRecords from "../communityMemberRecords.js";
 import type * as communityMemberSearch from "../communityMemberSearch.js";
@@ -341,6 +342,7 @@ declare const fullApi: ApiFromModules<{
   communityLifecycle: typeof communityLifecycle;
   communityMaintenance: typeof communityMaintenance;
   communityMemberCoach: typeof communityMemberCoach;
+  communityMemberJourney: typeof communityMemberJourney;
   communityMemberProfiles: typeof communityMemberProfiles;
   communityMemberRecords: typeof communityMemberRecords;
   communityMemberSearch: typeof communityMemberSearch;

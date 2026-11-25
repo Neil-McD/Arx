@@ -5,7 +5,7 @@
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveChange } from "../../../../shared/liveQuery";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -20,6 +20,24 @@ import {
   type CloudMemberSummary,
   type CloudPastMemberRow,
 } from "../../../../shared/cloudCommunityMemberRecordsGateway";
+import {
+  getCloudCommunityMemberJourneyBoard,
+  saveCloudCommunityJourneyStages,
+  updateCloudMemberJourneyCard,
+  type CloudMemberJourneyBoard,
+  type CloudMemberJourneyCard,
+} from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import {
+  JOURNEY_CARD_STATUSES,
+  JOURNEY_CARD_STATUS_LABELS,
+  MAX_FOUNDER_INSTRUCTION_CHARS,
+  type JourneyCardStatus,
+  type JourneyStageDefinition,
+} from "../../../../shared/communityMemberJourney";
+
+const KitMembersBoard = lazy(() =>
+  import("./KitMembersBoard").then((module) => ({ default: module.KitMembersBoard })),
+);
 import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
 import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
@@ -82,6 +100,11 @@ export function KitMembersPage(props: {
   const [summary, setSummary] = useState<CloudMemberSummary | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<MembersView>("everyone");
+  const [surfaceMode, setSurfaceMode] = useState<"table" | "board">("table");
+  const [board, setBoard] = useState<CloudMemberJourneyBoard | null>(null);
+  const [boardLoading, setBoardLoading] = useState(false);
+  const [boardError, setBoardError] = useState<string | null>(null);
+  const [boardVersion, setBoardVersion] = useState(0);
   const [loaded, setLoaded] = useState<{ view: string; rows: CloudMemberRecordRow[]; past: CloudPastMemberRow[]; cursor: string | null; done: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<{ key: MembersSortKey; desc: boolean } | null>(null);
@@ -189,6 +212,20 @@ export function KitMembersPage(props: {
     if (search.trim() && loaded && !loaded.done && !loading) void loadMore(false);
   }, [search, loaded, loading, loadMore]);
 
+  // Load Member Journey Board when Board view or an active member record is open.
+  const needsBoard = surfaceMode === "board" || Boolean(openKey && openKey !== OWNER_KEY);
+  useEffect(() => {
+    if (!scope || !needsBoard) return;
+    let cancelled = false;
+    setBoardLoading(true);
+    setBoardError(null);
+    getCloudCommunityMemberJourneyBoard({ session: scope.session, communityId: scope.communityId })
+      .then((next) => { if (!cancelled) setBoard(next); })
+      .catch(() => { if (!cancelled) setBoardError("Member board couldn't load. Try again."); })
+      .finally(() => { if (!cancelled) setBoardLoading(false); });
+    return () => { cancelled = true; };
+  }, [scope?.session, scope?.communityId, needsBoard, boardVersion, props.refreshKey, tableVersion]);
+
   useEffect(() => {
     if (!scope || !openKey) return;
     let cancelled = false;
@@ -266,16 +303,79 @@ export function KitMembersPage(props: {
       setExporting(false);
     }
   };
+  const modeToggle = (
+    <div className={cx("seg")} role="tablist" aria-label="Members view">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={surfaceMode === "table"}
+        className={cx(surfaceMode === "table" ? "on" : "")}
+        onClick={() => setSurfaceMode("table")}
+      >
+        Table
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={surfaceMode === "board"}
+        className={cx(surfaceMode === "board" ? "on" : "")}
+        onClick={() => setSurfaceMode("board")}
+      >
+        Board
+      </button>
+    </div>
+  );
+
   const page = (
     <section className={`members-page is-kit${picked ? " has-picked" : ""}`} aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
-          {/* One header style everywhere: the title alone (the count is in the left column; On hold is a filter below). */}
-          <Top title="Members" titleView={5} />
+          {/* One header style everywhere: the title plus the Table/Board switch. */}
+          <Top title="Members" titleView={5} actions={modeToggle} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("sub")} style={{ margin: 0 }}>{lead}</p>
             <WhoCanJoinLine admission={props.admission} waiting={waiting} />
             <JoinRequestsLine count={waiting} open={side === "requests"} onOpen={() => setSide(side === "requests" ? null : "requests")} />
+            {surfaceMode === "board" ? (
+              <>
+                <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => { setView(id as MembersView); setSurfaceMode("table"); }}
+                  onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />
+                <Suspense fallback={<p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>}>
+                  <KitMembersBoard
+                    board={board}
+                    loading={boardLoading}
+                    error={boardError}
+                    search={search}
+                    openKey={side === "record" ? openKey : null}
+                    now={now}
+                    timeFor={memberTimeFor}
+                    onOpenCard={openRecord}
+                    onMoveCard={async (membershipId, stageKey) => {
+                      if (!scope) return;
+                      await updateCloudMemberJourneyCard({
+                        session: scope.session,
+                        communityId: scope.communityId,
+                        membershipId,
+                        stageKey,
+                      });
+                      setBoardVersion((version) => version + 1);
+                    }}
+                    onSaveStages={async (stages) => {
+                      if (!scope) return;
+                      await saveCloudCommunityJourneyStages({
+                        session: scope.session,
+                        communityId: scope.communityId,
+                        stages,
+                      });
+                      setBoardVersion((version) => version + 1);
+                    }}
+                    getAvatarColor={props.getAvatarColor}
+                    getInitials={props.getInitials}
+                  />
+                </Suspense>
+              </>
+            ) : (
+            <>
             <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => setView(id as MembersView)}
               onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />
             {(!loaded && loading) || (loaded && view !== "past" && loading && rows.length === 0) ? (
@@ -312,6 +412,8 @@ export function KitMembersPage(props: {
             <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
             {loading && rows.length > 0 ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Loading more…</p> : null}
             {summary?.capped ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Counts cover the first 5,000 people.</p> : null}
+            </>
+            )}
           </div>
         </View>
       </KitApp>
@@ -335,6 +437,18 @@ export function KitMembersPage(props: {
       <Rail index={5} label={record ? record.name : "Member"}>
         {record ? <MemberRecordView record={record} now={now} self={record.user_id === props.currentUserId}
           onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+          journeyStages={board?.stages ?? null}
+          journeyCard={record.membership_id ? board?.cards.find((card) => card.membership_id === record.membership_id) ?? null : null}
+          onUpdateJourney={record.membership_id && !record.out ? async (patch) => {
+            if (!scope || !record.membership_id) return;
+            await updateCloudMemberJourneyCard({
+              session: scope.session,
+              communityId: scope.communityId,
+              membershipId: record.membership_id,
+              ...patch,
+            });
+            setBoardVersion((version) => version + 1);
+          } : undefined}
           onAddNote={async (body) => {
             if (!scope) return;
             await addCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, membershipId: record.membership_id, body });
@@ -371,6 +485,9 @@ function MemberRecordView(props: {
   onAddNote: (body: string) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
   payments: CloudCommunityMemberBillingHistory | null;
+  journeyStages?: JourneyStageDefinition[] | null;
+  journeyCard?: CloudMemberJourneyCard | null;
+  onUpdateJourney?: (patch: { stageKey?: string; statusOverride?: JourneyCardStatus | "auto"; founderInstruction?: string | null }) => Promise<void>;
 }) {
   const { record } = props;
   const manage = () => record.membership_id && props.onManage?.({ id: record.membership_id, user_id: record.user_id, display_name: record.name,
@@ -378,6 +495,13 @@ function MemberRecordView(props: {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [instructionDraft, setInstructionDraft] = useState(props.journeyCard?.founder_instruction ?? "");
+  const [savingJourney, setSavingJourney] = useState(false);
+  const [journeyError, setJourneyError] = useState<string | null>(null);
+  useEffect(() => {
+    setInstructionDraft(props.journeyCard?.founder_instruction ?? "");
+    setJourneyError(null);
+  }, [record.membership_id, props.journeyCard?.founder_instruction]);
   const saveNote = async () => {
     const body = draft.trim();
     if (!body || saving) return;
@@ -463,6 +587,108 @@ function MemberRecordView(props: {
               </div>
             ))}
           </Sec>
+        </>
+      ) : null}
+      {props.onUpdateJourney && props.journeyStages && props.journeyCard ? (
+        <>
+          <Sep />
+          <div className={cx("sec")}>
+            <span className={cx("lab")}>Journey<em className={cx("priv")}>Steers your Guide</em></span>
+            <div className="members-journey-record-grid">
+              <div className="members-journey-field">
+                <label htmlFor="member-journey-stage">Stage</label>
+                <select
+                  id="member-journey-stage"
+                  value={props.journeyCard.stage_key}
+                  disabled={savingJourney}
+                  onChange={(event) => {
+                    const nextStageKey = event.target.value;
+                    setSavingJourney(true);
+                    setJourneyError(null);
+                    void props.onUpdateJourney?.({ stageKey: nextStageKey })
+                      .catch(() => setJourneyError("Couldn't update stage."))
+                      .finally(() => setSavingJourney(false));
+                  }}
+                >
+                  {props.journeyStages.map((stage) => (
+                    <option key={stage.key} value={stage.key}>{stage.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="members-journey-field">
+                <label htmlFor="member-journey-status">Status</label>
+                <select
+                  id="member-journey-status"
+                  value={props.journeyCard.status_is_manual ? props.journeyCard.status : "auto"}
+                  disabled={savingJourney}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value as JourneyCardStatus | "auto";
+                    setSavingJourney(true);
+                    setJourneyError(null);
+                    void props.onUpdateJourney?.({ statusOverride: nextStatus })
+                      .catch(() => setJourneyError("Couldn't update status."))
+                      .finally(() => setSavingJourney(false));
+                  }}
+                >
+                  <option value="auto">Auto ({JOURNEY_CARD_STATUS_LABELS[props.journeyCard.status]})</option>
+                  {JOURNEY_CARD_STATUSES.map((status) => (
+                    <option key={status} value={status}>{JOURNEY_CARD_STATUS_LABELS[status]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="members-journey-field" style={{ marginTop: 8 }}>
+              <label htmlFor="member-journey-instruction">Instruction for your Guide</label>
+              <textarea
+                id="member-journey-instruction"
+                value={instructionDraft}
+                maxLength={MAX_FOUNDER_INSTRUCTION_CHARS}
+                placeholder="e.g. Check if they finished onboarding, or pause nudges this week"
+                onChange={(event) => setInstructionDraft(event.target.value)}
+              />
+            </div>
+            {instructionDraft.trim() !== (props.journeyCard.founder_instruction ?? "") ? (
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                <Btn
+                  small
+                  go
+                  onClick={() => {
+                    if (savingJourney) return;
+                    setSavingJourney(true);
+                    setJourneyError(null);
+                    void props.onUpdateJourney?.({ founderInstruction: instructionDraft.trim() })
+                      .catch(() => setJourneyError("Couldn't save instruction."))
+                      .finally(() => setSavingJourney(false));
+                  }}
+                >
+                  {savingJourney ? "Saving…" : "Save instruction"}
+                </Btn>
+                {props.journeyCard.founder_instruction ? (
+                  <Btn
+                    small
+                    onClick={() => {
+                      if (savingJourney) return;
+                      setSavingJourney(true);
+                      setJourneyError(null);
+                      void props.onUpdateJourney?.({ founderInstruction: "" })
+                        .then(() => setInstructionDraft(""))
+                        .catch(() => setJourneyError("Couldn't clear instruction."))
+                        .finally(() => setSavingJourney(false));
+                    }}
+                  >
+                    Clear
+                  </Btn>
+                ) : null}
+              </div>
+            ) : null}
+            {props.journeyCard.agent_outcome ? (
+              <p className={cx("sub")} style={{ margin: "6px 0 0", fontSize: 12 }}>
+                {props.journeyCard.agent_outcome}
+                {props.journeyCard.agent_outcome_at ? ` · ${memberTimeFor(props.journeyCard.agent_outcome_at, props.now)}` : ""}
+              </p>
+            ) : null}
+            {journeyError ? <p className={cx("bad")} role="alert" style={{ margin: "4px 0 0", fontSize: 12 }}>{journeyError}</p> : null}
+          </div>
         </>
       ) : null}
       <Sep />

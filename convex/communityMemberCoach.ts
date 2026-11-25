@@ -18,6 +18,10 @@ import { expandCommunityEventRows, listCommunityEventExpansionCandidates } from 
 import { readMemberCourseProgress } from "./communityLessonProgress";
 import { communityTimeZone } from "./communityMemory";
 import { readPersonFacts } from "./communityPersonFacts";
+import {
+  readMemberJourneyGuidanceForCoach,
+  recordMemberJourneyCoachOutcome,
+} from "./communityMemberJourney";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
@@ -821,8 +825,9 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
     const chosen = candidates[0]!;
 
     // Read ONLY this member's own consented self facts (lens: "self" — NEVER host notes
-    // and NEVER any other member's private context or threads).
-    const [person, chosenMemRow] = await Promise.all([
+    // and NEVER any other member's private context or threads), plus any explicit
+    // Journey stage goal and founder card instruction written for the Guide.
+    const [person, chosenMemRow, journeyGuidance] = await Promise.all([
       readPersonFacts(ctx, {
         communityId: args.communityId,
         subjectUserId: chosen.memberUserId,
@@ -836,6 +841,10 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
             )
             .unique()
         : Promise.resolve(null),
+      readMemberJourneyGuidanceForCoach(ctx, {
+        communityId: args.communityId,
+        memberUserId: chosen.memberUserId,
+      }),
     ]);
     if (!person) return { candidate: null, nextScanCursorCreatedAt, temperatureCounts };
 
@@ -864,6 +873,9 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
         dedupeKey: chosen.dedupeKey,
         signalSummary: chosen.signalSummary,
         signalDetail: chosen.signalDetail,
+        journeyStageName: journeyGuidance?.stageName ?? null,
+        journeyStageGoal: journeyGuidance?.stageGoal ?? null,
+        founderCardInstruction: journeyGuidance?.founderInstruction ?? null,
         mode: chosen.mode,
       },
     };
@@ -998,6 +1010,12 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
         threadMessageKey,
         updatedAt: args.nowMs,
       });
+      await recordMemberJourneyCoachOutcome(ctx, {
+        communityId: args.communityId,
+        memberUserId: args.memberUserId,
+        outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[args.reason] ?? "check-in"}`,
+        nowMs: args.nowMs,
+      });
       return { ok: true as const, outcome: "sent_auto" as const, draftId: String(draftId) };
     }
 
@@ -1092,6 +1110,16 @@ async function runCoachForCommunity(
         : []),
       ...(candidate.personalMemoryExcerpt
         ? [`Private memory with this member (for this private message only):\n${candidate.personalMemoryExcerpt}`]
+        : []),
+      ...(candidate.journeyStageName
+        ? [
+            `Member journey stage: ${candidate.journeyStageName}${candidate.journeyStageGoal ? ` — Goal: ${candidate.journeyStageGoal}` : ""}`,
+          ]
+        : []),
+      ...(candidate.founderCardInstruction
+        ? [
+            `Founder instruction on this member's card (follow this guidance naturally; never mention "the founder left a note on your card"; if it says to pause or skip outreach, return {"action":"skip"}):\n${candidate.founderCardInstruction}`,
+          ]
         : []),
       `Signal (${candidate.reason}): ${candidate.signalDetail}`,
       "Decide whether to send a short, concrete check-in now or skip.",
@@ -1444,6 +1472,12 @@ export const sendMemberCoachDraft = mutation({
       decidedAt: nowMs,
       sentAt: nowMs,
       updatedAt: nowMs,
+    });
+    await recordMemberJourneyCoachOutcome(ctx, {
+      communityId: args.communityId,
+      memberUserId: draft.memberUserId,
+      outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[draft.reason as MemberCoachReason] ?? "check-in"} (approved)`,
+      nowMs,
     });
     return { ok: true, thread_id: delivered.threadId };
   },
