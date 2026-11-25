@@ -37,22 +37,23 @@ test("the guide section leads with the pain, has no plan chip, and lists only wh
   expect(html).not.toMatch(/Answers with their source|Follow-ups in active threads|cites? (its|their) sources?/i);
 });
 
-test("the brain scene is the preview's own community, and only claims what's true", async () => {
-  const { BrainScene, sceneBrain } = await import("../apps/web/src/components/polynetLanding/BrainScene");
-  const { buildClubBrain } = await import("../apps/web/src/components/polynetLanding/RealAppPreview");
-  const now = Date.UTC(2026, 10, 25, 12);
-  const map = sceneBrain(now);
-  // Same map as the preview at the top.
-  expect(map.points.map((point) => point.id)).toEqual(buildClubBrain(now).points.map((point) => point.id));
+test("the brain scene is simple: only the branches are named, and every dot is a real note", async () => {
+  const { BrainScene, BRANCHES } = await import("../apps/web/src/components/polynetLanding/BrainScene");
   const html = renderToStaticMarkup(React.createElement(BrainScene)).replace(/&#x27;/g, "'");
-  // It starts with the community itself picked, the first of the tour's steps.
-  expect(html).toContain("Everything your community knows, in one place");
-  expect(html).toContain("1 of 7");
-  // The map is the panel's: no words on it.
-  expect(html).not.toMatch(/<text[^>]*>/);
+  // It starts on the community itself, with the card open.
+  expect(html).toContain("Everything your community knows");
+  // The only words on the map: the community and its branches.
+  const names = [...html.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((match) => match[1]);
+  expect(names).toEqual([...BRANCHES.map((branch) => branch.name), "The Build Club"]);
+  // A few dots per branch, each saved from real posts.
+  for (const branch of BRANCHES) {
+    expect(branch.notes.length).toBeLessThanOrEqual(4);
+    for (const note of branch.notes) expect(note.sources.length).toBeGreaterThan(0);
+  }
   // The guide learns from posts; courses are where notes are filed.
   expect(html).not.toMatch(/learn(s|ed)? from (your )?courses/i);
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
   expect(page).toContain("Good answers get<br/>buried in old threads.");
   expect(page).not.toMatch(/Learned from courses and posts|Memory for each member/);
 });
+

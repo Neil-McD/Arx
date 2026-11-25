@@ -1,52 +1,77 @@
-import { useMemo, useState } from "react";
-import type { BrainMap, BrainPoint } from "../../../../../shared/communityBrain";
-import { layoutBrain, lensLayout } from "../../../../../shared/communityBrainLayout";
+import { useState } from "react";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
-import { BRAIN_CENTER_ID, KitBrainMap } from "../../v1/KitBrainMap";
-import { KitApp } from "../../v1/kit";
-import { buildClubBrain } from "./RealAppPreview";
 
-// The community brain's section (Neil, Nov 25: "no labels, better
-// structure, start with one node selected, and each one you pick tells you
-// more"). The map is the app's own, as the panels draw it (KitBrainMap,
-// size "panel": the clusters and their glow, no words), of the same
-// community as the preview at the top. Over it, each dot can be picked. The
-// card beside it is a short tour of how the memory works, one node at a
-// time, as one real case: Priya's question, Jon's answer, the note it
-// became, Dev's 2am answer from it, and you putting it right.
+// The community brain's section (Neil, Nov 25: "simpler: very few nodes, a
+// label only on the main node of each tree, and people select the branches
+// to see what's there"). The same community as the preview at the top, drawn
+// as the app's brain is: the community in the middle, its courses and the
+// subjects it learned on its own as branches, and on each branch the things
+// members worked out, each saved from their own posts. Only the branches
+// are named. A picked dot opens in the card beside it: what it says, where
+// it came from, and Correct and Remove, which work here as in the app.
 
-const DAY = 86_400_000;
+type Note = { id: string; title: string; body: string; under: string; days: number; uses: number; sources: Array<[who: string, channel: string, excerpt: string]> };
+type Branch = { id: string; name: string; kind: "course" | "subject"; about: string; x: number; y: number; notes: Note[] };
 
-type NoteWords = { body: string; sources: Array<[who: string, channel: string, excerpt: string]> };
+export const BRANCHES: Branch[] = [
+  { id: "start", name: "Start here", kind: "course", x: -170, y: -30,
+    about: "What members work out about a lesson is filed under it, so the next person on that lesson finds it.",
+    notes: [
+      { id: "founding", title: "Founding-member pricing", under: "Lesson 3 · Pricing your first offer", days: 1, uses: 6,
+        body: "Offer the first ten members a lower price for life, and say when it ends. Members here have used $29 to $49.",
+        sources: [["Priya", "general", "Thinking of a founding price, $29 for life for the first ten?"], ["Jon", "general", "Mine started at $39 and I raised it after the first ten."]] },
+      { id: "onePrice", title: "One price beats three tiers at the start", under: "Lesson 3 · Pricing your first offer", days: 12, uses: 4,
+        body: "Start with one price. Tiers can come once you know what people pay for.",
+        sources: [["Maya", "general", "I dropped my three tiers and sales went up."]] },
+      { id: "askedHelp", title: "Start with people who asked you for help", under: "Lesson 4 · Your first ten customers", days: 2, uses: 5,
+        body: "Your first members are the people who already ask you for help. List ten of them before you write a sales page.",
+        sources: [["Dev", "general", "My first three were people who'd DM'd me questions for months."]] },
+      { id: "dms", title: "Ten DMs, not one big post", under: "Lesson 4 · Your first ten customers", days: 9, uses: 3,
+        body: "Ten personal messages bring more first customers than one big post.",
+        sources: [["Kai", "wins", "Ten DMs, four yeses. The big post got one like."]] },
+    ] },
+  { id: "growth", name: "Growth", kind: "subject", x: 150, y: -110,
+    about: "No course teaches this yet. The guide grouped it on its own from what members shared, so you can see what to teach next.",
+    notes: [
+      { id: "invite", title: "Invitations that work", under: "Growth", days: 0, uses: 7,
+        body: "Personal invitations beat posts. Name why you thought of them, say what's inside in one line, and give one date to show up.",
+        sources: [["Jon", "wins", "Sent my invitation to 40 people from my newsletter. 11 joined in two days."], ["Priya", "general", "The personal ones worked, the group post got nothing."]] },
+      { id: "hundred", title: "How Jon passed 100 members", under: "Growth", days: 1, uses: 2,
+        body: "Six weeks: one invitation a day, a weekly call, and every new member welcomed by name.",
+        sources: [["Jon", "wins", "100 members today. Six weeks, one invitation a day."]] },
+      { id: "referral", title: "Ask each customer who else needs this", under: "Growth", days: 15, uses: 1,
+        body: "After someone joins, ask who else they know with the same problem. Half the referrals here came that way.",
+        sources: [["Amir", "wins", "Asked my first five who else should join. Got three names each."]] },
+    ] },
+  { id: "calls", name: "Calls", kind: "subject", x: 140, y: 125,
+    about: "Learned on its own from the community's calls: how they run, and what to do when they don't.",
+    notes: [
+      { id: "friday", title: "How the Friday call runs", under: "Calls", days: 40, uses: 3,
+        body: "Thirty minutes: one member shares, everyone brings one thing they're stuck on, and the recording goes under the course.",
+        sources: [["Maya", "general", "Friday format: one share, then hot seats. Recording after."]] },
+      { id: "noshow", title: "What to do when nobody shows up", under: "Calls", days: 5, uses: 1,
+        body: "Record a short version anyway and post it. Next week, remind people the day before and the hour before.",
+        sources: [["Amir", "general", "Nobody came to my first call. Recorded it anyway, 4 people watched it."]] },
+      { id: "record", title: "Where call recordings live", under: "Calls", days: 22, uses: 2,
+        body: "Recordings go under the course they belong to, with a two-line summary pinned in the channel.",
+        sources: [["Hana", "general", "Found the recording under the course, thanks!"]] },
+    ] },
+  { id: "launch", name: "Launch week", kind: "course", x: -120, y: 140,
+    about: "Members who launched left what worked under its lessons.",
+    notes: [
+      { id: "headline", title: "Launch post headlines that worked", under: "Lesson 2 · The launch post", days: 3, uses: 2,
+        body: "Headlines that worked here say the result, then who it's for. Short beats clever.",
+        sources: [["Hana", "launch-pod", "Changed my headline to the result first and sign-ups doubled."]] },
+      { id: "onepage", title: "What goes on a one-page offer", under: "Lesson 1 · A one-page offer", days: 18, uses: 1,
+        body: "Who it's for, the one result, what's inside, the price, and one way to join. Nothing else.",
+        sources: [["Jon", "general", "My page is five lines now and it converts better."]] },
+    ] },
+];
 
-// What each learned note says and the posts it came from. The guide learns
-// from posts only; courses are where notes are filed.
-const NOTES: Record<string, NoteWords> = {
-  "note:invite": { body: "Personal invitations beat posts. Name why you thought of them, say what's inside in one line, and give one date to show up.",
-    sources: [["Jon", "wins", "Sent my invitation to 40 people from my newsletter. 11 joined in two days."], ["Priya", "general", "The personal ones worked, the group post got nothing."]] },
-  "note:founding": { body: "Offer the first ten members a lower price for life, and say when it ends. Members here have used $29 to $49.",
-    sources: [["Priya", "general", "Thinking of a founding price, $29 for life for the first ten?"], ["Jon", "general", "Mine started at $39 and I raised it after the first ten."]] },
-  "note:hundred": { body: "Jon passed 100 members in six weeks: one invitation a day, a weekly call, and every new member welcomed by name.",
-    sources: [["Jon", "wins", "100 members today. Six weeks, one invitation a day."]] },
-  "note:askedHelp": { body: "Your first members are the people who already ask you for help. List ten of them before you write a sales page.",
-    sources: [["Dev", "general", "My first three were people who'd DM'd me questions for months."]] },
-  "note:headline": { body: "Headlines that worked here say the result, then who it's for. Short beats clever.",
-    sources: [["Hana", "launch-pod", "Changed my headline to the result first and sign-ups doubled."]] },
-  "note:noshow": { body: "If nobody shows up, record a short version anyway and post it. Next week, remind people the day before and the hour before.",
-    sources: [["Amir", "general", "Nobody came to my first call. Recorded it anyway, 4 people watched it."]] },
-  "note:dms": { body: "Ten personal messages bring more first customers than one big post.",
-    sources: [["Kai", "wins", "Ten DMs, four yeses. The big post got one like."]] },
-  "note:onePrice": { body: "Start with one price. Tiers can come once you know what people pay for.",
-    sources: [["Maya", "general", "I dropped my three tiers and sales went up."]] },
-};
+const CENTER = "center";
+const W = 600, H = 460, CX = 300, CY = 230;
 
-// The preview's own community, so the page is one place throughout.
-export function sceneBrain(now: number): BrainMap {
-  return buildClubBrain(now);
-}
-
-function learnedWhen(iso: string, now: number): string {
-  const days = Math.floor((now - Date.parse(iso)) / DAY);
+function when(days: number): string {
   return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
 }
 
@@ -54,205 +79,176 @@ function track(action: string) {
   captureProductAnalyticsEvent("brain_scene_used", { action });
 }
 
-type Edit = { title: string; body: string };
-
-function placeOf(map: BrainMap, point: BrainPoint): string {
-  if (point.at.kind === "subject") return point.at.name;
-  if (point.at.kind === "pod") return "In a pod";
-  const at = point.at;
-  if (at.kind !== "lesson") return "Not filed yet";
-  for (const course of map.courses) {
-    const lesson = course.lessons.find((entry) => entry.id === at.id);
-    if (lesson) return `Lesson ${lesson.order} · ${lesson.title}`;
-  }
-  return "Not filed yet";
+// Each branch's dots fan out away from the middle.
+function leafSpots(branch: Branch): Array<{ x: number; y: number }> {
+  const out = Math.atan2(branch.y, branch.x);
+  const n = branch.notes.length;
+  return branch.notes.map((_, index) => {
+    const a = out + (index - (n - 1) / 2) * 0.62;
+    return { x: CX + branch.x + Math.cos(a) * 62, y: CY + branch.y + Math.sin(a) * 62 };
+  });
 }
 
-// The panel map's own box and lens (KitBrainMap.tsx: PANEL_BOX, PANEL_LENS),
-// so the dots picked here sit exactly on the dots drawn.
-const BOX = { w: 240, h: 200 };
-const LENS = 0.85;
+type Edit = { title: string; body: string };
 
-type Step = { id: string; eyebrow: string; title: string; text: string; show?: "sources" | "answer" | "fix" };
-
-const TOUR: Step[] = [
-  { id: BRAIN_CENTER_ID, eyebrow: "The Build Club's memory", title: "Everything your community knows, in one place",
-    text: "Every dot is something the community knows. The guide answers from it, and you can see all of it. Pick the glowing dot to follow one answer through it." },
-  { id: "course:start", eyebrow: "Your courses", title: "Your courses are the frame",
-    text: "Start here is one of the big branches. When members work something out about a lesson, it's filed right under that lesson, so the next person on it finds it." },
-  { id: "note:founding", eyebrow: "It learns", title: "Monday: a good answer in #general",
-    text: "Priya asked what to charge her first members. Jon answered with his own numbers. The guide saved it as a note, filed under Lesson 3, with both posts as its source.", show: "sources" },
-  { id: "resource:price", eyebrow: "It answers", title: "Wednesday, 2am: Dev asks his guide",
-    text: "“How should I price my first offer?” The guide answered from Jon's note and pointed to Lesson 3. Nobody had to answer the same question twice.", show: "answer" },
-  { id: "subject:Growth", eyebrow: "It notices", title: "What no course teaches yet",
-    text: "Invitations, referrals, how Jon passed 100 members: none of it is in a course. The guide groups it on its own as Growth, so you can see what to teach next." },
-  { id: "note:invite", eyebrow: "You decide", title: "Something not quite right? Fix it",
-    text: "Anything it learned can be corrected or removed. Once you correct a note it's yours, and the guide won't change it again. Try it.", show: "fix" },
-  { id: "pod:launch", eyebrow: "Pods", title: "Pods keep their own memory",
-    text: "What the Launch pod learns stays in the pod, for the people in it. That's the whole memory: it grows every day your members help each other." },
-];
+function onKey(go: () => void) {
+  return (event: { key: string; preventDefault: () => void }) => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); go(); }
+  };
+}
 
 export function BrainScene() {
-  const [now] = useState(() => Date.now());
-  const [map, setMap] = useState(() => sceneBrain(now));
-  const [picked, setPicked] = useState<string>(BRAIN_CENTER_ID);
+  const [branches, setBranches] = useState(BRANCHES);
+  const [picked, setPicked] = useState<string>(CENTER);
+  const [touched, setTouched] = useState(false);
   const [mode, setMode] = useState<"correct" | "remove" | null>(null);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [draft, setDraft] = useState<Edit>({ title: "", body: "" });
   const [said, setSaid] = useState<string | null>(null);
 
-  // Where each dot is drawn, the same way the panel map places them.
-  const spots = useMemo(() => {
-    const layout = lensLayout(layoutBrain(map, now), BOX, { power: LENS });
-    const at = new Map<string, { x: number; y: number }>();
-    at.set(BRAIN_CENTER_ID, layout.center);
-    for (const hub of layout.hubs) if (hub.kind !== "course") at.set(hub.key, hub);
-    for (const course of layout.courses) at.set(course.key, course);
-    for (const lesson of layout.lessons) at.set(lesson.id, lesson);
-    for (const point of layout.points) at.set(point.id, point);
-    return at;
-  }, [map, now]);
-
-  const stepAt = TOUR.findIndex((step) => step.id === picked);
-  const next = TOUR.slice(stepAt + 1).find((step) => spots.has(step.id)) ?? (stepAt === -1 ? TOUR.find((step) => spots.has(step.id)) : null);
   const pick = (id: string) => {
-    if (id !== picked) track(TOUR.some((step) => step.id === id) ? `tour_${id}` : "pick");
-    setPicked(id); setMode(null); setSaid(null);
+    if (id !== picked) track(id === CENTER ? "center" : branches.some((entry) => entry.id === id) ? "branch" : "note");
+    setTouched(true); setPicked(id); setMode(null); setSaid(null);
   };
 
-  const point = map.points.find((entry) => entry.id === picked) ?? null;
-  const step = stepAt >= 0 ? TOUR[stepAt] : null;
-  const edit = point ? edits[point.id] : undefined;
-  const noteTitle = point ? edit?.title ?? point.title ?? "Something the community learned" : "";
-  const noteBody = point ? edit?.body ?? NOTES[point.id]?.body ?? "The guide answers from it." : "";
+  const all = branches.flatMap((entry) => entry.notes.map((note) => ({ branch: entry, note })));
+  const found = all.find((entry) => entry.note.id === picked) ?? null;
+  const branch = branches.find((entry) => entry.id === picked) ?? found?.branch ?? null;
+  const fresh = all.filter((entry) => entry.note.days <= 7).length;
 
-  const sources = (id: string) => {
-    const list = NOTES[id]?.sources ?? [];
-    return list.length ? (
-      <div className="bsc-sources">
-        <span className="bsc-label">Where it came from</span>
-        {list.map(([who, channel, excerpt]) => <p key={excerpt}><b>{who}</b> in #{channel}: {excerpt}</p>)}
-      </div>
-    ) : null;
-  };
-
-  const fix = point ? (
-    mode === "correct" ? (
-      <div className="bsc-form">
-        <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} aria-label="Title" maxLength={120} />
-        <textarea value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} aria-label="What it says" rows={3} maxLength={600} />
-        <span className="bsc-hint">Once you correct it, it's yours: the guide won't change it again.</span>
-        <div className="bsc-acts">
-          <button type="button" className="go" onClick={() => {
-            track("correct_saved");
-            setEdits((last) => ({ ...last, [point.id]: { title: draft.title.trim() || noteTitle, body: draft.body.trim() || noteBody } }));
-            setMode(null); setSaid("Saved. The guide answers with your words from now on.");
-          }}>Save</button>
-          <button type="button" onClick={() => setMode(null)}>Cancel</button>
-        </div>
-      </div>
-    ) : mode === "remove" ? (
-      <div className="bsc-form">
-        <span className="bsc-hint">The guide stops answering from it, and the same posts won't teach it again.</span>
-        <div className="bsc-acts">
-          <button type="button" className="go" onClick={() => {
-            track("removed");
-            setMap((last) => ({ ...last, points: last.points.filter((entry) => entry.id !== point.id) }));
-            setPicked(next?.id ?? BRAIN_CENTER_ID); setMode(null); setSaid(null);
-          }}>Remove</button>
-          <button type="button" onClick={() => setMode(null)}>Cancel</button>
-        </div>
-      </div>
-    ) : (
-      <div className="sc-acts">
-        <button type="button" onClick={() => { track("correct"); setMode("correct"); setSaid(null); setDraft({ title: noteTitle, body: noteBody }); }}>Correct</button>
-        <button type="button" onClick={() => { track("remove"); setMode("remove"); setSaid(null); }}>Remove</button>
-      </div>
-    )
-  ) : null;
-
-  const card = step ? (
-    <>
-      <span className="sc-eyebrow">{step.eyebrow} · {stepAt + 1} of {TOUR.length}</span>
-      <b className="bsc-title">{step.title}</b>
-      <p className="bsc-text">{step.text}</p>
-      {step.show === "sources" ? sources(step.id) : null}
-      {step.show === "answer" ? (
-        <div className="bsc-sources">
-          <span className="bsc-label">Lesson 3 · Pricing your first offer</span>
-          <p>Answers used Jon's note here 6 times this month.</p>
-        </div>
-      ) : null}
-      {step.show === "fix" && point ? (
-        <div className="bsc-sources">
-          <span className="bsc-label">{edit ? "Corrected by you" : `Learned ${learnedWhen(point.learned_at, now)}`}</span>
-          <p><b>{noteTitle}</b>: {noteBody}</p>
-        </div>
-      ) : null}
-      {said ? <p className="bsc-said" role="status">{said}</p> : null}
-      {step.show === "fix" ? fix : null}
-    </>
-  ) : point ? (
-    <>
-      <span className="sc-eyebrow">{edit ? "Corrected by you" : "Learned"} · {learnedWhen(point.learned_at, now)}</span>
-      <b className="bsc-title">{noteTitle}</b>
-      <p className="bsc-text">{noteBody}</p>
-      <div className="bsc-facts"><span>Sits under</span><b>{placeOf(map, point)}</b></div>
-      {sources(point.id)}
-      {said ? <p className="bsc-said" role="status">{said}</p> : null}
-      {point.at.kind === "pod" ? null : fix}
-    </>
-  ) : (
-    <>
-      <span className="sc-eyebrow">The Build Club's memory</span>
-      <b className="bsc-title">{map.courses.flatMap((course) => course.lessons).find((lesson) => lesson.id === picked)?.title
-        ?? map.courses.find((course) => course.id === picked)?.name ?? map.subjects.find((entry) => `subject:${entry.name}` === picked)?.name ?? "The Build Club"}</b>
-      {(() => {
-        const course = map.courses.find((entry) => entry.id === picked);
-        const under = map.points.filter((entry) => entry.at.kind === "lesson"
-          ? (entry.at.id === picked || Boolean(course?.lessons.some((lesson) => entry.at.kind === "lesson" && lesson.id === entry.at.id)))
-          : entry.at.kind === "subject" ? `subject:${entry.at.name}` === picked : false);
-        return under.length ? (
-          <div className="bsc-sources">
-            <span className="bsc-label">{under.length} {under.length === 1 ? "thing" : "things"} learned here, from members' posts</span>
-            {under.slice(0, 4).map((entry) => <p key={entry.id}><button type="button" className="bsc-link" onClick={() => pick(entry.id)}>{edits[entry.id]?.title ?? entry.title}</button></p>)}
+  const card = (() => {
+    if (found) {
+      const { note } = found;
+      const edit = edits[note.id];
+      const title = edit?.title ?? note.title;
+      const body = edit?.body ?? note.body;
+      return (
+        <>
+          <button type="button" className="bsc-crumb-btn" onClick={() => pick(found.branch.id)}>← {found.branch.name}</button>
+          <span className="sc-eyebrow">{edit ? "Corrected by you" : "Learned"} · {when(note.days)}</span>
+          <b className="bsc-title">{title}</b>
+          <p className="bsc-text">{body}</p>
+          <div className="bsc-facts">
+            <span>Sits under</span><b>{note.under}</b>
+            <span>Used</span><b>In {note.uses} {note.uses === 1 ? "answer" : "answers"} this month</b>
           </div>
-        ) : <p className="bsc-text">Nothing learned here yet. Notes land here as members answer each other.</p>;
-      })()}
-    </>
-  );
+          <div className="bsc-sources">
+            <span className="bsc-label">Where it came from</span>
+            {note.sources.map(([who, channel, excerpt]) => <p key={excerpt}><b>{who}</b> in #{channel}: {excerpt}</p>)}
+          </div>
+          {said ? <p className="bsc-said" role="status">{said}</p> : null}
+          {mode === "correct" ? (
+            <div className="bsc-form">
+              <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} aria-label="Title" maxLength={120} />
+              <textarea value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} aria-label="What it says" rows={3} maxLength={600} />
+              <span className="bsc-hint">Once you correct it, it's yours: the guide won't change it again.</span>
+              <div className="bsc-acts">
+                <button type="button" className="go" onClick={() => {
+                  track("correct_saved");
+                  setEdits((last) => ({ ...last, [note.id]: { title: draft.title.trim() || title, body: draft.body.trim() || body } }));
+                  setMode(null); setSaid("Saved. The guide answers with your words from now on.");
+                }}>Save</button>
+                <button type="button" onClick={() => setMode(null)}>Cancel</button>
+              </div>
+            </div>
+          ) : mode === "remove" ? (
+            <div className="bsc-form">
+              <span className="bsc-hint">The guide stops answering from it, and the same posts won't teach it again.</span>
+              <div className="bsc-acts">
+                <button type="button" className="go" onClick={() => {
+                  track("removed");
+                  setBranches((last) => last.map((entry) => ({ ...entry, notes: entry.notes.filter((other) => other.id !== note.id) })));
+                  setPicked(found.branch.id); setMode(null); setSaid("Removed. The guide no longer answers from it.");
+                }}>Remove</button>
+                <button type="button" onClick={() => setMode(null)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div className="sc-acts">
+              <button type="button" onClick={() => { track("correct"); setMode("correct"); setSaid(null); setDraft({ title, body }); }}>Correct</button>
+              <button type="button" onClick={() => { track("remove"); setMode("remove"); setSaid(null); }}>Remove</button>
+            </div>
+          )}
+        </>
+      );
+    }
+    if (branch) {
+      return (
+        <>
+          <button type="button" className="bsc-crumb-btn" onClick={() => pick(CENTER)}>← The Build Club</button>
+          <span className="sc-eyebrow">{branch.kind === "course" ? "A course" : "Learned on its own"}</span>
+          <b className="bsc-title">{branch.name}</b>
+          <p className="bsc-text">{branch.about}</p>
+          {said ? <p className="bsc-said" role="status">{said}</p> : null}
+          <div className="bsc-sources">
+            <span className="bsc-label">{branch.notes.length} {branch.notes.length === 1 ? "thing" : "things"} members worked out</span>
+            {branch.notes.map((note) => (
+              <p key={note.id}><button type="button" className="bsc-link" onClick={() => pick(note.id)}>{edits[note.id]?.title ?? note.title}</button></p>
+            ))}
+          </div>
+        </>
+      );
+    }
+    return (
+      <>
+        <span className="sc-eyebrow">The Build Club's memory</span>
+        <b className="bsc-title">Everything your community knows</b>
+        <p className="bsc-text">Each branch is a course, or a subject the guide grouped on its own. Each dot on it is something members worked out, saved from their own posts. The guide answers from all of it. Pick a branch or a dot.</p>
+        <div className="bsc-facts"><span>Learned</span><b>{all.length} things · {fresh} this week</b></div>
+      </>
+    );
+  })();
 
-  const ring = (id: string | undefined, className: string) => {
-    const at = id ? spots.get(id) : undefined;
-    return at ? <circle className={className} cx={at.x} cy={at.y} r={id === BRAIN_CENTER_ID ? 9 : 6} /> : null;
-  };
-
+  const lit = branch?.id ?? null;
   return (
     <div className="bsc">
-      <div className="bsc-map">
-        <KitApp view="know" part="main">
-          <KitBrainMap map={map} size="panel" now={now} />
-        </KitApp>
-        <svg className="bsc-hits" viewBox={`0 0 ${BOX.w} ${BOX.h}`} aria-label="Pick a dot">
-          {ring(picked, "bsc-on")}
-          {next ? ring(next.id, "bsc-next") : null}
-          {[...spots].map(([id, at]) => (
-            <circle key={id} className="bsc-hit" cx={at.x} cy={at.y} r={id === BRAIN_CENTER_ID ? 10 : 5.5}
-              role="button" tabIndex={0} aria-label={TOUR.find((entry) => entry.id === id)?.title ?? "A dot on the map"}
-              onClick={() => pick(id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pick(id); } }} />
-          ))}
-        </svg>
-      </div>
-      <div className="sc-panel bsc-card" aria-live="polite">
-        {card}
-        <div className="bsc-nav">
-          {TOUR.map((entry, index) => (
-            <button key={entry.id} type="button" aria-label={`Step ${index + 1}: ${entry.title}`} className={index === stepAt ? "on" : ""} onClick={() => pick(entry.id)} />
-          ))}
-          {next ? <button type="button" className="bsc-nextbtn" onClick={() => pick(next.id)}>Next: the glowing dot →</button>
-            : <button type="button" className="bsc-nextbtn" onClick={() => pick(BRAIN_CENTER_ID)}>Start again</button>}
-        </div>
-      </div>
+      <svg className="bsc-net" viewBox={`0 0 ${W} ${H}`} role="group" aria-label="The Build Club's memory: pick the middle, a branch or a dot">
+        <defs>
+          <radialGradient id="bscGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#A78BFA" stopOpacity=".55" /><stop offset="1" stopColor="#A78BFA" stopOpacity="0" /></radialGradient>
+        </defs>
+        {branches.map((entry) => {
+          const hx = CX + entry.x, hy = CY + entry.y;
+          return (
+            <g key={entry.id} className={lit === entry.id ? "bsc-branch on" : lit ? "bsc-branch dim" : "bsc-branch"}>
+              <path className="bsc-trunk" d={`M${CX} ${CY} Q${CX + entry.x * 0.55 + entry.y * 0.18} ${CY + entry.y * 0.55 - entry.x * 0.18} ${hx} ${hy}`} />
+              {leafSpots(entry).map((spot, index) => <line key={index} className="bsc-twig" x1={hx} y1={hy} x2={spot.x} y2={spot.y} />)}
+            </g>
+          );
+        })}
+        <circle className="bsc-glow" cx={CX} cy={CY} r={58} fill="url(#bscGlow)" />
+        {branches.map((entry) => {
+          const hx = CX + entry.x, hy = CY + entry.y;
+          const spots = leafSpots(entry);
+          return (
+            <g key={`n-${entry.id}`} className={lit && lit !== entry.id ? "bsc-branch dim" : "bsc-branch"}>
+              {entry.notes.map((note, index) => (
+                <g key={note.id} className={picked === note.id ? "bsc-dot on" : "bsc-dot"} role="button" tabIndex={0} aria-label={note.title}
+                  onClick={() => pick(note.id)} onKeyDown={onKey(() => pick(note.id))}>
+                  <circle className="bsc-hit" cx={spots[index].x} cy={spots[index].y} r={13} />
+                  {!touched && note.id === "founding" ? <circle className="bsc-next" cx={spots[index].x} cy={spots[index].y} r={7} /> : null}
+                  <circle className={note.days <= 7 ? "bsc-leaf new" : "bsc-leaf"} cx={spots[index].x} cy={spots[index].y} r={note.days <= 7 ? 4.6 : 3.8} />
+                  {picked === note.id ? <circle className="bsc-ring" cx={spots[index].x} cy={spots[index].y} r={9} /> : null}
+                </g>
+              ))}
+              <g className={picked === entry.id ? "bsc-hub on" : "bsc-hub"} role="button" tabIndex={0} aria-label={entry.name}
+                onClick={() => pick(entry.id)} onKeyDown={onKey(() => pick(entry.id))}>
+                <circle className="bsc-hit" cx={hx} cy={hy} r={16} />
+                <circle className="bsc-hubdot" cx={hx} cy={hy} r={7.5} />
+                {picked === entry.id ? <circle className="bsc-ring" cx={hx} cy={hy} r={13} /> : null}
+                <text className="bsc-name" x={hx} y={hy + (entry.y < 0 ? -17 : 28)} textAnchor="middle">{entry.name}</text>
+              </g>
+            </g>
+          );
+        })}
+        <g className={picked === CENTER ? "bsc-core on" : "bsc-core"} role="button" tabIndex={0} aria-label="The Build Club"
+          onClick={() => pick(CENTER)} onKeyDown={onKey(() => pick(CENTER))}>
+          <circle className="bsc-hit" cx={CX} cy={CY} r={20} />
+          <circle className="bsc-corering" cx={CX} cy={CY} r={13} />
+          <circle className="bsc-coredot" cx={CX} cy={CY} r={7} />
+          <text className="bsc-name core" x={CX} y={CY + 34} textAnchor="middle">The Build Club</text>
+        </g>
+      </svg>
+      <div className="sc-panel bsc-card" aria-live="polite">{card}</div>
     </div>
   );
 }
