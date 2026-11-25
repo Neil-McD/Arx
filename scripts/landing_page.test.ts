@@ -98,3 +98,9 @@ test("old home page links to pricing and questions open the pricing page", () =>
   expect(resolvePublicEntryRoute({ pathname: "/pricing/" })).toEqual({ kind: "pricing" });
   expect(resolvePublicEntryRoute({ pathname: "/pricing/extra" })).toBeNull();
 });
+
+test("on a phone one Menu button holds every top-bar link", () => {
+  const html = renderToStaticMarkup(React.createElement(ConversionLanding, { onJoin: () => undefined }));
+  expect(html).toContain('aria-controls="phone-menu"');
+  expect(html).toContain(">Menu</button>");
+});

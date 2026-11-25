@@ -397,6 +397,57 @@ function ProductMenu() {
   );
 }
 
+// On a phone or narrow window the top-bar links don't fit, so one Menu button
+// opens them all in a panel under the bar.
+export function PhoneMenu(props: { onJoin: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [productOpen, setProductOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && wrap.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
+  const close = () => setOpen(false);
+  return (
+    <div className="phone-menu" ref={wrap}>
+      <button type="button" className={open ? "phone-menu-button open" : "phone-menu-button"} aria-expanded={open} aria-controls="phone-menu"
+        onClick={() => setOpen((value) => !value)}>
+        {open ? "Close" : "Menu"}
+      </button>
+      {open ? (
+        <div className="phone-menu-panel" id="phone-menu">
+          <button type="button" className="phone-menu-row" aria-expanded={productOpen} onClick={() => setProductOpen((value) => !value)}>
+            Product<span aria-hidden="true">{productOpen ? "\u2212" : "+"}</span>
+          </button>
+          {productOpen ? (
+            <div className="phone-menu-sub">
+              {PRODUCT_MENU.flat().map(([title, , href]) => <a key={title} href={href} onClick={close}>{title}</a>)}
+            </div>
+          ) : null}
+          <a className="phone-menu-row" href="/discover" onClick={() => { trackFind("phone_menu")(); close(); }}>Communities</a>
+          <a className="phone-menu-row" href="/pricing" onClick={close}>Pricing</a>
+          {RESOURCES_MENU.filter(([, , href]) => href !== "/ai").map(([title, , href]) => <a className="phone-menu-row" key={title} href={href} onClick={close}>{title}</a>)}
+          <a className="phone-menu-row" href="/pricing#questions" onClick={close}>Questions</a>
+          <div className="phone-menu-foot">
+            <a href="/login">Sign in</a>
+            <button className="cta" type="button" onClick={() => { close(); trackStart("phone_menu", props.onJoin)(); }}>Start a community</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ResourcesMenu() {
   return (
     <NavMenu label="Resources" id="resources-menu" narrow>
@@ -432,6 +483,7 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
           <nav aria-label="Account">
             <a href="/login">Sign in</a>
             <button className="cta cta-small" type="button" onClick={trackStart("header", props.onJoin)}>Start a community</button>
+            <PhoneMenu onJoin={props.onJoin} />
           </nav>
         </header>
 
