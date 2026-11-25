@@ -21,6 +21,7 @@ import type { CommunityMemberJourneySelfSummary } from "../shared/communityMembe
 import {
   DEFAULT_JOURNEY_STAGES,
   JOURNEY_CARD_STATUSES,
+  JOURNEY_CARD_STATUS_SORT_RANK,
   MAX_AGENT_OUTCOME_CHARS,
   MAX_CARD_OUTCOMES,
   MAX_CHECKPOINT_LABEL_CHARS,
@@ -708,46 +709,93 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       }
     }
     const activatedPct = board.cards.length > 0 ? Math.round((activatedCount / board.cards.length) * 100) : 0;
-    return {
-      read_at: new Date(nowMs).toISOString(),
-      stages: board.stages,
-      summary: {
-        total_active_members: board.total_active_members,
-        shown_members: board.cards.length,
-        capped: board.capped,
-        activated_pct: activatedPct,
-        ready_to_advance_count: readyToAdvanceCount,
-        by_stage: byStage,
-        by_status: byStatus,
-      },
-      cards: board.cards.map((card) => ({
+    // Sort cards by highest actionability first (needs_you -> stuck -> ready_to_advance -> on_track -> done -> quiet)
+    // so large communities always surface the highest-priority members within the 24 KB canonical JSON budget.
+    const sortedCards = [...board.cards].sort((left, right) => {
+      const leftRank = JOURNEY_CARD_STATUS_SORT_RANK[left.status as JourneyCardStatus] ?? 9;
+      const rightRank = JOURNEY_CARD_STATUS_SORT_RANK[right.status as JourneyCardStatus] ?? 9;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      const leftReady = left.checkpoints_total > 0 && left.checkpoints_done >= left.checkpoints_total && left.stage_key !== lastStageKey ? 0 : 1;
+      const rightReady = right.checkpoints_total > 0 && right.checkpoints_done >= right.checkpoints_total && right.stage_key !== lastStageKey ? 0 : 1;
+      if (leftReady !== rightReady) return leftReady - rightReady;
+      return String(right.last_active_at ?? "").localeCompare(String(left.last_active_at ?? ""));
+    });
+
+    const projectedCards = sortedCards.map((card) => {
+      const readyToAdvance =
+        card.checkpoints_total > 0 &&
+        card.checkpoints_done >= card.checkpoints_total &&
+        card.stage_key !== lastStageKey;
+      return {
         member_ref: `user:${card.db_user_id}`,
         handle: card.handle,
         name: card.name,
         role: card.role,
         plan_label: card.plan_label,
-        money_kind: card.money_kind,
+        ...(card.money_kind ? { money_kind: card.money_kind } : {}),
         stage_key: card.stage_key,
         stage_name: card.stage_name,
         status: card.status,
         status_is_manual: card.status_is_manual,
         checkpoints_done: card.checkpoints_done,
         checkpoints_total: card.checkpoints_total,
-        ready_to_advance:
-          card.checkpoints_total > 0 &&
-          card.checkpoints_done >= card.checkpoints_total &&
-          card.stage_key !== lastStageKey,
-        checkpoints: card.checkpoints,
-        latest_outcome: card.latest_outcome,
-        outcomes: card.outcomes,
-        founder_instruction: card.founder_instruction,
-        agent_outcome: card.agent_outcome,
-        working_on: card.working_on,
-        activity_summary: card.activity_summary,
+        ready_to_advance: readyToAdvance,
+        ...(card.checkpoints.length
+          ? {
+              checkpoints_remaining: card.checkpoints.filter((cp) => !cp.done).map((cp) => cp.key),
+            }
+          : {}),
+        ...(card.latest_outcome ? { latest_outcome: card.latest_outcome } : {}),
+        ...(card.outcomes.length ? { outcomes: card.outcomes.slice(0, 3) } : {}),
+        ...(card.founder_instruction ? { founder_instruction: card.founder_instruction } : {}),
+        ...(card.agent_outcome ? { agent_outcome: card.agent_outcome } : {}),
+        ...(card.working_on ? { working_on: card.working_on } : {}),
+        ...(card.activity_summary ? { activity_summary: card.activity_summary } : {}),
         joined_at: card.joined_at,
         last_active_at: card.last_active_at,
-      })),
-    };
+      };
+    });
+
+    // Enforce a hard budget safely below CANONICAL_JSON_DOCUMENT_MAX_CHARS (24,000)
+    // so builder/journey.json ALWAYS stays valid, parseable JSON even with 200 members.
+    const BUILDER_JOURNEY_JSON_BUDGET_CHARS = 22_000;
+    const buildPayload = (cardsSlice: typeof projectedCards, cardsTruncated: boolean) => ({
+      read_at: new Date(nowMs).toISOString(),
+      stages: board.stages,
+      summary: {
+        total_active_members: board.total_active_members,
+        shown_members: cardsSlice.length,
+        capped: board.capped || cardsTruncated,
+        cards_truncated: cardsTruncated,
+        activated_pct: activatedPct,
+        ready_to_advance_count: readyToAdvanceCount,
+        by_stage: byStage,
+        by_status: byStatus,
+      },
+      cards: cardsSlice,
+      ...(cardsTruncated
+        ? { note: "Showing highest-priority members first. Read members/<handle>.json for full journey details on any specific member." }
+        : {}),
+    });
+
+    let kept = projectedCards.length;
+    let payload = buildPayload(projectedCards, false);
+    if ((JSON.stringify(payload, null, 2)?.length ?? 0) > BUILDER_JOURNEY_JSON_BUDGET_CHARS) {
+      let low = 0;
+      let high = projectedCards.length;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        const candidate = buildPayload(projectedCards.slice(0, mid), mid < projectedCards.length);
+        if ((JSON.stringify(candidate, null, 2)?.length ?? 0) <= BUILDER_JOURNEY_JSON_BUDGET_CHARS) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+      kept = low;
+      payload = buildPayload(projectedCards.slice(0, kept), kept < projectedCards.length);
+    }
+    return payload;
   },
 });
 

@@ -380,6 +380,62 @@ describe("Member Board three-lens privacy & ontology", () => {
       founder_instruction: "SECRET_HOST_NOTE: gently nudge Sam to ship lesson 1 before Friday",
     });
   });
+
+  test("builder/journey.json stays valid, parseable, and priority-sorted under 24 KB even in larger communities", async () => {
+    const t = convexTest(schema, modules);
+    const f = await seedFixture(t);
+
+    // Seed 55 extra members so an unbounded pretty-printed JSON payload would exceed 24 KB.
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      for (let i = 0; i < 55; i += 1) {
+        const uid = await ctx.db.insert("users", {
+          authSubject: `bulk_subj_${i}`,
+          displayName: `Bulk Member ${i}`,
+          handle: `bulk-member-${i}`,
+          normalizedHandle: `bulk-member-${i}`,
+          email: `bulk${i}@example.com`,
+          emailVerifiedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await ctx.db.insert("communityMemberships", {
+          communityId: f.communityId,
+          userId: uid,
+          role: "member",
+          state: "active",
+          createdAt: now - 2 * 24 * 60 * 60 * 1000,
+          activatedAt: now - 2 * 24 * 60 * 60 * 1000,
+          updatedAt: now,
+        });
+        await ctx.db.insert("communityMemberJourneyCards", {
+          communityId: f.communityId,
+          userId: uid,
+          stageKey: "new",
+          outcomes: [{ id: `o_${i}`, text: `Completed onboarding exercise number ${i} with full writeup`, at: now, source: "founder" }],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+
+    const boardRes = await execReadOrList(t, f.owner, {
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_read",
+      path: `/communities/${f.slug}/builder/journey.json`,
+    });
+    expect(boardRes.ok).toBe(true);
+    const rawBody = String((boardRes as any).value.body ?? "");
+    expect(rawBody.length).toBeLessThanOrEqual(24_000);
+    const parsed = JSON.parse(rawBody);
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.summary.total_active_members).toBeGreaterThanOrEqual(59);
+    expect(parsed.summary.cards_truncated).toBe(true);
+    // Priority sorting guarantees Sam (needs_you) and Jules (stuck) appear first, ahead of on_track bulk members.
+    expect(parsed.cards[0]?.handle).toBe("sam");
+    expect(parsed.cards[1]?.handle).toBe("jules");
+  });
 });
 
 describe("Builder Member Board tools across Official Polynet MCP & Studio Guide Chat", () => {
