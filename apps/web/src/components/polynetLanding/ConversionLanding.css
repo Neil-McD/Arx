@@ -186,23 +186,23 @@
 .pn-landing [data-anim] [data-rv] { opacity: 0; transform: translateY(12px); transition: opacity .45s ease-out, transform .45s ease-out; }
 .pn-landing [data-anim] [data-rv][data-in] { opacity: 1; transform: none; }
 
-/* Hero: the planet runs edge to edge, behind the top bar. */
+/* Hero: a quiet star field edge to edge behind the top bar; the headline,
+   then the product. */
 .pn-landing .hero {
   position: relative;
-  height: 860px;
   margin: -84px calc(50% - 50vw) 0;
-  padding: 0;
-  background: #05060a;
+  padding: 0 0 64px;
+  background: radial-gradient(70% 60% at 50% 0%, #0c0e16 0%, #05060a 70%);
   overflow: hidden;
 }
-.pn-landing .orbit { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pn-landing .stars { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pn-landing .hero-text {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 156px 24px 0;
+  padding: 172px 24px 0;
 }
 .pn-landing .hero h1 {
   font-size: clamp(40px, 5.8vw, 84px);
@@ -215,27 +215,22 @@
 .pn-landing .doors { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 22px; margin-top: 28px; }
 .pn-landing .hero .microcopy { margin-top: 14px; }
 
-@keyframes pn-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes pn-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pn-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@keyframes pn-breathe { 0%, 100% { opacity: .75; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
 @keyframes pn-twinkle { 0%, 100% { opacity: .9; } 50% { opacity: .35; } }
-.pn-landing .orbit-arc { stroke-dasharray: 1; stroke-dashoffset: 1; animation: pn-draw 1.5s cubic-bezier(.3, .7, .2, 1) forwards; }
-.pn-landing .orbit-node { opacity: 0; animation: pn-in .6s ease-out forwards; }
-.pn-landing .orbit-hub { transform-box: fill-box; transform-origin: center; animation: pn-breathe 6s ease-in-out infinite; }
-.pn-landing .orbit-star { animation: pn-twinkle 5s ease-in-out infinite; }
+.pn-landing .star-twinkle { animation: pn-twinkle 5s ease-in-out infinite; }
 .pn-landing .hero-text > * { animation: pn-rise .8s ease-out both; }
 .pn-landing .hero-text > :nth-child(2) { animation-delay: .15s; }
 .pn-landing .hero-text > :nth-child(3) { animation-delay: .3s; }
 .pn-landing .hero-text > :nth-child(4) { animation-delay: .45s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pn-landing :is(.orbit-arc, .orbit-node, .orbit-ring, .orbit-hub, .orbit-star),
+  .pn-landing .star-twinkle,
   .pn-landing .hero-text > * { animation: none; opacity: 1; stroke-dashoffset: 0; }
 }
 
 /* The product, drawn small. */
-.pn-landing .product { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: -40px; position: relative; }
+.pn-landing .product { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: -8px; position: relative; }
+.pn-landing .product::before { content: ""; position: absolute; inset: -80px 10% auto; height: 260px; background: radial-gradient(50% 50% at 50% 50%, rgba(124, 92, 240, .16), transparent 70%); pointer-events: none; }
 .pn-landing .caption { color: var(--muted); font-size: 14.5px; text-align: center; }
 .pn-landing .shot {
   width: 100%;
@@ -513,7 +508,6 @@
 
 @media (max-width: 560px) {
   .pn-landing .page { width: min(100% - 32px, var(--content)); }
-  .pn-landing .hero { height: 900px; }
   .pn-landing .hero-text { padding-top: 124px; }
   .pn-landing .doors { flex-direction: column; width: 100%; }
   .pn-landing .doors > .cta { width: 100%; }

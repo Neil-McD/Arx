@@ -119,67 +119,21 @@ export function Brand() {
   );
 }
 
-// The hero's picture: the Earth's horizon at night, and lines of violet light
-// spreading from one bright point (the community's AI) to its people.
-const ARCS: Array<[string, number, number, number, number]> = [
-  ["M720 690 Q560 470 300 792", 0.9, 300, 792, 4], ["M720 690 Q600 560 448 738", 0.6, 448, 738, 4],
-  ["M720 690 Q650 660 590 764", 0.35, 590, 764, 3.6], ["M720 690 Q800 620 860 746", 0.45, 860, 746, 4],
-  ["M720 690 Q900 520 1010 776", 0.75, 1010, 776, 4], ["M720 690 Q980 420 1178 834", 1.05, 1178, 834, 3.6],
-  ["M720 690 Q680 770 662 832", 0.55, 662, 832, 3.4], ["M720 690 Q770 780 802 852", 0.65, 802, 852, 3.4],
-];
+// The hero's backdrop: a quiet field of stars; the product itself leads.
 const STARS: Array<[number, number, number]> = [
   [96, 84, 1.3], [212, 168, 0.8], [338, 62, 1.1], [470, 214, 0.7], [560, 96, 1.4], [842, 58, 1], [968, 182, 0.8], [1096, 88, 1.3],
   [1238, 150, 1], [1356, 72, 1.2], [60, 300, 0.8], [182, 392, 1], [1290, 320, 0.9], [1392, 430, 1.1], [1150, 262, 0.7], [284, 270, 0.7],
-  [700, 40, 0.8], [1010, 330, 0.7], [420, 356, 0.7],
-];
-const CITY_LIGHTS: Array<[number, number, number]> = [
-  [296, 792, 1.7], [308, 800, 1.1], [286, 806, 1], [318, 812, 1.3], [330, 796, 0.9], [446, 738, 1.6], [458, 748, 1.1], [436, 752, 1],
-  [468, 742, 0.9], [452, 762, 1], [588, 764, 1.5], [600, 774, 1], [578, 778, 0.9], [610, 760, 0.9], [706, 700, 1.4], [738, 706, 1.1],
-  [694, 716, 1], [748, 722, 1], [858, 746, 1.6], [872, 756, 1.1], [848, 760, 1], [882, 748, 0.9], [1008, 776, 1.5], [1022, 786, 1],
-  [998, 790, 0.9], [1176, 834, 1.5], [1190, 842, 1], [660, 832, 1.2], [800, 852, 1.2], [520, 850, 1], [940, 868, 1], [380, 868, 1],
+  [700, 40, 0.8], [1010, 330, 0.7], [420, 356, 0.7], [760, 250, 0.6], [1220, 470, 0.8], [130, 500, 0.7], [640, 420, 0.6],
 ];
 
-function OrbitScene() {
+function StarField() {
   return (
-    <svg className="orbit" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-      <defs>
-        <radialGradient id="pnEarth" gradientUnits="userSpaceOnUse" cx="560" cy="820" r="1000"><stop offset="0" stopColor="#172646" /><stop offset=".45" stopColor="#0B1326" /><stop offset="1" stopColor="#03050A" /></radialGradient>
-        <radialGradient id="pnAtmo" gradientUnits="userSpaceOnUse" cx="720" cy="1780" r="1230"><stop offset=".912" stopColor="#6E8FFF" stopOpacity="0" /><stop offset=".922" stopColor="#8FB0FF" stopOpacity=".55" /><stop offset=".94" stopColor="#B9A2FF" stopOpacity=".22" /><stop offset="1" stopColor="#7C5CF0" stopOpacity="0" /></radialGradient>
-        <linearGradient id="pnRim" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#9DB8FF" stopOpacity="0" /><stop offset=".3" stopColor="#BFD0FF" stopOpacity=".9" /><stop offset=".55" stopColor="#E4DAFF" /><stop offset=".8" stopColor="#9DB8FF" stopOpacity=".5" /><stop offset="1" stopColor="#9DB8FF" stopOpacity="0" /></linearGradient>
-        <radialGradient id="pnHub" cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#FFFFFF" /><stop offset=".18" stopColor="#E4DAFF" stopOpacity=".95" /><stop offset=".5" stopColor="#A78BFA" stopOpacity=".45" /><stop offset="1" stopColor="#7C5CF0" stopOpacity="0" /></radialGradient>
-        <radialGradient id="pnHaze" gradientUnits="userSpaceOnUse" cx="720" cy="700" r="520"><stop offset="0" stopColor="#7C5CF0" stopOpacity=".34" /><stop offset=".6" stopColor="#7C5CF0" stopOpacity=".07" /><stop offset="1" stopColor="#7C5CF0" stopOpacity="0" /></radialGradient>
-        <linearGradient id="pnFade" x1="0" y1="0" x2="0" y2="1"><stop offset=".8" stopColor="#08090A" stopOpacity="0" /><stop offset="1" stopColor="#08090A" /></linearGradient>
-        <filter id="pnBlur" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="6" /></filter>
-        <clipPath id="pnClip"><circle cx="720" cy="1780" r="1130" /></clipPath>
-      </defs>
+    <svg className="stars" viewBox="0 0 1440 560" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
       <g fill="#DFE6FF">
         {STARS.map(([cx, cy, r], index) => (
-          <circle key={index} className={index % 4 === 0 ? "orbit-star" : undefined} style={index % 4 === 0 ? { animationDelay: `-${index * 0.4}s` } : undefined} cx={cx} cy={cy} r={r} />
+          <circle key={index} className={index % 4 === 0 ? "star-twinkle" : undefined} style={index % 4 === 0 ? { animationDelay: `-${index * 0.4}s` } : undefined} cx={cx} cy={cy} r={r} />
         ))}
       </g>
-      <circle cx="720" cy="700" r="520" fill="url(#pnHaze)" />
-      <circle cx="720" cy="1780" r="1230" fill="url(#pnAtmo)" />
-      <circle cx="720" cy="1780" r="1130" fill="url(#pnEarth)" />
-      <circle cx="720" cy="1780" r="1131" fill="none" stroke="url(#pnRim)" strokeWidth="10" opacity=".5" filter="url(#pnBlur)" />
-      <circle cx="720" cy="1780" r="1130.5" fill="none" stroke="url(#pnRim)" strokeWidth="1.6" />
-      <g clipPath="url(#pnClip)" fill="#FFC98A" opacity=".82">
-        {CITY_LIGHTS.map(([cx, cy, r], index) => <circle key={index} cx={cx} cy={cy} r={r} />)}
-      </g>
-      <g fill="none" stroke="#C4B5FD" strokeWidth="1.5" strokeLinecap="round">
-        {ARCS.map(([d, delay], index) => <path key={index} className="orbit-arc" pathLength={1} style={{ animationDelay: `${delay}s` }} d={d} />)}
-      </g>
-      {/* Where each line lands is a person: a face-sized dot in a faint ring. */}
-      <g fill="#EDE5FF">
-        {ARCS.map(([, delay, cx, cy, r], index) => (
-          <Fragment key={index}>
-            <circle className="orbit-ring" style={{ animationDelay: `${delay + 1.3}s` }} cx={cx} cy={cy} r={r * 2.6} />
-            <circle className="orbit-node" style={{ animationDelay: `${delay + 1.3}s` }} cx={cx} cy={cy} r={r * 1.5} />
-          </Fragment>
-        ))}
-      </g>
-      <circle className="orbit-hub" cx="720" cy="690" r="86" fill="url(#pnHub)" />
-      <circle cx="720" cy="690" r="7.5" fill="#FFFFFF" />
-      <rect width="1440" height="900" fill="url(#pnFade)" />
     </svg>
   );
 }
@@ -576,7 +530,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
     <PublicFrame onJoin={onJoin}>
       <div ref={reveal} className="landing-body">
         <section className="hero" aria-labelledby="hero-title">
-          <OrbitScene />
+          <StarField />
           <div className="hero-text">
             <h1 id="hero-title">A normal community forgets.<br /><b>Yours will think.</b></h1>
             <p className="subhead">Give your people a home with its own AI. It answers them, remembers them, and helps you run the place.</p>
