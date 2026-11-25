@@ -49,6 +49,7 @@ export async function claimCommunityInferenceFundingSession(args: {
   receiptKey: string;
   sourceRunId: string;
   admission: CommunityInferenceFundingAdmission;
+  requireProactiveTier?: boolean;
 }): Promise<CommunityInferenceFundingSession> {
   if (args.admission.ok === false) throw new Error(args.admission.code);
   const receiptKey = String(args.receiptKey ?? "").trim();
@@ -67,6 +68,7 @@ export async function claimCommunityInferenceFundingSession(args: {
       expectedFounderSubscriptionId:
         args.admission.mode === "platform_subscription" ? args.admission.subscriptionId : undefined,
       surface: args.surface,
+      ...(args.requireProactiveTier ? { requireProactiveTier: true } : {}),
       claimToken,
       nowMs: Date.now(),
     },

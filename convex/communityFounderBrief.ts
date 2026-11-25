@@ -16,6 +16,7 @@ import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
+import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
@@ -567,6 +568,12 @@ export const claimFounderBriefInternal = internalMutation({
     const community = await ctx.db.get(args.communityId);
     if (!community || !communityIsActive(community)) {
       // An archived community waits a day at a time, so it never blocks the queue.
+      await scheduleNext(ctx, args.communityId, args.nowMs, false);
+      return null;
+    }
+    // Daily Founder Briefs require an active Chief of Staff tier (or operator grant).
+    // Free, Guide ($20/mo), past-due, expired, and risk-revoked communities fail closed.
+    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))) {
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }

@@ -1,7 +1,9 @@
 import {
-  POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+  founderPlanTierIncludedCostMicros,
   founderSubscriptionStatusGrantsAccess,
+  isAllowedFounderPlanIncludedCostMicros,
+  type FounderPlanTier,
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
 import { computeEffectiveCycleAllowanceMicros } from "../shared/founderUsageBoosts";
@@ -16,6 +18,7 @@ export type FounderSubscriptionRow = {
   providerCustomerId: string;
   providerSubscriptionId: string;
   providerPriceId: string;
+  planTier?: FounderPlanTier;
   status: FounderSubscriptionStatus;
   currentPeriodStartAt: number;
   currentPeriodEndAt: number;
@@ -182,9 +185,32 @@ export async function syncFounderUsageCycle(args: {
     if (normalizedId(existing.communityId) !== subscriptionCommunityId) {
       throw new Error("founder_usage_cycle_community_mismatch");
     }
+    // Support mid-cycle tier upgrades ($3 -> $20 immediately) and downgrades
+    // ($20 -> $3 safely clamped so reserved + settled <= effectiveAllowance
+    // never breaks ledger invariants if spend already exceeded $3).
+    let nextIncludedCostMicros = existing.includedCostMicros;
+    let nextMaxRunReservationCostMicros = existing.maxRunReservationCostMicros;
+    if (
+      args.pricing &&
+      isAllowedFounderPlanIncludedCostMicros(args.pricing.includedCostMicros) &&
+      isPositiveSafeInteger(args.pricing.maxRunReservationCostMicros)
+    ) {
+      const paidBoost = Math.max(0, Math.floor(Number(existing.paidBoostCostMicros ?? 0)));
+      const minRequiredIncluded = Math.max(
+        0,
+        existing.reservedCostMicros + existing.settledCostMicros - paidBoost,
+      );
+      nextIncludedCostMicros = Math.max(args.pricing.includedCostMicros, minRequiredIncluded);
+      nextMaxRunReservationCostMicros = Math.min(
+        args.pricing.maxRunReservationCostMicros,
+        nextIncludedCostMicros,
+      );
+    }
     await args.ctx.db.patch(existing._id as any, {
       cycleStartAt: args.cycleStartAt,
       cycleEndAt: args.cycleEndAt,
+      includedCostMicros: nextIncludedCostMicros,
+      maxRunReservationCostMicros: nextMaxRunReservationCostMicros,
       status: "open",
       updatedAt: args.nowMs,
     });
@@ -192,6 +218,8 @@ export async function syncFounderUsageCycle(args: {
       ...existing,
       cycleStartAt: args.cycleStartAt,
       cycleEndAt: args.cycleEndAt,
+      includedCostMicros: nextIncludedCostMicros,
+      maxRunReservationCostMicros: nextMaxRunReservationCostMicros,
       status: "open",
       updatedAt: args.nowMs,
     };
@@ -199,7 +227,7 @@ export async function syncFounderUsageCycle(args: {
   if (!args.pricing) return null;
   if (
     args.pricing.pricingVersion !== POLYNET_FOUNDER_PLAN_PRICING_VERSION ||
-    args.pricing.includedCostMicros !== POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS ||
+    !isAllowedFounderPlanIncludedCostMicros(args.pricing.includedCostMicros) ||
     !isPositiveSafeInteger(args.pricing.inputCostMicrosPerMillionTokens) ||
     !isPositiveSafeInteger(args.pricing.outputCostMicrosPerMillionTokens) ||
     !isPositiveSafeInteger(args.pricing.maxRunReservationCostMicros) ||
@@ -213,7 +241,7 @@ export async function syncFounderUsageCycle(args: {
     cycleKey,
     cycleStartAt: args.cycleStartAt,
     cycleEndAt: args.cycleEndAt,
-    includedCostMicros: POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
+    includedCostMicros: args.pricing.includedCostMicros,
     reservedCostMicros: 0,
     settledCostMicros: 0,
     pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
@@ -348,9 +376,38 @@ export async function settleFounderUsageReservation(args: {
   ) {
     throw new Error("founder_usage_cycle_ledger_invalid");
   }
+  // If a mid-cycle tier downgrade temporarily raised `includedCostMicros` above
+  // the new tier's target while reservations were open, reclaim that unused
+  // temporary headroom as reservations settle or are released.
+  let nextIncludedCostMicros = cycle.includedCostMicros;
+  let nextMaxRunReservationCostMicros = cycle.maxRunReservationCostMicros;
+  const subscription = (await args.ctx.db.get(
+    cycle.founderSubscriptionId as any,
+  )) as FounderSubscriptionRow | null;
+  if (subscription) {
+    const tierTargetIncluded = founderPlanTierIncludedCostMicros(subscription.planTier);
+    if (cycle.includedCostMicros > tierTargetIncluded) {
+      const paidBoost = Math.max(0, Math.floor(Number(cycle.paidBoostCostMicros ?? 0)));
+      const minRequiredIncluded = Math.max(
+        0,
+        nextReservedCostMicros + nextSettledCostMicros - paidBoost,
+      );
+      nextIncludedCostMicros = Math.max(tierTargetIncluded, minRequiredIncluded);
+      nextMaxRunReservationCostMicros = Math.min(
+        cycle.maxRunReservationCostMicros,
+        nextIncludedCostMicros,
+      );
+    }
+  }
   await args.ctx.db.patch(cycle._id as any, {
     reservedCostMicros: nextReservedCostMicros,
     settledCostMicros: nextSettledCostMicros,
+    ...(nextIncludedCostMicros !== cycle.includedCostMicros
+      ? {
+          includedCostMicros: nextIncludedCostMicros,
+          maxRunReservationCostMicros: nextMaxRunReservationCostMicros,
+        }
+      : {}),
     updatedAt: args.nowMs,
   });
 }

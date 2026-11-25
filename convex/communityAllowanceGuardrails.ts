@@ -16,7 +16,12 @@ import { readFounderInferencePricingFromEnv } from "./founderPlanPricing";
 import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
-import { POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS } from "../shared/founderPlan";
+import {
+  POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
+  founderPlanTierAllowsUsageBoosts,
+  normalizeFounderPlanTier,
+  type FounderPlanTier,
+} from "../shared/founderPlan";
 import { computeEffectiveCycleAllowanceMicros } from "../shared/founderUsageBoosts";
 import { countReengagedMembersFromSentChecks } from "../shared/agentRoiSummary";
 import {
@@ -37,6 +42,7 @@ const REENGAGEMENT_MEMBER_CHECK_CAP = 25;
 
 export type ActiveCommunityAllowanceState = {
   fundingSource: "stripe" | "operator_grant";
+  planTier: FounderPlanTier;
   cycleKey: string;
   cycleStartAt: number;
   cycleEndAt: number;
@@ -112,8 +118,15 @@ export async function readActiveCommunityAllowanceState(
     allowanceMicros > 0 &&
     (settledMicros >= allowanceMicros ||
       (maxReservation > 0 && settledMicros + maxReservation > allowanceMicros));
+  const subscription = isStripeCycle && activeCycle
+    ? await ctx.db.get((activeCycle as any).founderSubscriptionId)
+    : null;
+  const planTier: FounderPlanTier = isStripeCycle
+    ? normalizeFounderPlanTier((subscription as any)?.planTier)
+    : "chief_of_staff";
   return {
     fundingSource: isStripeCycle ? "stripe" : "operator_grant",
+    planTier,
     cycleKey: String(activeCycle.cycleKey),
     cycleStartAt: Number(activeCycle.cycleStartAt),
     cycleEndAt: Number(activeCycle.cycleEndAt),
@@ -261,7 +274,8 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
         reengaged30d: reengagement.reengagedCount,
         contacted30d: reengagement.contactedCount,
         actionUrl,
-        boostAvailable: state.fundingSource === "stripe",
+        boostAvailable:
+          state.fundingSource === "stripe" && founderPlanTierAllowsUsageBoosts(state.planTier),
       });
 
       const dedupeKey = `founder-allowance:${String(settings.communityId)}:${state.cycleKey}:${milestone}`;
