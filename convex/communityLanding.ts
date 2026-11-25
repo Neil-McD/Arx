@@ -12,6 +12,7 @@ import { resolveAuthenticatedActor } from "./authActor";
 import { communityAppJoinProjection } from "./communityAppJoin";
 import { communityAgentIsOn } from "./communityApps";
 import { communityWideEvents } from "./communityEventAudience";
+import { findNextLiveOccurrenceStartsAt } from "./communityEvents";
 import { sha256Hex } from "./communityCheckoutBuyer";
 import { startCommunityJoinCheckoutCore } from "./communityCommerce";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -109,15 +110,24 @@ export const getCommunityLandingPage = query({
       signed_in: Boolean(userId),
       host,
       // Public, and never a pod's call (only that pod's people may see those).
+      // Advance past any individually cancelled date on a live recurring event.
       events: communityWideEvents(events as any[])
         .filter((row) => row.visibility === "public")
+        .map((row) => {
+          const nextStartsAt = findNextLiveOccurrenceStartsAt(row, nowMs);
+          if (nextStartsAt === null) return null;
+          return {
+            title: String(row.title ?? "").slice(0, 120),
+            startsAtMs: nextStartsAt,
+            starts_at: new Date(nextStartsAt).toISOString(),
+            place: row.locationType === "online" ? "Online" : typeof row.locationLabel === "string" ? row.locationLabel.slice(0, 80) : null,
+            repeats: row.recurrenceFrequency && row.recurrenceFrequency !== "none" ? row.recurrenceFrequency : null,
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+        .sort((a, b) => a.startsAtMs - b.startsAtMs)
         .slice(0, UPCOMING_EVENTS)
-        .map((row) => ({
-          title: String(row.title ?? "").slice(0, 120),
-          starts_at: new Date(row.startsAt).toISOString(),
-          place: row.locationType === "online" ? "Online" : typeof row.locationLabel === "string" ? row.locationLabel.slice(0, 80) : null,
-          repeats: row.recurrenceFrequency && row.recurrenceFrequency !== "none" ? row.recurrenceFrequency : null,
-        })),
+        .map(({ startsAtMs: _startsAtMs, ...entry }) => entry),
       // That there is a guide, and nothing about what it knows: notes are its
       // memory, not something the page counts for visitors.
       guide: agentOn ? {} : null,

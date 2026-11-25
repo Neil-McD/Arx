@@ -43,6 +43,7 @@ const mocks = {
     "listCloudCommunityEvents",
     "saveCloudCommunityEvent",
     "cancelCloudCommunityEvent",
+    "restoreCloudCommunityEvent",
   ]),
   "shared/cloudCommunityMembershipGateway.ts": gateway([
     "countCloudCommunityMembershipRows",

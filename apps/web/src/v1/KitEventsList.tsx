@@ -11,7 +11,10 @@
 // Polynet, so it can't know.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CalendarPlus, ChevronDown, ChevronRight, MapPin, Plus, Repeat, Video, X } from "lucide-react";
-import type { CloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
+import type {
+  CloudCommunityEvent,
+  CloudCommunityEventCancelOptions,
+} from "../../../../shared/cloudCommunityEventsGateway";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { eventAddressKey, eventIdFromAddressKey } from "../../../../shared/webAppRouteState";
 import { registerMobilePageBack } from "../components/CommunityPageHeader";
@@ -50,6 +53,7 @@ const yours = (primary: string) => primary.replace(/\s*·\s*your time$/i, "");
 export function KitEventsList(props: {
   featured: CloudCommunityEvent | null;
   comingUp: CloudCommunityEvent[];
+  cancelled?: CloudCommunityEvent[];
   past: CloudCommunityEvent[];
   now: number;
   canManage: boolean;
@@ -63,7 +67,8 @@ export function KitEventsList(props: {
   editingId: string | null;
   onNew: () => void;
   onEdit: (event: CloudCommunityEvent) => void;
-  onCancel: (event: CloudCommunityEvent) => Promise<unknown> | void;
+  onCancel: (event: CloudCommunityEvent, options?: CloudCommunityEventCancelOptions) => Promise<unknown> | void;
+  onRestore?: (event: CloudCommunityEvent) => Promise<unknown> | void;
   onSetPublic: (event: CloudCommunityEvent, isPublic: boolean) => Promise<unknown> | void;
   // Where the right column's content goes (the page's rail).
   renderRail: (rail: ReactNode) => ReactNode;
@@ -73,19 +78,22 @@ export function KitEventsList(props: {
   const pickedId = eventIdFromAddressKey(useRouteDetail("event"));
   const setPickedId = (id: string | null) => writeRouteDetail("event", id ? eventAddressKey(id) : null);
   const [asking, setAsking] = useState(false);
+  const [cancelNote, setCancelNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
 
   const featured = props.featured;
   const label = featured ? featuredEventLabel(featured, props.now) : null;
   const upcoming = [featured, ...props.comingUp].filter((event): event is CloudCommunityEvent => Boolean(event));
-  const all = [...upcoming, ...props.past];
+  const cancelledList = props.cancelled ?? [];
+  const all = [...upcoming, ...cancelledList, ...props.past];
   const picked = all.find((event) => event.id === pickedId) ?? null;
   const isPast = (event: CloudCommunityEvent) => props.past.some((row) => row.id === event.id);
+  const isCancelled = (event: CloudCommunityEvent) => event.status === "cancelled";
   const isSeries = (event: CloudCommunityEvent) => event.recurrence_frequency !== "none";
-  // An event that is gone (cancelled, or not in the months shown) is simply
+  // An event that is gone (past or not in the months shown) is simply
   // not shown; the address is left alone, since the list may still be loading.
-  useEffect(() => { setAsking(false); }, [pickedId]);
+  useEffect(() => { setAsking(false); setCancelNote(""); }, [pickedId]);
   // Escape puts down what was picked (the form has its own).
   useEffect(() => {
     if (!pickedId || props.form) return;
@@ -94,9 +102,14 @@ export function KitEventsList(props: {
     return () => window.removeEventListener("keydown", onKey);
   }, [pickedId, props.form]);
 
-  const cancel = async (event: CloudCommunityEvent) => {
+  const cancel = async (event: CloudCommunityEvent, options?: CloudCommunityEventCancelOptions) => {
     setBusy(event.id);
-    try { await props.onCancel(event); } finally { setBusy(null); setAsking(false); }
+    try { await props.onCancel(event, options); } finally { setBusy(null); setAsking(false); setCancelNote(""); }
+  };
+  const restore = async (event: CloudCommunityEvent) => {
+    if (!props.onRestore) return;
+    setBusy(event.id);
+    try { await props.onRestore(event); } finally { setBusy(null); }
   };
   const setPublic = async (event: CloudCommunityEvent, isPublic: boolean) => {
     setBusy(event.id);
@@ -106,25 +119,47 @@ export function KitEventsList(props: {
   const placeIcon = (event: CloudCommunityEvent) => event.location_type === "online" ? <Video size={14} aria-hidden="true" /> : <MapPin size={14} aria-hidden="true" />;
   const tags = (event: CloudCommunityEvent) => (
     <>
+      {isCancelled(event) ? <span className={cx("evtag bad")}>Cancelled</span> : null}
       {eventRepeatWord(event) ? <span className={cx("evtag")}><Repeat size={11} aria-hidden="true" />{capital(eventRepeatWord(event)!)}</span> : null}
       {event.pod_name ? <span className={cx("evtag pod")}>{event.pod_name}</span> : null}
-      {props.canManage && event.visibility === "public" && !event.pod_channel_id && !isPast(event) ? <span className={cx("evtag pub")}>On the public page</span> : null}
+      {props.canManage && event.visibility === "public" && !event.pod_channel_id && !isPast(event) && !isCancelled(event) ? <span className={cx("evtag pub")}>On the public page</span> : null}
     </>
   );
   const joinLabel = (event: CloudCommunityEvent) => featuredEventLabel(event, props.now).live ? "Join now" : "Join when it starts";
 
   // The event you picked.
   const pickedTime = picked ? props.timeLabel(picked) : null;
+  const pickedCancelled = picked ? isCancelled(picked) : false;
+  const pickedCanCancelSingleDate = Boolean(picked && isSeries(picked) && !picked.pod_channel_id);
+  const trimmedCancelNote = cancelNote.trim() || undefined;
   const detail = picked && pickedTime ? (
     <div className={cx("evp")}>
       <button type="button" className={cx("evp-x")} aria-label="Close" onClick={() => setPickedId(null)}><X size={16} strokeWidth={1.8} aria-hidden="true" /></button>
       <header>
-        <span className={cx("lab")}>{isPast(picked) ? "Past" : eventSoonWord(picked.starts_at, props.now)}</span>
+        <span className={cx("lab")}>
+          {pickedCancelled
+            ? picked.cancellation_scope === "occurrence"
+              ? "This date is cancelled"
+              : "Cancelled"
+            : isPast(picked)
+              ? "Past"
+              : eventSoonWord(picked.starts_at, props.now)}
+        </span>
         <h2>{picked.title}</h2>
         <p className={cx("evp-when")}>{eventDayWord(picked.starts_at, props.now)} · {yours(pickedTime.primary)}</p>
         {pickedTime.secondary ? <p className={cx("evp-also")}>{pickedTime.secondary}</p> : null}
         <div className={cx("evp-tags")}>{tags(picked)}</div>
       </header>
+      {pickedCancelled ? (
+        <PanelPart label="Status">
+          <p className={cx("evp-say")}>
+            {picked.cancellation_scope === "occurrence"
+              ? "Just this date is cancelled. Future dates in this series are still on."
+              : "This event has been cancelled."}
+          </p>
+          {picked.cancellation_note ? <p className={cx("evp-say")} style={{ marginTop: 8 }}>{picked.cancellation_note}</p> : null}
+        </PanelPart>
+      ) : null}
       {eventPlaceWord(picked) ? (
         <PanelPart label="Where"><div className={cx("ln")}>{placeIcon(picked)}<span className={cx("t")}>{eventPlaceWord(picked)}</span></div></PanelPart>
       ) : null}
@@ -133,7 +168,7 @@ export function KitEventsList(props: {
       ) : null}
       <PanelPart label="Who sees it">
         <div className={cx("ln")}><span className={cx("t")}>{picked.pod_name ? `Only people in ${picked.pod_name}` : `Everyone in ${props.communityName ?? "the community"}`}</span></div>
-        {props.canManage && !picked.pod_channel_id && !isPast(picked) ? (
+        {props.canManage && !picked.pod_channel_id && !isPast(picked) && !pickedCancelled ? (
           <div className={cx("evswitch")}>
             <span>On the public page<small>Visitors see the name, day and place. The link to join stays with members.</small></span>
             <button type="button" role="switch" aria-checked={picked.visibility === "public"} aria-label="Show on the public page" disabled={busy === picked.id}
@@ -141,18 +176,92 @@ export function KitEventsList(props: {
           </div>
         ) : null}
       </PanelPart>
-      {!isPast(picked) ? (
+      {pickedCancelled ? (
+        props.canManage && props.onRestore ? (
+          <div className={cx("evp-foot")}>
+            <button type="button" className={cx("btn")} disabled={busy === picked.id} onClick={() => void restore(picked)}>
+              {busy === picked.id
+                ? "Restoring…"
+                : picked.cancellation_scope === "occurrence"
+                  ? "Restore this date"
+                  : "Restore event"}
+            </button>
+          </div>
+        ) : null
+      ) : !isPast(picked) ? (
         <div className={cx("evp-foot")}>
           {picked.url ? <a className={cx("btn go")} href={picked.url} target="_blank" rel="noreferrer">{joinLabel(picked)}</a> : null}
           <a className={cx(picked.url ? "btn" : "btn go")} href={props.calendarUrl(picked)} target="_blank" rel="noreferrer"><CalendarPlus size={15} aria-hidden="true" />Add to calendar</a>
           {props.canManage ? (
             asking ? (
               <div className={cx("evp-ask")} role="group" aria-label={`Cancel ${picked.title}`}>
-                <span>{isSeries(picked) ? "Cancel every date of this event?" : "Cancel this event?"}</span>
-                <div className={cx("two")}>
-                  <button type="button" className={cx("btn no")} disabled={busy === picked.id} onClick={() => void cancel(picked)}>{busy === picked.id ? "Cancelling…" : "Yes, cancel it"}</button>
-                  <button type="button" className={cx("btn")} onClick={() => setAsking(false)}>Keep it</button>
-                </div>
+                <span>
+                  {pickedCanCancelSingleDate
+                    ? "Cancel just this date, or every date?"
+                    : isSeries(picked)
+                      ? "Cancel every date of this event?"
+                      : "Cancel this event?"}
+                </span>
+                {!picked.pod_channel_id ? (
+                  <input
+                    type="text"
+                    className={cx("evnote-input")}
+                    maxLength={280}
+                    placeholder="Optional note for members (included in the email)"
+                    aria-label="Optional cancellation note"
+                    value={cancelNote}
+                    onChange={(event) => setCancelNote(event.target.value)}
+                  />
+                ) : null}
+                {pickedCanCancelSingleDate ? (
+                  <>
+                    <button
+                      type="button"
+                      className={cx("btn no")}
+                      disabled={busy === picked.id}
+                      onClick={() =>
+                        void cancel(picked, {
+                          scope: "occurrence",
+                          occurrenceStartsAtIso: picked.starts_at,
+                          note: trimmedCancelNote,
+                        })
+                      }
+                    >
+                      {busy === picked.id ? "Cancelling…" : "Cancel just this date"}
+                    </button>
+                    <div className={cx("two")}>
+                      <button
+                        type="button"
+                        className={cx("btn no")}
+                        disabled={busy === picked.id}
+                        onClick={() => void cancel(picked, { scope: "series", note: trimmedCancelNote })}
+                      >
+                        {busy === picked.id ? "Cancelling…" : "Cancel every date"}
+                      </button>
+                      <button type="button" className={cx("btn")} onClick={() => { setAsking(false); setCancelNote(""); }}>Keep it</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className={cx("two")}>
+                    <button
+                      type="button"
+                      className={cx("btn no")}
+                      disabled={busy === picked.id}
+                      onClick={() =>
+                        void cancel(
+                          picked,
+                          picked.pod_channel_id ? undefined : { scope: "series", note: trimmedCancelNote },
+                        )
+                      }
+                    >
+                      {busy === picked.id ? "Cancelling…" : "Yes, cancel it"}
+                    </button>
+                    <button type="button" className={cx("btn")} onClick={() => { setAsking(false); setCancelNote(""); }}>Keep it</button>
+                  </div>
+                )}
+                {!picked.pod_channel_id ? (
+                  <span className={cx("evp-note")}>Members will receive a cancellation email.</span>
+                ) : null}
               </div>
             ) : (
               <div className={cx("two")}>
@@ -202,22 +311,25 @@ export function KitEventsList(props: {
     );
   }
 
-  const row = (event: CloudCommunityEvent, past: boolean) => {
+  const row = (event: CloudCommunityEvent, past: boolean, cancelled = false) => {
     const block = eventDateBlock(event.starts_at, past);
     const dim = props.editingId === event.parent_event_id;
+    const summary = cancelled
+      ? [eventDayWord(event.starts_at, props.now), eventClock(event.starts_at), event.cancellation_note || eventPlaceWord(event)].filter(Boolean).join(" · ")
+      : [past ? null : eventDayWord(event.starts_at, props.now), eventClock(event.starts_at), eventPlaceWord(event)].filter(Boolean).join(" · ");
     return (
-      <button key={event.id} type="button" className={cx("evrow", pickedId === event.id && "on", dim && "evdim")} id={`community-event-${event.id}`} aria-pressed={pickedId === event.id} onClick={() => pick(event)}>
-        <span className={cx(past ? "evday sm past" : "evday sm")}><b>{block.number}</b><span>{block.word}</span></span>
+      <button key={event.id} type="button" className={cx("evrow", pickedId === event.id && "on", dim && "evdim", cancelled && "evcancelled")} id={`community-event-${event.id}`} aria-pressed={pickedId === event.id} onClick={() => pick(event)}>
+        <span className={cx(past || cancelled ? "evday sm past" : "evday sm")}><b>{block.number}</b><span>{block.word}</span></span>
         <span className={cx("evrow-t")}>
           <b>{event.title}{tags(event)}</b>
-          <small title={props.timeLabel(event).secondary ?? undefined}>{[past ? null : eventDayWord(event.starts_at, props.now), eventClock(event.starts_at), eventPlaceWord(event)].filter(Boolean).join(" · ")}</small>
+          <small title={props.timeLabel(event).secondary ?? undefined}>{summary}</small>
         </span>
         <ChevronRight size={15} strokeWidth={1.8} aria-hidden="true" className={cx("evrow-go")} />
       </button>
     );
   };
   const last = props.past[0] ?? null;
-  const showPast = pastOpen || upcoming.length === 0;
+  const showPast = pastOpen || (upcoming.length === 0 && cancelledList.length === 0);
   const featuredBlock = featured ? eventDateBlock(featured.starts_at, false) : null;
 
   return (
@@ -226,8 +338,22 @@ export function KitEventsList(props: {
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           <div className={cx("evtop")}>
             <div>
-              <p className={cx("evlead")}>{upcoming.length ? `${upcoming.length} coming up.` : props.canManage ? "Nothing is planned yet." : "Nothing is planned right now."}</p>
-              <p className={cx("sub")} style={{ margin: "4px 0 0" }}>{upcoming.length ? "Times are in your time zone." : props.canManage ? "Add the first one and members get an email the day before." : "You'll get an email the day before the next one."}</p>
+              <p className={cx("evlead")}>
+                {upcoming.length
+                  ? `${upcoming.length} coming up.`
+                  : cancelledList.length
+                    ? `${cancelledList.length} cancelled.`
+                    : props.canManage
+                      ? "Nothing is planned yet."
+                      : "Nothing is planned right now."}
+              </p>
+              <p className={cx("sub")} style={{ margin: "4px 0 0" }}>
+                {upcoming.length || cancelledList.length
+                  ? "Times are in your time zone."
+                  : props.canManage
+                    ? "Add the first one and members get an email the day before."
+                    : "You'll get an email the day before the next one."}
+              </p>
             </div>
             {/* One form at a time: a second would replace what is being saved. */}
             {props.canManage ? <button type="button" className={cx(props.form ? "btn" : "btn go")} disabled={Boolean(props.form)} onClick={props.onNew}><Plus size={14} aria-hidden="true" />Add an event</button> : null}
@@ -252,7 +378,7 @@ export function KitEventsList(props: {
                 </div>
               </div>
             </>
-          ) : last && !props.canManage ? (
+          ) : last && !props.canManage && cancelledList.length === 0 ? (
             // Nothing coming for a member: the page still says something true.
             <div className={cx("evquiet")}>
               <h3>Last time: {last.title}</h3>
@@ -267,11 +393,18 @@ export function KitEventsList(props: {
             </>
           ) : null}
 
+          {cancelledList.length ? (
+            <>
+              <span className={cx("evsect")}><span className={cx("lab")}>Cancelled</span><em>{cancelledList.length}</em></span>
+              <div className={cx("evrows")}>{cancelledList.map((event) => row(event, false, true))}</div>
+            </>
+          ) : null}
+
           {props.past.length ? (
             <>
               <span className={cx("evsect")}>
                 <span className={cx("lab")}>Past</span><em>{props.past.length}</em>
-                {upcoming.length ? (
+                {upcoming.length || cancelledList.length ? (
                   <button type="button" className={cx("evmore")} aria-expanded={showPast} onClick={() => setPastOpen(!pastOpen)}>{showPast ? "Hide" : "Show"}<ChevronDown size={14} aria-hidden="true" style={showPast ? { transform: "rotate(180deg)" } : undefined} /></button>
                 ) : null}
               </span>

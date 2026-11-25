@@ -1,4 +1,5 @@
 import { isPodEvent, podEventRecipientIds } from "./communityEventAudience";
+import { isEventCancellationActive } from "./communityEvents";
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
@@ -46,7 +47,14 @@ type CommunityEventRow = {
   startsAt: number;
   endsAt?: number;
   timezone: string;
+  podChannelId?: any;
   status: "live" | "cancelled";
+  cancelledOccurrences?: Array<{
+    startsAt: number;
+    cancelledAt: number;
+    cancelledByUserId?: any;
+    note?: string;
+  }>;
   recurrenceFrequency?: "none" | "daily" | "weekly" | "monthly";
   recurrenceInterval?: number;
   recurrenceUntil?: number;
@@ -67,6 +75,11 @@ function normalizePositiveMs(value: unknown, fallback: number, max: number): num
 function getEventOccurrenceStartsInWindow(row: CommunityEventRow, windowStart: number, windowEnd: number): number[] {
   if (row.status !== "live") return [];
   const recurrenceUntil = typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null;
+  const cancelledSet = new Set(
+    (row.cancelledOccurrences ?? [])
+      .map((entry) => entry?.startsAt)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value)),
+  );
   return getCommunityEventOccurrenceStartsInRange({
     startsAt: row.startsAt,
     rangeStart: windowStart,
@@ -76,7 +89,7 @@ function getEventOccurrenceStartsInWindow(row: CommunityEventRow, windowStart: n
     recurrenceUntil,
     timeZone: row.timezone,
     limit: 10,
-  });
+  }).filter((startsAt) => !cancelledSet.has(startsAt));
 }
 
 function buildAppUrl(path: string): string {
@@ -250,6 +263,172 @@ export const enqueueEventReminderEmailsInternal = internalAction({
       ok: true,
       events: batches.length,
       recipients: batches.reduce((count, batch) => count + batch.recipientUserIds.length, 0),
+      enqueued,
+      deduped,
+      suppressed,
+    };
+  },
+});
+
+type EventCancellationTarget = {
+  communityId: any;
+  communityName: string;
+  communitySlug: string;
+  communityLifecycleGeneration: number;
+  eventTitle: string;
+  eventTimezone: string;
+  isRecurring: boolean;
+  recipientUserIds: any[];
+};
+
+export const buildEventCancellationTargetInternal = internalQuery({
+  args: {
+    eventId: v.id("communityEvents"),
+    scope: v.union(v.literal("occurrence"), v.literal("series")),
+    occurrenceStartsAt: v.number(),
+    cancelledAt: v.number(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<EventCancellationTarget | null> => {
+    const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
+    const event = (await ctx.db.get(args.eventId)) as (CommunityEventRow & { cancelledAt?: number }) | null;
+    if (
+      !event ||
+      isPodEvent(event) ||
+      !isEventCancellationActive(event as any, {
+        scope: args.scope,
+        occurrenceStartsAt: args.occurrenceStartsAt,
+        cancelledAt: args.cancelledAt,
+      })
+    ) {
+      return null;
+    }
+    const community = (await ctx.db.get(event.communityId)) as (CommunityRow & {
+      archivedAt?: number;
+      lifecycleGeneration?: number;
+    }) | null;
+    if (!community || typeof community.archivedAt === "number") return null;
+    const communitySlug = String(community.slug ?? "").trim();
+    if (!communitySlug) return null;
+
+    const recipientUserIds = await listActiveCommunityRecipientUserIds(ctx, {
+      communityId: community._id,
+      communityOwnerId: community.ownerId,
+      nowMs,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    if (recipientUserIds.length === 0) return null;
+
+    const frequency = normalizeCommunityEventRecurrenceFrequency(event.recurrenceFrequency);
+    return {
+      communityId: community._id,
+      communityName: String(community.name ?? communitySlug).trim() || "your community",
+      communitySlug,
+      communityLifecycleGeneration:
+        typeof community.lifecycleGeneration === "number" ? community.lifecycleGeneration : 0,
+      eventTitle: String(event.title ?? "").trim() || "Your event",
+      eventTimezone: String(event.timezone ?? "").trim() || "UTC",
+      isRecurring: frequency !== "none",
+      recipientUserIds,
+    };
+  },
+});
+
+export const enqueueEventCancellationEmailsInternal = internalAction({
+  args: {
+    eventId: v.id("communityEvents"),
+    scope: v.union(v.literal("occurrence"), v.literal("series")),
+    occurrenceStartsAt: v.number(),
+    occurrenceEndsAt: v.optional(v.number()),
+    cancelledAt: v.number(),
+    note: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
+    const effectiveEndMs = Number.isFinite(args.occurrenceEndsAt)
+      ? Math.floor(args.occurrenceEndsAt as number)
+      : args.occurrenceStartsAt;
+    if (effectiveEndMs <= nowMs) {
+      return { ok: true, skipped: "past_event", enqueued: 0, deduped: 0, suppressed: 0 };
+    }
+    const target = (await ctx.runQuery(
+      (internal as any).eventReminders.buildEventCancellationTargetInternal,
+      {
+        eventId: args.eventId,
+        scope: args.scope,
+        occurrenceStartsAt: args.occurrenceStartsAt,
+        cancelledAt: args.cancelledAt,
+        nowMs,
+      },
+    )) as EventCancellationTarget | null;
+    if (!target) {
+      return { ok: true, skipped: "no_target", enqueued: 0, deduped: 0, suppressed: 0 };
+    }
+
+    const startLabel = formatEventStartLabel(args.occurrenceStartsAt, target.eventTimezone);
+    const trimmedNote = typeof args.note === "string" ? args.note.trim() : "";
+    const noteSuffix = trimmedNote ? ` Note from the host: "${trimmedNote}"` : "";
+    const intro =
+      args.scope === "occurrence"
+        ? `The ${startLabel} session of ${target.eventTitle} has been cancelled. Future sessions remain on the calendar.${noteSuffix}`
+        : target.isRecurring
+          ? `All upcoming sessions of ${target.eventTitle} (next scheduled ${startLabel}) have been cancelled.${noteSuffix}`
+          : `${target.eventTitle} scheduled for ${startLabel} has been cancelled.${noteSuffix}`;
+
+    const payload = {
+      eventId: String(args.eventId),
+      cancellationScope: args.scope,
+      occurrenceStartsAt: args.occurrenceStartsAt,
+      cancelledAt: args.cancelledAt,
+      communityName: target.communityName,
+      eventTitle: target.eventTitle,
+      title:
+        args.scope === "occurrence"
+          ? `Cancelled: ${target.eventTitle} (${startLabel})`
+          : `Cancelled: ${target.eventTitle}`,
+      subtitle: target.communityName,
+      intro,
+      actionUrl: buildEventsActionUrl(target.communitySlug),
+      footerNote: "You can change event emails from account settings.",
+    };
+
+    let enqueued = 0;
+    let deduped = 0;
+    let suppressed = 0;
+    for (let start = 0; start < target.recipientUserIds.length; start += ENQUEUE_CHUNK_SIZE) {
+      const chunk = target.recipientUserIds.slice(start, start + ENQUEUE_CHUNK_SIZE);
+      const batchResult = (await ctx.runMutation(
+        (internal as any).email.enqueueEmailJobsBatchInternal,
+        {
+          jobs: chunk.map((userId) => ({
+            kind: "event_cancelled",
+            communityId: target.communityId,
+            communityLifecycleGeneration: target.communityLifecycleGeneration,
+            recipientUserId: userId,
+            templateKey: "event_cancelled",
+            payload,
+            dedupeKey: `event_cancelled:${String(args.eventId)}:${args.scope}:${args.occurrenceStartsAt}:${args.cancelledAt}:${String(userId)}`,
+            nowMs,
+          })),
+        },
+      )) as { enqueued?: number; deduped?: number; suppressed?: number } | null;
+      enqueued += Number(batchResult?.enqueued ?? 0);
+      deduped += Number(batchResult?.deduped ?? 0);
+      suppressed += Number(batchResult?.suppressed ?? 0);
+    }
+
+    if (enqueued > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).email.processPendingEmailOutboxInternal,
+        { limit: 25 },
+      );
+    }
+
+    return {
+      ok: true,
+      recipients: target.recipientUserIds.length,
       enqueued,
       deduped,
       suppressed,

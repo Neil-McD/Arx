@@ -971,6 +971,10 @@
 .app .evtag{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;border:1px solid var(--line2);font-size:11.5px;font-weight:500;letter-spacing:0;color:var(--ink2);white-space:nowrap}
 .app .evtag.pod{border-color:rgba(var(--au),.4);color:var(--aurora-ink)}
 .app .evtag.pub{border-color:rgba(95,211,141,.38);color:#7fdca4}
+.app .evtag.bad{border-color:rgba(240,104,104,.4);color:#f38b8b}
+.app .evrow.evcancelled .evrow-t b{color:var(--ink2)}
+.app .evnote-input{width:100%;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);font-size:13px}
+.app .evnote-input::placeholder{color:var(--ink3)}
 .app .evsect{display:flex;align-items:center;gap:8px;margin-top:30px}
 .app .evsect em{font-style:normal;font-size:12px;color:var(--ink3);opacity:.8}
 .app .evmore{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:12.5px;color:var(--ink2);cursor:pointer}

@@ -3,8 +3,10 @@ import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 import {
   cancelCloudCommunityEvent,
   listCloudCommunityEvents,
+  restoreCloudCommunityEvent,
   saveCloudCommunityEvent,
   type CloudCommunityEvent,
+  type CloudCommunityEventCancelOptions,
   type CloudCommunityEventSavePayload,
 } from "./cloudCommunityEventsGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
@@ -72,6 +74,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
         communityId: requestedCommunityId,
         startIso: range.startIso,
         endIso: range.endIso,
+        includeCancelled: true,
         limit: 500,
         overlap: true,
       });
@@ -120,6 +123,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
   const handleCancelCommunityEvent = useCallback(async (
     eventId: string,
     range: CommunityEventsRange,
+    options?: CloudCommunityEventCancelOptions,
   ) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -129,6 +133,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
       await cancelCloudCommunityEvent({
         session,
         eventId,
+        ...(options ?? {}),
       });
       if (!current.skipReloadAfterMutation) {
         current.invalidateCommunityEventsCache?.(current.activeCommunityId);
@@ -141,9 +146,36 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
     }
   }, [loadCommunityEvents]);
 
+  const handleRestoreCommunityEvent = useCallback(async (
+    eventId: string,
+    range: CommunityEventsRange,
+    options?: { occurrenceStartsAtIso?: string },
+  ) => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return false;
+    try {
+      current.setCommunityEventsError(null);
+      await restoreCloudCommunityEvent({
+        session,
+        eventId,
+        ...(options ?? {}),
+      });
+      if (!current.skipReloadAfterMutation) {
+        current.invalidateCommunityEventsCache?.(current.activeCommunityId);
+        await loadCommunityEvents(current.activeCommunityId, session, range);
+      }
+      return true;
+    } catch (error) {
+      current.setCommunityEventsError(error instanceof Error ? error.message : "Could not restore community event.");
+      return false;
+    }
+  }, [loadCommunityEvents]);
+
   return {
     loadCommunityEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
+    handleRestoreCommunityEvent,
   };
 }

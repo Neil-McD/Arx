@@ -168,7 +168,7 @@ export function useWebCommunityContentController(
             communityId: activeCommunityId,
             startIso: eventsVisibleRange.startIso,
             endIso: eventsVisibleRange.endIso,
-            includeCancelled: false,
+            includeCancelled: true,
             overlap: true,
             limit: 500,
           }
@@ -258,6 +258,7 @@ export function useWebCommunityContentController(
     loadCommunityEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
+    handleRestoreCommunityEvent,
   } = useCommunityEventsController<AuthSession>({
     activeCommunityId,
     visibleRange: eventsVisibleRange,
@@ -430,6 +431,7 @@ export function useWebCommunityContentController(
     reloadActiveEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
+    handleRestoreCommunityEvent,
     ...resourceUi,
   };
 }

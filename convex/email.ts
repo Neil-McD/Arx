@@ -11,6 +11,7 @@ import {
   communityLifecycleGenerationMatches,
 } from "../shared/communityLifecycle";
 import { communityMembershipRowIsActive } from "./communityCore";
+import { isEventCancellationStillActive } from "./communityEvents";
 import { resolveMentionEmailDelivery } from "./communityMentionEmailDelivery";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
@@ -28,7 +29,11 @@ export function emailPriorityRankForTemplate(templateKey: EmailTemplateKey): num
   if (templateKey === "event_reminder" || templateKey === "weekly_member_digest") {
     return EMAIL_PRIORITY_BULK;
   }
-  if (templateKey === "mention_notification" || templateKey === "member_coach_nudge") {
+  if (
+    templateKey === "mention_notification" ||
+    templateKey === "member_coach_nudge" ||
+    templateKey === "event_cancelled"
+  ) {
     return EMAIL_PRIORITY_MENTION;
   }
   return EMAIL_PRIORITY_URGENT;
@@ -109,6 +114,7 @@ function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean 
   return (
     templateKey === "weekly_member_digest" ||
     templateKey === "event_reminder" ||
+    templateKey === "event_cancelled" ||
     templateKey === "mention_notification" ||
     templateKey === "member_coach_nudge"
   );
@@ -121,7 +127,7 @@ function preferenceAllowsTemplate(preferences: Record<string, unknown>, template
   if (templateKey === "mention_notification" || templateKey === "member_coach_nudge") {
     return preferences.mentionEmailsEnabled !== false;
   }
-  if (templateKey === "event_reminder") {
+  if (templateKey === "event_reminder" || templateKey === "event_cancelled") {
     return preferences.eventReminderEnabled !== false;
   }
   return true;
@@ -476,6 +482,31 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
             updatedAt: nowMs,
           });
           continue;
+        }
+      }
+      if (row.templateKey === "event_cancelled") {
+        const meta = asRecord(row.payload);
+        const rawEventId = readString(meta.eventId);
+        const scope = meta.cancellationScope === "occurrence" || meta.cancellationScope === "series"
+          ? meta.cancellationScope
+          : null;
+        const occurrenceStartsAt = typeof meta.occurrenceStartsAt === "number" ? meta.occurrenceStartsAt : null;
+        const cancelledAt = typeof meta.cancelledAt === "number" ? meta.cancelledAt : null;
+        if (rawEventId && scope && occurrenceStartsAt !== null && cancelledAt !== null) {
+          const stillCancelled = await isEventCancellationStillActive(ctx, {
+            eventId: rawEventId,
+            scope,
+            occurrenceStartsAt,
+            cancelledAt,
+          });
+          if (!stillCancelled) {
+            await ctx.db.patch(row._id, {
+              status: "suppressed",
+              failureReason: "event_restored",
+              updatedAt: nowMs,
+            });
+            continue;
+          }
         }
       }
       if (row.recipientUserId && isPreferenceControlledTemplate(row.templateKey as EmailTemplateKey)) {

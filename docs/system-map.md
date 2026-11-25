@@ -207,8 +207,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 6. Events — Keep
 
-- **Code:** `communityEvents`, `eventReminders` (cron: 24-hour reminder emails),
-  no "I'll be there" (removed Nov 14; its table and rows went Nov 16).
+- **Code:** `communityEvents` (create, edit, single-date or whole-series cancel,
+  and restore), `eventReminders` (cron: 24-hour reminder emails skipping
+  cancelled dates, plus automatic `event_cancelled` email fanout on upcoming
+  community-wide cancellations), no "I'll be there" (removed Nov 14; its table
+  and rows went Nov 16).
 - **Tables:** `communityEvents`.
 
 ### 7. Community notes — Keep (protected)
@@ -567,8 +570,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   pending mention emails" (15 min), and "process due weekly community digests"
   (30 min, zero-AI digest).
 - **Delivery and scaling contract:** `emailOutbox` assigns `priorityRank` (`0`
-  urgent/transactional, `1` mention notifications, `2` bulk event reminders and
-  weekly digests) and claims due jobs in strict priority order via
+  urgent/transactional, `1` mention notifications and event cancellations, `2`
+  bulk event reminders and weekly digests) and claims due jobs in strict priority
+  order via
   `by_status_priority_scheduledAt` (with legacy unranked fallback).
   `processPendingEmailOutboxInternal` sends claimed rows in bounded parallel
   chunks of `5` and self-continues at 2-second intervals for up to `10` rounds
