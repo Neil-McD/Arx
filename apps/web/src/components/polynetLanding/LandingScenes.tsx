@@ -108,53 +108,6 @@ export function FeatureSection(props: {
   );
 }
 
-// The brain: what the community knows as a map, and what it learned lately.
-export function brainScene() {
-  const clusters: Array<[number, number, Array<[number, number]>, boolean?]> = [
-    [250, 120, [[190, 80], [206, 150], [262, 62], [306, 96], [226, 176]]],
-    [560, 96, [[508, 62], [570, 40], [622, 70], [628, 122], [540, 150]], true],
-    [430, 330, [[362, 306], [372, 366], [420, 392], [478, 384], [500, 326], [470, 286]]],
-    [760, 300, [[706, 268], [778, 244], [826, 290], [806, 348], [736, 356]]],
-    [900, 130, [[858, 92], [924, 76], [960, 132], [922, 180]]],
-  ];
-  return {
-    front: (
-      <div className="sc-panel">
-        <span className="sc-eyebrow">What your community knows</span>
-        {[
-          ["Monthly billing keeps cohorts together", "From Maya's answer in # General", true],
-          ["Most members join for the live calls", "From 11 introductions"],
-          ["Lesson 4 is where people get stuck", "From 9 questions to the guide"],
-        ].map(([title, source, fresh]) => (
-          <div key={String(title)} className="sc-learned"><i className={fresh ? "new" : undefined} /><div><b>{title}</b><span>{source}</span></div></div>
-        ))}
-        <span className="sc-foot">3 learned this week · you can correct any of it</span>
-      </div>
-    ),
-    back: (
-      <svg className="sc-brain" viewBox="120 10 900 420">
-        <defs><Glow id="pnSceneBrain" /></defs>
-        <g fill="none" stroke="#33363D" strokeWidth="1.2">
-          {clusters.map(([x, y, leaves], index) => (
-            <Fragment key={index}>
-              <path d={`M600 215 Q${(600 + x) / 2} ${(215 + y) / 2 - 24} ${x} ${y}`} />
-              {leaves.map(([lx, ly]) => <line key={`${lx}-${ly}`} x1={x} y1={y} x2={lx} y2={ly} />)}
-            </Fragment>
-          ))}
-        </g>
-        <circle cx="600" cy="215" r="70" fill="url(#pnSceneBrain)" /><circle cx="600" cy="215" r="9" fill="#FFFFFF" />
-        {clusters.map(([x, y, leaves, bright], index) => (
-          <Fragment key={index}>
-            {leaves.map(([lx, ly]) => <circle key={`${lx}-${ly}`} cx={lx} cy={ly} r="4.5" fill={bright ? "#EEF0F4" : "#7D828C"} />)}
-            <circle cx={x} cy={y} r="7.5" fill="#EEF0F4" />
-          </Fragment>
-        ))}
-        <circle cx="622" cy="70" r="16" fill="url(#pnSceneBrain)" /><circle cx="622" cy="70" r="5" fill="#C4B5FD" />
-      </svg>
-    ),
-  };
-}
-
 // Chief of Staff: the morning brief over the Members table; the member it
 // wants to check in on is lit in the table behind.
 export function chiefScene() {

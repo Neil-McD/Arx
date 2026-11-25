@@ -36,3 +36,23 @@ test("the guide section leads with the pain, has no plan chip, and lists only wh
   expect(html).not.toContain("plan-tag");
   expect(html).not.toMatch(/Answers with their source|Follow-ups in active threads|cites? (its|their) sources?/i);
 });
+
+test("the brain graph: only the middle and each cluster are named, and each kind of memory is there", async () => {
+  const { BrainScene, HUBS, DOTS, KINDS } = await import("../apps/web/src/components/polynetLanding/BrainScene");
+  const html = renderToStaticMarkup(React.createElement(BrainScene)).replace(/&#x27;/g, "'");
+  // It starts on the community, with the kinds of memory as a key.
+  expect(html).toContain("What your community remembers");
+  for (const kind of KINDS) expect(html).toContain(kind.name);
+  // The only words on the map: each cluster and the middle.
+  const names = [...html.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((match) => match[1]);
+  expect(names).toEqual([...HUBS.map((hub) => hub.name), "The Build Club"]);
+  // Every learned note came from real posts; what a host taught has none.
+  for (const dot of DOTS) if (dot.note && !dot.note.taught) expect(dot.note.sources.length).toBeGreaterThan(0);
+  // The guide learns from posts; courses are where notes are filed.
+  expect(html).not.toMatch(/learn(s|ed)? from (your )?courses/i);
+  const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
+  expect(page).toContain("Good answers get<br/>buried in old threads.");
+  expect(page).not.toMatch(/Learned from courses and posts|Memory for each member/);
+});
+
+
