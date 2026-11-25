@@ -3,7 +3,8 @@
 // under each feature. Everything here is drawn in markup, never a screenshot,
 // so it stays sharp, never goes stale and never shows a real member. The
 // people in the scenes are made up.
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
+import { FigureActs, FigureDecides, FigureLearns } from "./LandingFigures";
 import { Sparkles } from "lucide-react";
 
 const INK = "#08090A";
@@ -16,88 +17,38 @@ function Glow(props: { id: string }) {
   );
 }
 
-// Fig 0.1: members around one centre; the centre answers one of them.
-function FigureAnswers() {
-  const members: Array<[number, number]> = [[98, 101], [200, 42], [302, 219], [98, 219], [200, 278]];
-  return (
-    <svg className="fig" viewBox="0 0 400 320" role="img" aria-label="Members around one centre, with a line of light running from the centre to one of them">
-      <defs><Glow id="pnFig1" /></defs>
-      <g fill="none" stroke="#3F434B">
-        <circle cx="200" cy="160" r="62" strokeDasharray="1 5" strokeLinecap="round" /><circle cx="200" cy="160" r="118" />
-        <circle cx="200" cy="160" r="146" strokeDasharray="1 7" strokeLinecap="round" />
-      </g>
-      <g stroke="#5A5F69">{members.map(([x, y]) => <line key={`${x}-${y}`} x1="200" y1="160" x2={x} y2={y} />)}</g>
-      <line x1="200" y1="160" x2="302" y2="101" stroke="#C4B5FD" strokeWidth="1.4" />
-      <circle cx="200" cy="160" r="34" fill="url(#pnFig1)" />
-      <circle cx="200" cy="160" r="15" fill={INK} stroke="#E6E7EA" /><circle cx="200" cy="160" r="5" fill="#F7F8F8" />
-      <g fill={INK} stroke="#9AA0AA">{members.map(([x, y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r="8" />)}</g>
-      <circle cx="302" cy="101" r="8" fill={INK} stroke="#C4B5FD" strokeWidth="1.2" /><circle cx="302" cy="101" r="3" fill="#C4B5FD" />
-    </svg>
-  );
-}
-
-// Fig 0.2: what the community learns, in layers that build up.
-function FigureRemembers() {
-  const layers = [94, 162, 230];
-  return (
-    <svg className="fig" viewBox="0 0 400 320" role="img" aria-label="Three layers of connected points, stacked, with one point lit on the top layer">
-      <defs><Glow id="pnFig2" /></defs>
-      <g stroke="#3F434B" strokeDasharray="1 5" strokeLinecap="round">
-        {[[126, 94], [200, 66], [274, 94], [200, 122], [70, 94], [330, 94]].map(([x, y]) => <line key={`${x}-${y}`} x1={x} y1={y} x2={x} y2={y + 136} />)}
-      </g>
-      <g fill={INK} stroke="#4A4E57">{[...layers].reverse().map((cy) => <ellipse key={cy} cx="200" cy={cy} rx="130" ry="46" />)}</g>
-      {layers.map((cy, index) => (
-        <g key={cy} opacity={[1, 0.65, 0.4][index]}>
-          <path d={`M126 ${cy} 200 ${cy - 28} 274 ${cy} 200 ${cy + 28}Z`} fill="none" stroke="#5A5F69" />
-          <g fill={INK} stroke="#9AA0AA">
-            <circle cx="126" cy={cy} r="5.5" /><circle cx="274" cy={cy} r="5.5" /><circle cx="200" cy={cy + 28} r="5.5" />
-            {index ? <circle cx="200" cy={cy - 28} r="5.5" /> : null}
-          </g>
-        </g>
-      ))}
-      <circle cx="200" cy="66" r="24" fill="url(#pnFig2)" />
-      <circle cx="200" cy="66" r="6.5" fill={INK} stroke="#C4B5FD" strokeWidth="1.2" /><circle cx="200" cy="66" r="2.5" fill="#C4B5FD" />
-    </svg>
-  );
-}
-
-// Fig 0.3: a day as an arc over a row of members; the morning reaches one of them.
-function FigureRuns() {
-  return (
-    <svg className="fig" viewBox="0 0 400 320" role="img" aria-label="A day drawn as an arc over a row of members, with a light at morning reaching down to one of them">
-      <defs><Glow id="pnFig3" /></defs>
-      <g fill="none" stroke="#3F434B">
-        <path d="M40 236 A160 160 0 0 1 360 236" /><path d="M76 236 A124 124 0 0 1 324 236" strokeDasharray="1 6" strokeLinecap="round" />
-      </g>
-      <line x1="24" y1="236" x2="376" y2="236" stroke="#5A5F69" />
-      <g stroke="#4A4E57">{[40, 80, 120, 160, 200, 240, 280, 320, 360].map((x) => <line key={x} x1={x} y1={x % 160 === 40 ? 230 : 232} x2={x} y2={x % 160 === 40 ? 242 : 240} />)}</g>
-      <g stroke="#3F434B" strokeDasharray="1 5" strokeLinecap="round"><line x1="200" y1="76" x2="200" y2="270" /><line x1="313" y1="123" x2="280" y2="270" /></g>
-      <line x1="87" y1="123" x2="120" y2="270" stroke="#C4B5FD" strokeWidth="1.4" />
-      <g fill={INK} stroke="#9AA0AA">
-        <circle cx="200" cy="76" r="6" /><circle cx="313" cy="123" r="6" />
-        <circle cx="60" cy="278" r="7" opacity=".5" /><circle cx="200" cy="278" r="7" /><circle cx="280" cy="278" r="7" /><circle cx="340" cy="278" r="7" opacity=".5" />
-      </g>
-      <circle cx="120" cy="278" r="7" fill={INK} stroke="#C4B5FD" strokeWidth="1.2" /><circle cx="120" cy="278" r="2.5" fill="#C4B5FD" />
-      <circle cx="87" cy="123" r="30" fill="url(#pnFig3)" />
-      <circle cx="87" cy="123" r="13" fill={INK} stroke="#E6E7EA" /><circle cx="87" cy="123" r="4.5" fill="#F7F8F8" />
-    </svg>
-  );
-}
-
-const FIGURES: Array<[string, ReactNode, string, string]> = [
-  ["FIG 0.1", <FigureAnswers key="a" />, "It answers", "Every member has a guide that answers from your courses and past discussions, any hour of the day."],
-  ["FIG 0.2", <FigureRemembers key="b" />, "It remembers", "Courses, notes and good answers build into one memory, so what one member learns stays for the next."],
-  ["FIG 0.3", <FigureRuns key="c" />, "It runs", "A brief every morning, check-ins with members who go quiet, and reply drafts waiting for your yes."],
+const FIGURES: Array<[number, ReactNode, string, string]> = [
+  [1, <FigureLearns key="a" />, "It learns", "Courses, answers and conversations add up to one memory. What one member figures out, the next one finds."],
+  [2, <FigureActs key="b" />, "It acts", "It answers at 2am, spots who's gone quiet, and drafts what to say."],
+  [3, <FigureDecides key="c" />, "You decide", "Drafts wait for your yes. Who joins, who leaves and what gets taught stays your call."],
 ];
 
+// Each figure responds under a pointer. On a phone (no hover) each plays its
+// move once as it comes into view; with less motion asked for, none moves.
 export function StatementFigures() {
+  const figs = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = figs.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    if (!window.matchMedia?.("(hover: none)").matches) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const seen = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("play");
+        seen.unobserve(entry.target);
+      }
+    }, { threshold: 0.6 });
+    node.querySelectorAll("article").forEach((article) => seen.observe(article));
+    return () => seen.disconnect();
+  }, []);
   return (
     <section className="statement" aria-labelledby="statement-title" data-rv>
-      <h2 id="statement-title">A community with an AI at its centre. <span>Polynet gives your people a home that answers their questions, keeps what they learn, and helps you run the place.</span></h2>
-      <div className="figs">
-        {FIGURES.map(([label, drawing, title, text]) => (
-          <article key={label}>
-            <span className="fig-label">{label}</span>
+      <h2 id="statement-title">Communities that think. <span>Polynet gives your community an AI at its core: it learns from everything, acts on what it learns, and leaves the decisions to you.</span></h2>
+      <div className="figs" ref={figs}>
+        {FIGURES.map(([n, drawing, title, text]) => (
+          <article key={n} className={`f${n}`}>
+            <span className="fig-label">FIG 0.{n}</span>
             {drawing}
             <h3>{title}</h3>
             <p>{text}</p>
