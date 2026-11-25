@@ -1,8 +1,6 @@
 import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
-import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
-import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityTypes";
 import {
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
   POLYNET_FOUNDER_TIER_CATALOG,
@@ -46,7 +44,7 @@ export const LANDING_PLANS: Plan[] = [
     button: `Start with ${CHIEF.label}`,
     note: "Less than a few hours of a community manager's time, every month.",
     ai: `${aiDollars(CHIEF.includedCostMicros)} of AI included each month; add more if you need it`,
-    points: ["Everything in Guide", "A morning brief for you", "Member check-ins and win-backs", "Reply drafts for unanswered questions"],
+    points: ["Everything in Guide", "A morning brief for you", "Check-ins for quiet members", "Reply drafts for unanswered questions"],
   },
 ];
 
@@ -87,9 +85,6 @@ const SUPPORT_EMAIL = "support@polynet.ai";
 
 // "See it live": Polynet's own community, open to look around before signing up.
 const LIVE_COMMUNITY_PATH = "/c/polynet";
-
-// Visitors only see communities that look finished: a banner and a one-liner.
-const SHOWCASE_LIMIT = 8;
 
 // The Polynet mark on its graphite tile, as the tab icon draws it. Same
 // geometry as scripts/generate_brand_icons.mjs.
@@ -166,46 +161,6 @@ function StarField() {
       {layer(far, FAR_STARS, "stars-far")}
       {layer(near, NEAR_STARS, "stars-near")}
     </>
-  );
-}
-
-function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
-  if (props.communities.length === 0) return null;
-  return (
-    <section className="showcase" id="communities" aria-labelledby="showcase-title" data-rv>
-      <div className="showcase-head">
-        <h2 id="showcase-title" className="label">Communities on Polynet</h2>
-        <a className="more" href="/discover" onClick={trackFind("home_showcase")}>See all communities →</a>
-      </div>
-      <div className="showcase-row">
-        {props.communities.map((community) => (
-          <a
-            className="showcase-card"
-            key={community.id}
-            href={`/c/${community.slug}`}
-            onClick={() => captureProductAnalyticsEvent("community_card_opened", { community_id: community.id, placement: "home" })}
-          >
-            <StableFramedMedia
-              className="showcase-banner"
-              imageUrl={community.banner_url}
-              frame={{
-                focusX: community.banner_focus_x,
-                focusY: community.banner_focus_y,
-                zoom: community.banner_zoom,
-              }}
-              alt=""
-              loading="lazy"
-              aria-hidden
-            />
-            <span className="showcase-body">
-              <strong>{community.name}</strong>
-              <span>{community.one_liner}</span>
-              <em>{community.active_plan ? formatPlanPrice(community.active_plan) : "Free"}</em>
-            </span>
-          </a>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -498,8 +453,8 @@ export function movedToPricing(hash: string): string | null {
 
 // Sections fade in once as they come into view. Without the observer (or with
 // motion turned down) everything is simply there.
-// `late` changes when a section arrives after the first draw (the community
-// showcase), so that section is watched too and never stays hidden.
+// `late` changes when a section arrives after the first draw, so that
+// section is watched too and never stays hidden.
 function useReveal(late: unknown) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -524,8 +479,7 @@ function useReveal(late: unknown) {
 }
 
 export function ConversionLanding({ onJoin }: JoinProps) {
-  const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
-  const reveal = useReveal(communities.length);
+  const reveal = useReveal(null);
 
   useEffect(() => {
     const moved = movedToPricing(window.location.hash);
@@ -534,24 +488,6 @@ export function ConversionLanding({ onJoin }: JoinProps) {
       return;
     }
     captureProductAnalyticsEvent("home_viewed");
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listCloudDiscoverCommunities({ limit: 24 })
-      .then((all) => {
-        if (cancelled) return;
-        setCommunities(
-          all
-            .filter((community) => community.banner_url && community.one_liner?.trim())
-            .sort((a, b) => (Date.parse(b.last_active_at ?? "") || 0) - (Date.parse(a.last_active_at ?? "") || 0))
-            .slice(0, SHOWCASE_LIMIT),
-        );
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   return (
@@ -597,22 +533,12 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           In most communities you only find out someone's gone when they cancel. Polynet sees it early: the new member who never said hello, the one stuck halfway through a course, the regular who's gone quiet. Your chief of staff drafts the right nudge for each, and you send it, change it or skip it.
         </FeatureSection>
 
-        <Showcase communities={communities} />
-
         <section className="plans-line" aria-labelledby="plans-line-title" data-rv>
           <div className="plans-line-head">
             <h2 id="plans-line-title">Free to build. Add an AI when you're ready.</h2>
             <a className="more" href="/pricing" onClick={() => captureProductAnalyticsEvent("compare_plans_clicked", { placement: "home" })}>Compare plans →</a>
           </div>
-          <div className="plans-line-row">
-            {LANDING_PLANS.map((plan) => (
-              <a className={plan.lit ? "plans-line-item lit" : "plans-line-item"} href="/pricing" key={plan.name}>
-                <b>{plan.name}{plan.lit ? <span className="recommended">Recommended</span> : null}</b>
-                <span className="plans-line-price"><strong>{plan.price}</strong> / month</span>
-                <span>{plan.line}</span>
-              </a>
-            ))}
-          </div>
+          <PlanCards onJoin={onJoin} placement="home" />
         </section>
 
         <section className="closing" aria-labelledby="closing-title">

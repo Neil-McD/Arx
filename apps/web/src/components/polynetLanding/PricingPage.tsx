@@ -49,7 +49,7 @@ export const COMPARE: Group[] = [
       { name: "Follow-ups in active threads", cells: GUIDE_UP },
       { name: "Community brain", hint: "What your community learns, kept and connected.", cells: GUIDE_UP },
       { name: "Morning brief for you", cells: CHIEF_ONLY },
-      { name: "Member check-ins and win-backs", cells: CHIEF_ONLY },
+      { name: "Check-ins for quiet members", cells: CHIEF_ONLY },
       { name: "Reply drafts for unanswered questions", cells: CHIEF_ONLY },
     ],
   },
