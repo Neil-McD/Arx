@@ -468,7 +468,7 @@
 @media (prefers-reduced-motion: reduce) { .pn-landing .bsc-next, .pn-landing .bsc-glow { animation: none; } }
 .pn-landing .bsc-card { position: absolute; z-index: 2; top: 28px; left: 0; width: min(440px, 100%); gap: 0; }
 .pn-landing .bsc-card .sc-eyebrow { margin-bottom: 6px; }
-.pn-landing .bsc-crumb-btn { align-self: flex-start; margin: 0 0 14px; padding: 0; border: 0; background: none; color: var(--quiet); font: inherit; font-size: 13px; cursor: pointer; }
+.pn-landing .bsc-crumb-btn { align-self: flex-start; margin: 0 0 14px; padding: 0; text-align: left; border: 0; background: none; color: var(--quiet); font: inherit; font-size: 13px; cursor: pointer; }
 .pn-landing .bsc-crumb-btn:hover { color: var(--text); }
 .pn-landing .bsc-title { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
 .pn-landing .bsc-text { margin: 8px 0 14px; color: var(--secondary); font-size: 14.5px; line-height: 1.55; }
@@ -511,19 +511,25 @@
 .pn-landing .gsc .entity-card-name { color: #eef0f4; font-size: 14px; font-weight: 600; }
 .pn-landing .gsc .entity-card-action { margin-top: 2px; color: #c4b2fc; font-weight: 500; }
 @media (max-width: 900px) {
-  .pn-landing .scene.live { height: auto; overflow: visible; -webkit-mask-image: none; mask-image: none; }
-  .pn-landing .gsc { display: flex; flex-direction: column; }
-  .pn-landing .gsc-front { position: relative; width: 100%; }
-  .pn-landing .gsc-back { order: 2; position: relative; top: auto; left: auto; width: 760px; height: 380px; margin: -36px 0 0 14%; }
-  .pn-landing .gsc-win .rpw-head, .pn-landing .gsc .gsc-page { padding-left: 32px; }
-  .pn-landing .gsc-chat [class*="chips"] { flex-wrap: nowrap; overflow-x: auto; margin-right: -20px; padding-right: 20px; scrollbar-width: none; }
-  .pn-landing .gsc-chat [class*="chips"] > * { flex: none; }
-  .pn-landing .gsc .rpw-channel { padding-left: 24px; }
+  .pn-landing .scene.live { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+  /* Phones, the guide: the desktop scene, smaller, its two parts on a
+     diagonal: the chat up and to the left, the app behind it lower and to
+     the right, running off the screen. */
+  .pn-landing .scene.live:has(.gsc) { height: 460px; }
+  .pn-landing .gsc { zoom: .6; height: 766px; }
+  .pn-landing .gsc-talk { min-height: 150px; }
+  .pn-landing .gsc .gsc-back { top: 230px; left: 22%; height: 520px;
+    -webkit-mask-image: linear-gradient(90deg, #000 72%, transparent), linear-gradient(180deg, #000 72%, transparent);
+    mask-image: linear-gradient(90deg, #000 72%, transparent), linear-gradient(180deg, #000 72%, transparent); }
+  .pn-landing .gsc-win .rpw-head, .pn-landing .gsc .gsc-page { padding-left: 48px; }
+  .pn-landing .gsc .rpw-channel { padding-left: 40px; }
+  /* Phones, the brain: the card on the left, the network to its right with
+     about half of it off the screen; its left side is the part you tap. */
   .pn-landing .scene.live:has(.bsc) { height: auto; }
-  .pn-landing .bsc { display: flex; flex-direction: column; }
-  /* The network is wider than the phone and falls off both edges. */
-  .pn-landing .bsc-net { position: relative; top: auto; right: auto; width: 132vw; max-width: none; margin: -8px 0 0 calc(50% - 66vw); }
-  .pn-landing .bsc-card { position: relative; top: auto; width: 100%; }
+  .pn-landing .bsc { height: auto; min-height: 430px; }
+  .pn-landing .bsc-card { position: relative; top: auto; width: 50%; zoom: .76; }
+  .pn-landing .bsc-kind small { display: none; }
+  .pn-landing .bsc-net { position: absolute; top: 24px; left: 32%; right: auto; width: 520px; max-width: none; }
 }
 
 /* Inside a scene: a floating panel, and a table or map behind it. */
