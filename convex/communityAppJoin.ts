@@ -28,6 +28,7 @@ import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuy
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
 import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { formatPlanPrice } from "../shared/accountCommerce";
+import { PLAN_KEY_PATTERN, planPodNames } from "./communityTiers";
 
 // Joining, as the community's landing page shows and runs it (/c/<slug>,
 // convex/communityLanding.ts): the same projections as Studio
@@ -95,7 +96,6 @@ export type CommunityAppJoinViewerState = "member" | "pending" | "denied" | "blo
 // as Studio picks it.
 // Every other plan on sale (Manage → Plans), in order: its monthly price, its
 // name, and the pods it includes. Tiers are monthly only.
-const PLAN_KEY = /^[a-z0-9][a-z0-9-]{0,31}$/;
 async function tierPlans(ctx: any, communityId: any) {
   const tiers = (await ctx.db.query("communityTiers").withIndex("by_community_key", (q: any) => q.eq("communityId", communityId)).collect())
     .filter((tier: any) => !tier.archivedAt).sort((a: any, b: any) => a.rank - b.rank);
@@ -106,19 +106,10 @@ async function tierPlans(ctx: any, communityId: any) {
   for (const tier of tiers) {
     if (tier.key === "member") continue;
     const price = prices.filter((row: any) => row.tierKey === tier.key).sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0];
-    if (!price || !PLAN_KEY.test(tier.key)) continue;
-    out.push({ key: tier.key, title: tier.name, summary: mapActivePlanSummaries([price])[0]!, includes: await podNames(ctx, communityId, tier.podChannelIds) });
+    if (!price || !PLAN_KEY_PATTERN.test(tier.key)) continue;
+    out.push({ key: tier.key, title: tier.name, summary: mapActivePlanSummaries([price])[0]!, includes: await planPodNames(ctx, communityId, tier.podChannelIds, 60) });
   }
   return out;
-}
-
-async function podNames(ctx: any, communityId: any, channelIds: any[] | undefined): Promise<string[]> {
-  const names: string[] = [];
-  for (const channelId of channelIds ?? []) {
-    const room = await ctx.db.get(channelId) as any;
-    if (room && String(room.communityId) === String(communityId) && room.status === "active" && room.accessMode === "restricted") names.push(String(room.name ?? "").slice(0, 60));
-  }
-  return names.filter(Boolean).slice(0, 4);
 }
 
 function plansByPeriod(plans: PublicPlanSummaryLike[]): PublicPlanSummaryLike[] {
@@ -148,7 +139,7 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
   // The base membership's own name and pods (Manage → Plans), and every other plan on sale.
   const baseTier = selling ? await ctx.db.query("communityTiers")
     .withIndex("by_community_key", (q: any) => q.eq("communityId", community._id).eq("key", "member")).first() : null;
-  const baseIncludes = baseTier ? await podNames(ctx, community._id, baseTier.podChannelIds) : [];
+  const baseIncludes = baseTier ? await planPodNames(ctx, community._id, baseTier.podChannelIds, 60) : [];
   const tiers = selling && plans.length ? await tierPlans(ctx, community._id) : [];
   let viewer: null | {
     state: CommunityAppJoinViewerState; can_request_again: boolean; reapply_at: string | null; setup_required: boolean;

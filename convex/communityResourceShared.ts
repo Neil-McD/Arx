@@ -314,10 +314,3 @@ export async function resolveAuthenticatedActionUserId(ctx: any, authSubject?: s
   if (!actor?.dbUserId) throw new Error("authenticated_user_required");
   return actor.dbUserId;
 }
-
-export async function requireCommunityManagerForAction(ctx: any, userId: any, communityId: any): Promise<void> {
-  await ctx.runQuery((internal as any).communityResources.requireCommunitySourceManagerInternal, {
-    userId,
-    communityId,
-  });
-}

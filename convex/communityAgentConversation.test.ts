@@ -44,13 +44,13 @@ test("community binding cannot change or clear and access is rechecked after rev
   const f = await fixture();
   const first = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId: f.communities[0] });
   await f.a.mutation(api.threads.addCloudThreadMessage, { threadId: first.thread_id as any, messageKey: "private-note", role: "user", contentJson: { text: "Private note" } });
-  await expect(f.a.mutation(api.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "wrong-community", communityId: f.communities[1] })).rejects.toThrow("runtime_run_community_lens_mismatch");
+  await expect(f.a.mutation(internal.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "wrong-community", communityId: f.communities[1] })).rejects.toThrow("runtime_run_community_lens_mismatch");
   await expect(f.a.mutation(api.threads.ensureCloudThread, { threadKey: first.thread_key, communityId: f.communities[1] })).rejects.toThrow("community_conversation_scope_immutable");
   await f.t.run(ctx => ctx.db.delete(f.memberships[0]));
   await expect(f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId: f.communities[0] })).rejects.toThrow();
   await expect(f.a.query(api.threads.listNewestCloudThreadMessages, { threadId: first.thread_id as any })).rejects.toThrow();
   await expect(f.a.query(api.threads.getCloudThreadByThreadKey, { threadKey: first.thread_key })).rejects.toThrow();
-  await expect(f.a.query(api.threads.getCloudThreadMessageByOwnerMessageKey, { messageKey: "private-note" })).rejects.toThrow();
+  await expect(f.a.query(internal.threads.getCloudThreadMessageByOwnerMessageKey, { messageKey: "private-note" })).rejects.toThrow();
   await expect(f.a.mutation(api.threads.addCloudThreadMessage, { threadId: first.thread_id as any, role: "user", contentJson: { text: "Denied" } })).rejects.toThrow();
 });
 
@@ -121,7 +121,7 @@ test("runtime records use the bound community and running turns prevent rollover
   const communityId = f.communities[0];
   const first = await f.a.mutation(api.threads.ensureCommunityAgentConversation, { communityId });
   await f.a.mutation(api.threads.addCloudThreadMessage, { threadId: first.thread_id as any, messageKey: "runtime-user", role: "user", contentJson: { text: "Help me" } });
-  const run = await f.a.mutation(api.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "scoped-runtime" });
+  const run = await f.a.mutation(internal.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "scoped-runtime" });
   expect(run.communityId).toBe(communityId);
   await expect(f.a.mutation(api.threads.startNewCommunityAgentConversation, { communityId, expectedActiveEpisodeId: first.episode_id as any })).rejects.toThrow("community_conversation_turn_running");
   await f.t.run(ctx => ctx.db.patch(f.memberships[0], { state: "lapsed", revokedAt: Date.now() }));

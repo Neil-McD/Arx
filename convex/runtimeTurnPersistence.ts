@@ -1,4 +1,4 @@
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   extractInferenceSourceFromContentJson,
   extractTextFromContentJson,
@@ -37,7 +37,7 @@ export async function ensureRuntimeRunStarted(args: {
   const { ctx, runStartArgs, fail } = args;
   try {
     const run = (await ctx.runMutation(
-      (api as any).threads.ensureCloudRuntimeRunStarted as any,
+      (internal as any).threads.ensureCloudRuntimeRunStarted as any,
       runStartArgs,
     )) as { status?: unknown } | null;
     const runStatus = String(run?.status ?? "").trim();
@@ -79,7 +79,7 @@ export async function lookupExistingRuntimeReplay(args: {
 }) {
   const { ctx, ownerId, threadId, assistantMessageKeyForRun, userMessageKeyForRun, inferenceSource } = args;
   const existingAssistant = (await ctx.runQuery(
-    api.threads.getCloudThreadMessageByOwnerMessageKey as any,
+    internal.threads.getCloudThreadMessageByOwnerMessageKey as any,
     {
       ownerId,
       threadId,
@@ -94,7 +94,7 @@ export async function lookupExistingRuntimeReplay(args: {
   if (!existingAssistant) return null;
   if (isPartialAssistantContentJson(existingAssistant.contentJson)) return null;
   const existingUser = (await ctx.runQuery(
-    api.threads.getCloudThreadMessageByOwnerMessageKey as any,
+    internal.threads.getCloudThreadMessageByOwnerMessageKey as any,
     {
       ownerId,
       threadId,
@@ -210,7 +210,7 @@ export async function persistRuntimeAssistantMessage(args: {
       )
     : [];
   const persisted = (await args.ctx.runMutation(
-    api.threads.upsertCloudThreadMessageByMessageKey as any,
+    internal.threads.upsertCloudThreadMessageByMessageKey as any,
     {
       ownerId: args.ownerId,
       threadId: args.threadId,

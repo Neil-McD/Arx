@@ -1757,37 +1757,6 @@ export const sendSiteDirectMessageForTrustedUserInternal = internalMutation({
   },
 });
 
-// The live signal for the twin's Messages page (communityLive:watchMessages):
-// a version that changes whenever the member's inbox (no conversation) or one
-// of their conversations changes, and, for a conversation, whether the other
-// person is typing. Never a message, a name or an id: the page re-reads
-// through its private routes when the version moves.
-const SITE_DM_INBOX_WATCH_ROWS = 50;
-export async function readDirectMessageLiveSignalForUser(ctx: any, viewerUserId: any, rawConversationId: string | null) {
-  if (rawConversationId === null) {
-    // Every message, read, mute or new conversation touches the member's own participant rows.
-    const rows = (await ctx.db
-      .query("dmParticipants" as any)
-      .withIndex("by_user_status_lastActivityAt", (q: any) => q.eq("userId", viewerUserId).eq("status", "active"))
-      .order("desc")
-      .take(SITE_DM_INBOX_WATCH_ROWS)) as DirectMessageParticipantLike[];
-    return { version: `${rows.length}:${rows.reduce((latest, row) => Math.max(latest, Number(row.updatedAt) || 0), 0)}`, typing: null };
-  }
-  const conversationId = siteConversationId(ctx, rawConversationId);
-  const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: viewerUserId });
-  // New messages move lastSeq; reads and mutes move a participant row.
-  const participants = await listConversationParticipants(ctx, conversationId);
-  const version = [conversation.lastSeq, conversation.updatedAt, ...participants.map((row) => `${row.lastReadSeq}.${row.updatedAt}`)].join(":");
-  const typing = await listDirectTypingForUser(ctx, viewerUserId, conversationId);
-  const nowMs = Date.now();
-  const until = typing.users.reduce((latest: number, user: { display_until_ms: number }) => Math.max(latest, user.display_until_ms), 0);
-  return {
-    version,
-    // The absolute deadline changes on every renewal, so a steady typist's renewals reach the page.
-    typing: typing.total_count > 0 ? { lease_until: until, expires_in_ms: Math.max(0, until - nowMs) } : null,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Messages through a person's own AI (the MCP; docs/specs/agent-access-v0.md,
 // slice 3). The executor has already established who the person is. Their AI

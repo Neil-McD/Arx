@@ -977,7 +977,7 @@ async function getCloudThreadMessageByOwnerMessageKeyHandler(ctx: QueryCtx, args
     return row;
 }
 
-export const getCloudThreadMessageByOwnerMessageKey = query({
+export const getCloudThreadMessageByOwnerMessageKey = internalQuery({
   args: getCloudThreadMessageByOwnerMessageKeyArgs,
   handler: async (ctx, args) =>
     await getCloudThreadMessageByOwnerMessageKeyHandler(ctx, args, await resolveOwnerIdForAuthenticatedRequest({
@@ -1284,7 +1284,7 @@ async function upsertCloudThreadMessageByMessageKeyHandler(ctx: MutationCtx, arg
     return created;
 }
 
-export const upsertCloudThreadMessageByMessageKey = mutation({
+export const upsertCloudThreadMessageByMessageKey = internalMutation({
   args: upsertCloudThreadMessageByMessageKeyArgs,
   handler: async (ctx, args) =>
     await upsertCloudThreadMessageByMessageKeyHandler(ctx, args, await resolveOwnerIdForAuthenticatedRequest({
@@ -1660,7 +1660,7 @@ async function ensureCloudRuntimeRunStartedHandler(ctx: MutationCtx, args: Objec
     return created;
 }
 
-export const ensureCloudRuntimeRunStarted = mutation({
+export const ensureCloudRuntimeRunStarted = internalMutation({
   args: ensureCloudRuntimeRunStartedArgs,
   handler: async (ctx, args) =>
     await ensureCloudRuntimeRunStartedHandler(ctx, args, await resolveOwnerIdForAuthenticatedRequest({
@@ -1737,7 +1737,7 @@ async function appendCloudRuntimeRunEventHandler(ctx: MutationCtx, args: ObjectT
     return created;
 }
 
-export const appendCloudRuntimeRunEvent = mutation({
+export const appendCloudRuntimeRunEvent = internalMutation({
   args: appendCloudRuntimeRunEventArgs,
   handler: async (ctx, args) =>
     await appendCloudRuntimeRunEventHandler(ctx, args, await resolveOwnerIdForAuthenticatedRequest({
@@ -1910,7 +1910,7 @@ async function finishCloudRuntimeRunHandler(ctx: MutationCtx, args: ObjectType<t
     });
 }
 
-export const finishCloudRuntimeRun = mutation({
+export const finishCloudRuntimeRun = internalMutation({
   args: finishCloudRuntimeRunArgs,
   handler: async (ctx, args) =>
     await finishCloudRuntimeRunHandler(ctx, args, await resolveOwnerIdForAuthenticatedRequest({

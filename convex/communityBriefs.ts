@@ -18,7 +18,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput, requireCommunityChatAccess } from "./communityCore";
-import { displayName } from "./communityFounderBrief";
+import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, removeBrief, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
 import { docReader, evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { communityAgentIsOn } from "./communityApps";

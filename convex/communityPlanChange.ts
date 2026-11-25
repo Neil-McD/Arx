@@ -15,20 +15,11 @@ import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair } fr
 import { communityIsActive } from "../shared/communityLifecycle";
 import { getStripeClient } from "./stripeCore";
 import { ensureCommunityProviderPrice } from "./communityCommerce";
+import { PLAN_KEY_PATTERN as PLAN_KEY, planPodNames as podNames } from "./communityTiers";
 
-const PLAN_KEY = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const BASE = "member";
 
 type Plan = { key: string | null; name: string; price: any; includes: string[] };
-
-async function podNames(ctx: any, communityId: any, ids: any[] | undefined): Promise<string[]> {
-  const names: string[] = [];
-  for (const id of ids ?? []) {
-    const room = await ctx.db.get(id) as any;
-    if (room && String(room.communityId) === String(communityId) && room.status === "active" && room.accessMode === "restricted") names.push(String(room.name ?? ""));
-  }
-  return names.filter(Boolean).slice(0, 4);
-}
 
 // The plans on sale, monthly: the base membership, then every live named plan, in order.
 async function plansOnSale(ctx: any, communityId: any): Promise<Plan[]> {

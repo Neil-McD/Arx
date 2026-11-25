@@ -1015,21 +1015,6 @@ export const listCommunityLaunchKnowledgeSources = query({
   },
 });
 
-export const requireCommunitySourceManagerInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    return { ok: true };
-  },
-});
-
 export const generateCommunityResourceSourceUploadUrl = mutation({
   args: {
     userId: v.optional(v.id("users")),

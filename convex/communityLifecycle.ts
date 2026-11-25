@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { communityHasCustomSite, requireCommunitySlugShape, storedCommunityMemberExperience } from "./communitySites";
+import { requireCommunitySlugShape } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
