@@ -3,7 +3,7 @@ id: product.guide.connect_polynet_mcp
 title: Connect Polynet MCP
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-10-28
+last_verified: 2026-11-25
 ---
 
 # Connect Polynet MCP
@@ -29,20 +29,12 @@ and removes posts; an owner or admin also gets the builder lens.
 7. Call `polynet_list` at `/`, follow the returned `communities/` path, and
    explicitly open a community you belong to.
 
-## Canonical Tools
+## Tool Surface
 
-The official provider exposes exactly:
-
-```text
-polynet_list
-polynet_read
-polynet_search
-polynet_write
-polynet_call
-```
-
-Optional premium tools belong to the external harness or a separate Polynet
-overlay. They do not change the base Polynet MCP contract.
+The official provider exposes three general read tools (`polynet_list`,
+`polynet_read`, `polynet_search`) plus named action tools scoped to the
+authenticated person's role. Every tool routes through the same canonical
+authorization, rate limits, and idempotent receipts.
 
 ## Authority Boundary
 

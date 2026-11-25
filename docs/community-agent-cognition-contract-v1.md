@@ -1,6 +1,12 @@
-# Community Agent Cognition Contract v1
+# Community Agent Cognition Contract v1 (Historical / Superseded)
 
-Status: staging architecture; canonical five-tool boundary implemented
+> **Superseded (Nov 2026):** The memory compiler, Steward, `communityIntelligenceNodes`,
+> AI Feed, personal agent, and single `$79` Builder model described below have been
+> retired. See [docs/specs/agent-system-end-state.md](specs/agent-system-end-state.md),
+> [docs/specs/agent-pricing-and-overage-v1.md](specs/agent-pricing-and-overage-v1.md),
+> and [docs/core-contract.md](core-contract.md) for the live architecture.
+
+Status: historical reference (superseded)
 Scope: product architecture, memory system, community agent loop
 Last updated: 2026-08-08
 

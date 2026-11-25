@@ -102,10 +102,6 @@ export type WebCommunityAgentDockHandle = {
   ask: (question: string, communityId: string) => "sent" | "not_ready" | "other_community";
   // When the guide stays busy, the question waits in Home's box instead.
   draft: (question: string, communityId: string) => boolean;
-  startResourceBuild: (request: {
-    communityId: string;
-    prompt: string;
-  }) => Promise<boolean>;
 };
 
 type CommunityAgentImageDraft = Omit<CommunityAgentImageAttachment, "storage_id"> & {
@@ -198,7 +194,7 @@ function hasSequencedAssistantText(events: ThreadStreamingRuntimeEvent[]): boole
 function formatInferenceIssue(issue: InferenceIssueModalState | null): string | null {
   if (!issue) return null;
   if (issue.reason === "provider_connection_required") {
-    return "The community agent is off. Ask the community owner to turn on the Agent plan.";
+    return "The community agent is off. Ask the community owner to turn on a Guide or Chief of Staff plan.";
   }
   return issue.message?.trim() || "The community agent could not complete this turn. Try again.";
 }
@@ -231,7 +227,6 @@ function WebCommunityAgentDock(props, ref) {
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
-  const [resourceBuildLaunchVersion, setResourceBuildLaunchVersion] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] = useState<InferenceIssueModalState | null>(null);
   const [sendingByThread, setSendingByThread] = useState<Record<string, boolean>>({});
@@ -282,11 +277,6 @@ function WebCommunityAgentDock(props, ref) {
   const submitInFlightRef = useRef(false);
   const sendSuggestionRef = useRef<(text: string) => void>(() => undefined);
   const askReadyRef = useRef(false);
-  const resourceBuildStartInFlightRef = useRef(false);
-  const pendingResourceBuildRef = useRef<{
-    communityId: string;
-    prompt: string;
-  } | null>(null);
   const retryRef = useRef<CommunityAgentRetryState | null>(null);
   const runUiScopeRef = useRef<AgentScope | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
@@ -359,62 +349,10 @@ function WebCommunityAgentDock(props, ref) {
       kitInputRef.current?.focus();
       return true;
     },
-    startResourceBuild: async (request) => {
-      const requestedCommunityId = String(request.communityId ?? "").trim();
-      const prompt = String(request.prompt ?? "").trim();
-      if (
-        !requestedCommunityId ||
-        requestedCommunityId !== communityId ||
-        !prompt ||
-        !props.canManageResources ||
-        !props.session ||
-        props.voiceButtonProps.state !== "idle" ||
-        resourceBuildStartInFlightRef.current ||
-        pendingResourceBuildRef.current ||
-        draftTextRef.current.trim() ||
-        attachmentsRef.current.length > 0
-      ) {
-        return false;
-      }
-      resourceBuildStartInFlightRef.current = true;
-      const launchScope = agentScopeRef.current;
-      props.onRequestOpen?.();
-      setLocalError(null);
-      try {
-        const usableSession = await props.ensureSession(
-          props.session,
-          "member_agent_resource_build",
-        );
-        if (
-          !usableSession ||
-          agentScopeRef.current.userId !== launchScope.userId ||
-          agentScopeRef.current.generation !== launchScope.generation
-        ) return false;
-        if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) {
-          return false;
-        }
-        pendingResourceBuildRef.current = {
-          communityId: requestedCommunityId,
-          prompt,
-        };
-        setResourceBuildLaunchVersion((current) => current + 1);
-        return true;
-      } catch (error) {
-        console.warn("member_agent_resource_build_start_failed", error);
-        setLocalError("Your resource proposal could not be checked. Try again.");
-        return false;
-      } finally {
-        resourceBuildStartInFlightRef.current = false;
-      }
-    },
   }), [
     communityId,
-    props.canManageResources,
-    props.ensureSession,
     props.mobileShellActive,
     props.onRequestOpen,
-    props.session,
-    props.voiceButtonProps.state,
   ]);
 
   const isCurrentScope = useCallback((scope: AgentScope): boolean => {
@@ -564,8 +502,6 @@ function WebCommunityAgentDock(props, ref) {
     setLocalError(null);
     setInferenceIssue(null);
     retryRef.current = null;
-    pendingResourceBuildRef.current = null;
-    resourceBuildStartInFlightRef.current = false;
   }, [clearAttachmentDrafts, props.session?.user.id, communityId, stopStreamingTurn]);
 
   useEffect(() => () => {
@@ -589,7 +525,6 @@ function WebCommunityAgentDock(props, ref) {
     setIsAttachmentDragOver(false);
     retryRef.current = null;
     setLocalError(null);
-    pendingResourceBuildRef.current = null;
   }, [clearAttachmentDrafts, surfaceKey]);
 
   useEffect(() => {
@@ -671,42 +606,6 @@ function WebCommunityAgentDock(props, ref) {
       ? formatInferenceIssue(inferenceIssue)
       : null;
   const dockError = memberLimitNotice ? null : localError ?? formatInferenceIssue(inferenceIssue);
-  useEffect(() => {
-    const request = pendingResourceBuildRef.current;
-    if (
-      !request ||
-      !isOpenSurface ||
-      !props.isVisible ||
-      !props.session ||
-      props.surfaceContext?.kind !== "community" ||
-      request.communityId !== communityId ||
-      composerIsBusy ||
-      isPreparing ||
-      isStartingNewChat
-    ) {
-      return;
-    }
-    if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) {
-      pendingResourceBuildRef.current = null;
-      setLocalError("Finish or clear your current agent message, then try again.");
-      return;
-    }
-    pendingResourceBuildRef.current = null;
-    draftTextRef.current = request.prompt;
-    setInput(request.prompt);
-    composerFormRef.current?.requestSubmit();
-  }, [
-    communityId,
-    composerIsBusy,
-    isOpenSurface,
-    isPreparing,
-    isStartingNewChat,
-    props.isVisible,
-    props.session,
-    props.surfaceContext,
-    resourceBuildLaunchVersion,
-  ]);
-
 
   const observeThreadContext = useCallback((communityId: string | null, contextVersion: number) => {
     const next = {

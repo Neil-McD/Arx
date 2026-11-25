@@ -41,16 +41,15 @@ authoritative deploy log.
 For official Polynet MCP provider changes, treat Convex as required, not
 optional. If a change touches files like:
 
-- `/Users/neilmcdevitt/code/arx/convex/httpMcp.ts`
-- `/Users/neilmcdevitt/code/arx/convex/memberOntology.ts`
-- `/Users/neilmcdevitt/code/arx/shared/polynetMcp.ts`
-- `/Users/neilmcdevitt/code/arx/shared/polynetMcpSetup.ts`
+- `convex/httpMcp.ts`
+- `convex/memberOntology.ts`
+- `shared/polynetMcp.ts`
+- `shared/polynetMcpSetup.ts`
 
-then the release is not complete until:
+then after the Main = Production workflow finishes deploying `main`, verify:
 
-1. `npm run release:prod` has released the change
-2. the metadata smoke passes against the canonical production URL
-3. one authenticated official Polynet MCP call has been re-tested on production
+1. the metadata smoke passes against the canonical production URL
+2. one authenticated official Polynet MCP call succeeds on production
 
 This is the canonical path. Do not rely on branch names, preview URLs, or old Vercel projects as release truth.
 
@@ -329,131 +328,53 @@ account or entitlement surface.
 
 ## Web Production Rule
 
-- Web production deploys come only from `npm run release:prod` at exact `origin/main`.
-- Do not run `vercel deploy --prod`, `vercel promote`, `vercel alias`, or `vercel rollback` by hand.
-- If the release command is blocked, fix the blocking guard instead of bypassing it.
+- Production deploys happen automatically from `main` via `.github/workflows/deploy-production.yml` (Convex first, Vercel second).
+- Do not run raw `vercel deploy --prod`, `npm run convex:deploy`, `vercel promote`, or `vercel alias` against production from a laptop.
+- Do not commit manual markdown release receipts to `docs/receipts/`.
+- If a gate check fails, fix the underlying issue instead of bypassing it.
 
-## Release Types
+## Release Compatibility & Local Verification
 
-### Community-first compatibility
-
-The retired onboarding activation table, community onboarding configuration field,
-and their migration tooling were removed after a complete production scan found no
-stored rows or dedicated onboarding threads. Do not recreate that persistence layer.
-
-The temporary `requestOnboardingGuideKickoff` shim is deleted; no onboarding
-kickoff function is callable.
-
-### Normal release
-
-Use when the change is ready and not urgent.
-
-The release command deploys Convex before the web app, so the previous web
+The production workflow deploys Convex before the web app, so the previous web
 briefly runs against the new backend. Keep every backend change backward
-compatible with the currently live web. If it is not, split it into a
-compatibility release first.
+compatible with the currently live web; otherwise split it into a two-release
+compatibility rollout.
 
-1. Make the change and run the relevant local checks.
-2. Land the intended changes on `main`.
-3. From a clean checkout at `origin/main`, run `npm run release:prod`.
-4. Commit the receipt and run the smoke test checklist below.
-
-### Hotfix
-
-Use when production is broken or trust is at risk.
-
-1. Minimize scope.
-2. Verify locally.
-3. Land it on `main` immediately.
-4. Run `npm run release:prod`. For a web-only regression, first consider
-   `npm run release:rollback -- <deployment-id>` using the rollback target in the
-   last receipt.
-
-## Local Verification
-
-Run focused checks while iterating, but use the executable release gate as the
-single local decision before proposing a release:
+Run focused checks locally from your clean worktree at `origin/main` before
+opening a PR (never use the stale root checkout `/Users/neilmcdevitt/code/arx`):
 
 ```bash
-cd /Users/neilmcdevitt/code/arx
-npm ci
-npm --prefix apps/web ci
-npx playwright install chromium # once per matching Playwright version
-npm run release:gate
+npm run check:web-typecheck
+npm run build
+npm run check:invariants
+npm run test:unit
 ```
 
-The local gate runs checked-in Convex generated-surface sanity and typechecking,
-web typechecking, a production web build with an unambiguous Git build marker,
-bundle budget, foundation invariants, all conventional
-behavior tests, and dependency security checks. It writes machine-readable
-evidence to `artifacts/release-gate.json`. The required media browser proof writes screenshots to `artifacts/media-reading/`; CI installs matching Chromium and uploads these artifacts even on failure. Missing browser binaries fail the gate.
-
-Release-gated repository absence checks distinguish all three search outcomes:
-matches fail the contract, no matches pass it, and scanner or target failures
-fail the gate as infrastructure errors. Conventional behavior tests exercise
-the real public community access lifecycle—including join policy, manager
-approval, revocation, and subsequent native/MCP authorization—rather than
-accepting source-marker assertions as behavioral proof.
-
-Local mode records dirty working-tree state so it is useful during development,
-marks its build identity as `<sha>-dirty`, and is not release-authoritative.
-`ci` mode requires a clean checkout whose `HEAD` matches the requested full
-commit SHA and emits that exact SHA as the build identity. `npm run release:prod`
-runs it on the release candidate, which makes it the canonical pre-release
-decision. The GitHub `Release Gate` job runs the same executable and is advisory:
-a release never depends on GitHub Actions.
-
-The release gate is validation only. It must never push Git, deploy Convex,
-deploy or promote Vercel, mutate production, or roll back a release.
-
-### Runtime Credit Accounting Gate
-
-Retired Nov 7 2026: the old Workspace credit tables it checked were emptied
-(backed up) and dropped, so the release no longer runs the accounting smoke.
+GitHub runs the parallel `Release Gate` (Typecheck & build, Tests & invariants,
+Browser checks) and `Secret Scan` on every PR.
 
 ## Post-Deploy Smoke Test
 
-After every production release, verify the changed surface and at least these core flows:
+After production changes affecting core surfaces, verify:
 
 1. Auth/session bootstrap
 2. Founder community create/manage and join-page link
 3. Member Discover/join page/gate/join
 4. Community navigation, post/chat, voice, and resources
-5. The community agent on the Agent page (explicit community context) and in @mention replies, when touched
+5. The community agent on the Home page (explicit community context) and in @mention replies, when touched
 6. Official Polynet MCP (every role in its own lens) authenticated community context when touched
 7. Billing checkout, entitlement convergence, and builder payout readiness when touched
 
-If the release touched billing, check both:
-
-- Community checkout and Stripe Connect payout readiness
-- Founder subscription, per-community allowance, and provider-cost evidence when founder funding is touched
-
-## Decision Rules
-
-Ship now only if the change does at least one of these:
-
-- fixes a production bug
-- removes user confusion or friction in a core flow
-- improves trust, safety, or billing correctness
-- unblocks a near-term product objective
-
-If it is mostly cleanup, renaming, or architecture polish without user pressure, it should usually wait.
-
 ## Rollback Posture
 
-Before release, know:
+Before release, know what user problem the change solves, whether it changes
+behavior or only internals, and the likely failure mode.
 
-- what exact user problem this change solves
-- whether it changes behavior or only internals
-- what the likely failure mode is
-- the rollback target recorded in the previous receipt
-
-If the failure is web-only, roll back with `npm run release:rollback -- <deployment-id>`.
-It only accepts a ready production deployment of project `polynet`, never touches
-Convex, and waits until `version.json` changes. After a rollback, Vercel stops
-auto-assigning the production domain; the next `release:prod` promotes its
-deployment explicitly.
-If the failure is backend/data-contract related, stop and assess before compounding the issue with more deploys.
+If a failure is web-only, use one-click rollback in the Vercel dashboard or
+`npm run release:rollback -- <deployment-id>` (using the prior deployment ID
+recorded in the GitHub Actions deploy log). It only affects Vercel and never
+touches Convex. If the failure is backend or data-contract related, stop and
+assess before compounding the issue with more deploys.
 
 ## Weekly Alpha Operating Loop
 

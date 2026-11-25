@@ -2,7 +2,7 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { highlightCodeHtml } from "../../../../../shared/markdownUi";
+import { highlightCodeHtml } from "../../../../../shared/markdownHighlight";
 
 // Code blocks in the lesson editor wear the same colours members see, and have
 // the same Copy button at the top right. The colours are decorations over the

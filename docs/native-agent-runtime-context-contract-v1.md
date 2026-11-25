@@ -1,6 +1,12 @@
-# Native Agent Runtime Context Contract v1
+# Native Agent Runtime Context Contract v1 (Historical / Superseded)
 
-Status: context architecture, pre-Slice 8 liveness, and native-only Slice 10 cleanup are production-released. Slice 8 rejected Pi in October 2026, Slice 9 is skipped, and only final Steward live acceptance remains. **Neil reopened the Pi decision on Nov 3, 2026 (POL-38): Pi agent core becomes the loop engine behind the turn contract** (see 14.3)
+> **Superseded (Nov 2026):** Pi agent core (`@earendil-works/pi-agent-core`) is
+> the live runtime engine, the native runtime kernel was removed, and the memory
+> compiler/Steward, Funnel Composer, and third-party MCP/skills were retired.
+> See [docs/specs/agent-system-end-state.md](specs/agent-system-end-state.md) and
+> [docs/core-contract.md](core-contract.md) for current contracts.
+
+Status: historical slice record (superseded)
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-11-03
 

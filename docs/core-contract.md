@@ -33,10 +33,8 @@ on this boundary and never move it.
 | Content | community | `communityResourceModules` → `communityResources` |
 | Event | community | `communityEvents` |
 | Money | community (founder plan) / membership (paid access) | `founderSubscriptions`, `communityPricePoints` → `communitySubscriptions` |
-| Accepted memory | community | traces → digests → `communityIntelligenceNodes` + `communityEvidenceCitations` |
-| Member knowledge | user (+ community) | `memberFacts`, `memberProfileSpines` |
+| Living memory | community | `communityNotes`, `communityNoteRemovals`, `communityHandbook` |
 | Agent conversation | member + community | `threads`, `cloudMessages`, `runtimeRuns` |
-| Site | community | `communityDomains`, `communitySiteDeploys`, `communityAppSessions` |
 
 ## Invariants
 
@@ -85,12 +83,10 @@ document in the same PR.
 2. Canonical community interaction substrate + canonical community UX.
 3. The community agent harness under explicit, server-validated community
    context.
-4. Community cognition: compiler, accepted memory and member knowledge.
+4. Community knowledge: resources, founder handbook, and living community notes (`memory/`).
 5. Official Polynet MCP and the canonical semantic operation seam.
-6. Community sites: the edge, sign-in with Polynet, the SDK, the shell and
-   deploys.
-7. Voice UX: web voice capture and the `voice_transcribe` endpoint.
-8. Community money rails: founder funding, paid-member checkout, Stripe Connect
+6. Voice UX: web voice capture and the `voice_transcribe` endpoint.
+7. Community money rails: founder funding, paid-member checkout, Stripe Connect
    Express onboarding, the webhook chain and payouts.
 
 ### Studio community surface
@@ -113,12 +109,12 @@ community context, and member interactions and autonomous community-agent author
 
 ## Current product rules (configurable, not invariant)
 
-- One founder plan: $79 per managed community, including a $20 model allowance.
-  **Direction (Oct 27, pending its spec):** the community is free and the agent
-  is paid, about $49 a month with an included budget.
-- A 2.9% application fee on paid-member revenue, versioned in commerce policy.
+- Three founder tiers, no free trial (per community, see [specs/agent-pricing-and-overage-v1.md](specs/agent-pricing-and-overage-v1.md)):
+  - **Free ($0/month):** unlimited members, up to 10 unfunded live communities per owner, zero-AI weekly digests, official Polynet MCP, no hosted AI.
+  - **Guide ($20/month per community):** reactive 1:1 chats, `@mentions`, active-thread follow-ups, and living memory ($3/month included AI allowance).
+  - **Chief of Staff ($100/month per community):** everything in Guide plus Daily Briefs, proactive Member & Builder Check-Ins, unanswered-question auto-replies, and optional prepaid `$30 → +$20 AI` usage boosts within a founder-set monthly safety cap ($20/month included AI allowance). Legacy `$79` subscriptions are grandfathered as Chief of Staff.
+- A 2.9% application fee on paid-member revenue across all tiers, versioned in commerce policy.
 - Entry policies: open, approval, paid.
-- One site per community on `<slug>.polynet.page` (staging: `<slug>-staging.polynet.page`); Studio stays Polynet's own UI.
 - Proactive agent: founders see outcomes, at most two agent-started messages
   per member per week, outreach in draft mode until the founder widens it
   ([spec](specs/proactive-community-agent-v0.md)).
@@ -131,25 +127,15 @@ and data are proven gone, following the two-release pattern in
 
 | Candidate | Known state |
 | --- | --- |
-| Member workflows and forms | Being replaced by the proactive agent; check production use first |
-| Personal-agent tables (`personalMemoryItems`, `userMemorySettings`) | Code removed Oct 27; data deletion with Neil's OK |
-| Own-account payment tables (`userProviderConnections`, `userProviderAuthStates`, `userProviderDeviceAuthStates`) | Code removed Oct 27 (POL-10); encrypted keys, deleted with Neil's sign-off |
-| Credit and workspace-compute tables, `legacyProgramGrants` | Neil decided Oct 27: delete after a production backup, with his sign-off |
-| AI feed tables | Feature retired; retirement module still present |
-| `communityArchiveDocuments`, `communityOnboardingSessions` | No writers found |
-| Legacy chat (`communityChatThreads`, `communityChatMessages`, `communityMessageReactions`, `communityFeaturedMessages`, `communityInteractionLegacyChatLinks`) | Code deleted Oct 28 (POL-26); tables emptied, then dropped Nov 7 |
-| `communityFunnels` and the funnel editor | Code deleted Oct 28 (POL-23); a plain join page stays. Table emptied, then dropped Nov 7 |
-| Integrations and skills tables (`communityIntegrationConnections`, `skillPackages`, `skillPackageRevisions`, `userPlatformSkillInstalls`, `communitySkillAttachments`) | Code deleted Oct 28 (POL-21, POL-22, incl. GitHub and Google Drive import); tables emptied, then dropped Nov 7 |
+| Retired site/crawl/legacy tables (`communityDomains`, `communitySiteDeploys`, `communityAppSessions`, `communityAppHandoffs`, `communityOwnerApprovals`, `communityPublicPages`, `communityLessonMentions`, `platformOperatorSummary`, `memberWriteRateCounters`, `userEntitlements`, `communitySourceCrawlJobs`, `communitySourceUnits`, `communitySourceUnitContents`, `memberProfileSpines`) | Awaiting two-release data census and Neil's sign-off before drop |
+| `communityOnboardingSessions` | No writers found |
+| Legacy chat, funnels, integrations, skills, personal-agent, own-account provider, credit, and AI feed tables | Emptied and dropped Nov 7, 2026 (local backups kept) |
 
 ## Open risks
 
 - **Unbounded history:** diagnostics and run events grow without retention.
-- **Hot spots:** `communityResources.ts`, `communityIntelligenceDirectory.ts`,
-  `threads.ts`, `apps/web/src/App.tsx`. Add stable operation boundaries before
-  exposing them.
-- **Founder administration** from sites needs its own authorized operations
-  (invariant 10).
-- **Sites are staging-only** until a production edge exists.
+- **Hot spots:** `communityResources.ts`, `threads.ts`, `apps/web/src/App.tsx`.
+  Add stable operation boundaries before exposing them.
 
 ## Deletion boundary
 

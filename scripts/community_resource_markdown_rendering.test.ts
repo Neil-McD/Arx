@@ -1,17 +1,25 @@
 // @vitest-environment node
 
 import { createRequire } from "node:module";
-import { describe, expect, it, vi } from "vitest";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("katex/dist/katex.min.css", () => ({}));
-
-import { renderMarkdown } from "../shared/markdownUi";
-import { WebCommunityResourceViewerContent } from "../apps/web/src/components/WebCommunityResourceViewerContent";
-import type { CommunityResource } from "../apps/web/src/components/communityResourcesContracts";
+vi.mock("highlight.js/styles/github-dark.css", () => ({}));
 
 const requireFromWeb = createRequire(new URL("../apps/web/package.json", import.meta.url));
-const { createElement } = requireFromWeb("react") as typeof import("react");
-const { renderToStaticMarkup } = requireFromWeb("react-dom/server") as typeof import("react-dom/server");
+const requireFromRoot = createRequire(import.meta.url);
+if (requireFromWeb.resolve("react") !== requireFromRoot.resolve("react")) {
+  vi.doMock(requireFromWeb.resolve("react"), () => React);
+}
+
+const { loadMarkdownHighlight, loadMarkdownMath, renderMarkdown } = await import("../shared/markdownUi");
+const { PublicFrame } = await import("../apps/web/src/components/polynetLanding/ConversionLanding");
+const { WebCommunityResourceViewerContent } = await import("../apps/web/src/components/WebCommunityResourceViewerContent");
+import type { CommunityResource } from "../apps/web/src/components/communityResourcesContracts";
+
+const { createElement } = React;
 
 function renderResourceMarkdown(markdown: string): string {
   return renderToStaticMarkup(
@@ -19,7 +27,42 @@ function renderResourceMarkdown(markdown: string): string {
   );
 }
 
+describe("deferred markdown math and syntax highlighting", () => {
+  it("renders plain code blocks and fallback math before deferred modules load, then highlights and formats after resolution", async () => {
+    const preCodeMarkup = renderResourceMarkdown("```ts\nconst answer = 42;\n```");
+    expect(preCodeMarkup).toContain("const answer = 42;");
+    expect(preCodeMarkup).not.toContain("hljs-keyword");
+
+    const preMathMarkup = renderResourceMarkdown("Before $a +\nb$ after");
+    expect(preMathMarkup).toContain("Before");
+    expect(preMathMarkup).not.toContain('class="katex"');
+
+    await Promise.all([loadMarkdownHighlight(), loadMarkdownMath()]);
+
+    const postCodeMarkup = renderResourceMarkdown("```ts\nconst answer = 42;\n```");
+    expect(postCodeMarkup).toContain("hljs-keyword");
+
+    const postMathMarkup = renderResourceMarkdown("Before $a +\nb$ after");
+    expect(postMathMarkup).toContain('class="katex"');
+    expect(postMathMarkup).toContain("Before");
+    expect(postMathMarkup).toContain("after");
+  });
+
+  it("links the public landing footer directly to standalone /privacy and /terms pages", () => {
+    const markup = renderToStaticMarkup(
+      createElement(PublicFrame, { onJoin: () => undefined }, createElement("p", null, "Body")),
+    );
+    expect(markup).toContain('href="/privacy"');
+    expect(markup).toContain('href="/terms"');
+    expect(markup).not.toContain("polynet-onboarding-legal-modal");
+  });
+});
+
 describe("community resource markdown rendering", () => {
+  beforeAll(async () => {
+    await loadMarkdownMath();
+  });
+
   it("leaves the shared renderer hierarchy unchanged unless a surface opts in", () => {
     const markup = renderToStaticMarkup(
       createElement("div", null, renderMarkdown("# Original heading")),

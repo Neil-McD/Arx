@@ -3,18 +3,18 @@ id: product.memory
 title: Community Memory
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-11-25
 ---
 
 # Community Memory
 
 ## Definition
 
-Community memory is accepted, community-owned intelligence derived from
-authorized community evidence.
+Community memory is living, community-owned knowledge kept as cited notes by
+the community agent, alongside the founder's handbook and curated resources.
 
-It is distinct from raw chat, private member-agent conversations, resources,
-and temporary retrieval results.
+It is distinct from raw chat, private member conversations, and temporary
+retrieval results.
 
 ## Why It Exists
 
@@ -23,16 +23,14 @@ message as truth or forcing members to repeat established knowledge.
 
 ## System Mental Model
 
-Community activity produces evidence. The compiler can create bounded
-candidates. Community cognition evaluates candidates. Only accepted
-intelligence enters the community memory directory.
+Community activity produces shared public discussions and lessons. The
+community agent curates living memory notes with citations to their source
+evidence, and owners can inspect, add, or remove notes at any time.
 
 ```text
-activity
-  -> evidence
-  -> candidate knowledge
-  -> community cognition
-  -> accepted community memory
+shared community activity
+  -> cited source evidence
+  -> community memory notes
 ```
 
 Memory remains a permission-filtered projection over canonical cloud records.
