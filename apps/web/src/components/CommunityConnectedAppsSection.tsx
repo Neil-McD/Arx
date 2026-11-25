@@ -4,7 +4,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { announceCommunityAppLinksChanged, COMMUNITY_PLANS_CHANGED_EVENT } from "../controllers/communityAppLinks";
 import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
-import { buildConnectedAppSetupPrompt } from "../../../../shared/connectedAppSetupPrompt";
+import {
+  buildConnectedAppSetupPrompt,
+  buildCustomLandingPagePrompt,
+} from "../../../../shared/connectedAppSetupPrompt";
 import { fetchCloudCommunityTiers, type CloudCommunityTier } from "../../../../shared/cloudCommunityTiersGateway";
 import {
   fetchCloudConnectedApps,
@@ -24,7 +27,7 @@ function apiOrigin(): string {
   return convex ? convex.replace(".convex.cloud", ".convex.site") : "";
 }
 
-export function CommunityConnectedAppsSection(props: { communityId: string; communityName?: string; communitySlug?: string; session: unknown; ensureSession: (session: any) => Promise<any | null> }) {
+export function CommunityConnectedAppsSection(props: { communityId: string; communityName?: string; communitySlug?: string; communityOneLiner?: string | null; session: unknown; ensureSession: (session: any) => Promise<any | null> }) {
   const [apps, setApps] = useState<CloudConnectedApp[] | null>(null);
   const [adding, setAdding] = useState<{ name: string; appUrl: string; webhookUrl: string } | null>(null);
   // One address at a time: where members open the app, or where webhooks go.
@@ -77,6 +80,23 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
     });
     void navigator.clipboard?.writeText(prompt).then(() => { setCopied(app.app_id); window.setTimeout(() => setCopied(null), 2000); }, () => setError("Couldn't copy. Open the guide instead."));
+  };
+  const copyLandingPagePrompt = () => {
+    if (!communityUrl || !props.communitySlug) return;
+    const primaryApp = apps[0] ?? null;
+    const prompt = buildCustomLandingPagePrompt({
+      communityName: props.communityName ?? "your community",
+      communitySlug: props.communitySlug,
+      communityUrl,
+      oneLiner: props.communityOneLiner ?? null,
+      tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
+      appName: primaryApp?.name ?? null,
+      appUrl: primaryApp?.app_url ?? null,
+    });
+    void navigator.clipboard?.writeText(prompt).then(
+      () => { setCopied("landing-page"); window.setTimeout(() => setCopied(null), 2000); },
+      () => setError("Couldn't copy the landing page prompt. Try again."),
+    );
   };
   const addressRow = (app: CloudConnectedApp, field: "appUrl" | "webhookUrl") => {
     const isApp = field === "appUrl";
@@ -188,6 +208,18 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
           {communityUrl ? <SettingsRow label="Link to your community" help="Put it in your app; the prompt suggests where."><span className="settings-v1-value is-mono">{communityUrl}</span></SettingsRow> : null}
           <SettingsRow label="The guide" help="How connected apps work, step by step.">
             <a className={settingsButtonClass()} href="/docs/guides/connect-your-app" target="_blank" rel="noreferrer">Read the guide</a>
+          </SettingsRow>
+        </SettingsGroup>
+      ) : null}
+      {communityUrl ? (
+        <SettingsGroup label="Custom landing page">
+          <SettingsRow
+            label="Landing page prompt"
+            help="Paste into your AI to build a custom site hosted anywhere (Vercel, Cloudflare). Every button sends visitors straight to your Polynet join and checkout page."
+          >
+            <SettingsButton onClick={copyLandingPagePrompt}>
+              {copied === "landing-page" ? "Copied" : "Copy landing page prompt"}
+            </SettingsButton>
           </SettingsRow>
         </SettingsGroup>
       ) : null}

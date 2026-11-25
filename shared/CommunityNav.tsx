@@ -279,8 +279,8 @@ export const CommunityNav = memo(function CommunityNav({
   }, [channelRowsSlug, channels.length, showChannelLoadingSkeleton]);
   // Design v1: the page rows and the foot hold their place too. How many a
   // person sees depends on their role, which arrives with the access record.
-  const pageRows = (onOpenPods ? 1 : 0) + 2 + (appLinks?.length ?? 0) + (isV1 && onOpenMembers && canViewMembersActiveCommunity ? 1 : 0);
-  const footRows = (canViewActiveCommunityAnalytics ? 1 : 0) + (canCopyJoinLink ? 1 : 0);
+  const pageRows = (onOpenPods ? 1 : 0) + 2 + (isV1 && onOpenMembers && canViewMembersActiveCommunity ? 1 : 0);
+  const footRows = (canViewActiveCommunityAnalytics ? 1 : 0) + (appLinks?.length ?? 0) + (canCopyJoinLink ? 1 : 0);
   const reservedPageRows = navRowsToReserve("pages", recallNavRows(channelRowsSlug, "pages"));
   const reservedFootRows = navRowsToReserve("foot", recallNavRows(channelRowsSlug, "foot"));
   useEffect(() => {
@@ -828,12 +828,6 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
-          {(appLinks ?? []).map((app) => (
-            <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={`Open ${app.name}`}>
-              <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
-              <span className="nav-item-label">{app.name}</span>
-            </a>
-          ))}
           {isV1 && onOpenMembers && canViewMembersActiveCommunity ? (
             <button className={showActiveSelection && communityTab === "members" ? "nav-item nav-item-members active" : "nav-item nav-item-members"} type="button" onClick={onOpenMembers} title="Members" aria-current={showActiveSelection && communityTab === "members" ? "page" : undefined}>
               <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>
@@ -889,9 +883,10 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
       ) : isV1 ? (
-        // Design system v1: the foot is Analytics (hosts), then Invite people
-        // (anyone who may invite). Settings and Your guide are in the account menu.
-        canCopyJoinLink || canViewActiveCommunityAnalytics ? (
+        // Design system v1: the foot is Analytics (hosts), connected app launch
+        // buttons (anyone), then Invite people (anyone who may invite).
+        // Settings and Your guide are in the account menu.
+        canCopyJoinLink || canViewActiveCommunityAnalytics || (appLinks?.length ?? 0) > 0 ? (
           <div className="community-nav-footer">
             {canViewActiveCommunityAnalytics ? (
               <button
@@ -904,6 +899,15 @@ export const CommunityNav = memo(function CommunityNav({
                 <span className="nav-item-label">Analytics</span>
               </button>
             ) : null}
+            {(appLinks ?? []).map((app) => {
+              const launchLabel = /^launch\b/i.test(app.name) ? app.name : `Launch ${app.name}`;
+              return (
+                <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
+                  <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
+                  <span className="nav-item-label">{launchLabel}</span>
+                </a>
+              );
+            })}
             {canCopyJoinLink ? (
               <button
                 className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
@@ -920,8 +924,17 @@ export const CommunityNav = memo(function CommunityNav({
             ) : null}
           </div>
         ) : null
-      ) : canCopyJoinLink ? (
+      ) : canCopyJoinLink || (appLinks?.length ?? 0) > 0 ? (
         <div className="community-nav-footer">
+          {(appLinks ?? []).map((app) => {
+            const launchLabel = /^launch\b/i.test(app.name) ? app.name : `Launch ${app.name}`;
+            return (
+              <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
+                <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
+                <span className="nav-item-label">{launchLabel}</span>
+              </a>
+            );
+          })}
           {canCopyJoinLink ? (
           <button
             className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}

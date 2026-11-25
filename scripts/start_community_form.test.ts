@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "vitest";
+import { createRequire } from "node:module";
+import { expect, test, vi } from "vitest";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
-import { discoverPriceWord } from "../apps/web/src/v1/KitDiscover";
-import { startCardCommunity, startCommunityListingLine } from "../apps/web/src/v1/KitStartCommunity";
+const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
+const root = createRequire(import.meta.url);
+if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
+
+const { discoverPriceWord } = await import("../apps/web/src/v1/KitDiscover");
+const { KitStartLaunch, startCardCommunity, startCommunityListingLine } = await import("../apps/web/src/v1/KitStartCommunity");
 
 // Start a community (design v1): three steps in one window, with the card
 // Discover will show beside each.
@@ -59,4 +66,37 @@ test("WebCreateCommunityModal draws KitStartCommunity directly inside the blocki
 test("the dialog's Tab stops leave out anything inside an inert part", () => {
   const modal = readFileSync(new URL("../apps/web/src/components/WebBlockingSetupModal.tsx", import.meta.url), "utf8");
   expect(modal).toContain('.filter((element) => !element.closest("[inert]"))');
+});
+
+test("step 3 launch renders the AI harness logos, universal copy prompt button, and optional app connect toggle", () => {
+  const html = renderToStaticMarkup(React.createElement(KitStartLaunch, {
+    titleId: "launch-title",
+    card: {
+      slug: "sunrise-climbing",
+      name: "Sunrise Climbing",
+      oneLiner: "Morning climbers.",
+      avatarUrl: null,
+      bannerUrl: null,
+      monthlyCents: null,
+      hostName: "Neil",
+      hostAvatarUrl: null,
+    },
+    listed: false,
+    saving: false,
+    note: null,
+    error: null,
+    opening: false,
+    copied: false,
+    onCopy: () => {},
+    onCopyAiSetup: () => {},
+    onConnectApp: () => {},
+    onOpen: () => {},
+  }));
+  expect(html).toContain("Connect your AI");
+  expect(html).toContain("Copy setup prompt");
+  for (const harness of ["Claude", "ChatGPT", "Codex", "Cursor", "Grok", "OpenClaw", "Hermes"]) {
+    expect(html).toContain(harness);
+  }
+  expect(html).toContain("Have a software product? Connect your app");
+  expect(html).toContain("Open community");
 });

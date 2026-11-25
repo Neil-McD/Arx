@@ -51,6 +51,24 @@ export function splitCommunityEvents<T extends ListedEvent>(events: T[], now: nu
   return { featured: notOver[0] ?? null, comingUp: notOver.slice(1), cancelled, past };
 }
 
+// When a repeating event's next live date is featured, check whether an earlier
+// upcoming date of that same series was cancelled and hasn't passed yet.
+export function earlierCancelledForEvent<T extends ListedEvent>(
+  event: T,
+  cancelled: readonly T[],
+): T | null {
+  const key = event.parent_event_id ?? event.id;
+  const startMs = Date.parse(event.starts_at);
+  return (
+    cancelled.find(
+      (candidate) =>
+        (candidate.parent_event_id ?? candidate.id) === key &&
+        candidate.cancellation_scope === "occurrence" &&
+        Date.parse(candidate.starts_at) < startMs,
+    ) ?? null
+  );
+}
+
 function startOfDay(ms: number): number {
   const date = new Date(ms);
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { buildPolynetMcpSetupForOrigin } from "../../../../shared/polynetMcpSetup";
+import { KitAiHarnessLogos } from "../v1/KitAiHarnessLogos";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
 
 export type WebPolynetMcpAccountSectionProps = {
@@ -41,9 +42,14 @@ export function WebPolynetMcpAccountSection(
       <SettingsRow
         label="Connect your AI"
         help={
-          props.session
-            ? "Paste the setup into Claude Code, Codex or another tool, then sign in once. It sees only communities you're in."
-            : "Sign in to connect your AI."
+          props.session ? (
+            <>
+              <span>Paste one universal prompt into your AI tool, then sign in once. It sees only communities you&apos;re in.</span>
+              <KitAiHarnessLogos compact />
+            </>
+          ) : (
+            "Sign in to connect your AI."
+          )
         }
       >
         {props.session ? (

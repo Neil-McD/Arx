@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { buildConnectedAppSetupPrompt } from "../shared/connectedAppSetupPrompt";
+import {
+  buildConnectedAppSetupPrompt,
+  buildCustomLandingPagePrompt,
+} from "../shared/connectedAppSetupPrompt";
 
 const guide = readFileSync(join(__dirname, "..", "docs", "product", "guides", "connect-your-app.md"), "utf8");
 
@@ -70,4 +73,25 @@ test("the guide's webhook check accepts Polynet's real signature and rejects a t
   const verify = (rawBody: string) => `v1,${createHmac("sha256", Buffer.from(secret.replace(/^whsec_/, ""), "base64")).update(`${id}.${timestamp}.${rawBody}`).digest("base64")}`;
   expect(verify(body)).toBe(sent);
   expect(verify(body.replace("a@b.co", "x@b.co"))).not.toBe(sent);
+});
+
+test("custom landing page prompt routes every CTA to the community join link and reflects plans and app", () => {
+  const prompt = buildCustomLandingPagePrompt({
+    communityName: "Distribution Engineer",
+    communitySlug: "distribution-engineer",
+    communityUrl: "https://www.polynet.ai/c/distribution-engineer",
+    oneLiner: "Ship AI agents that print distribution.",
+    tiers: [
+      { key: "member", name: "Connect", grants: ["de:connect"] },
+      { key: "pro", name: "Pro", grants: ["de:pro"] },
+    ],
+    appName: "DE App",
+    appUrl: "https://app.de.example",
+  });
+  expect(prompt).toContain("https://www.polynet.ai/c/distribution-engineer");
+  expect(prompt).toContain("Distribution Engineer");
+  expect(prompt).toContain("Ship AI agents that print distribution.");
+  expect(prompt).toContain("DE App (https://app.de.example)");
+  expect(prompt).toContain("Connect (includes: de:connect)");
+  expect(prompt).toContain("do not build a separate signup form or checkout flow");
 });

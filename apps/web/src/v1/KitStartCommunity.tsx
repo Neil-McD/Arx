@@ -5,9 +5,11 @@
 // Beside every step is the card Discover will show, filling in as you go.
 // The community is created on step 2's Next; step 3 is shown for it after.
 import { useState, type ReactNode } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { communityPageAddress, isValidCommunitySlug } from "../../../../shared/communitySlug";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { Btn, cx, Icon, KitApp } from "./kit";
+import { KitAiHarnessLogos } from "./KitAiHarnessLogos";
 import { DiscoverCard } from "./KitDiscover";
 import { monthlyCentsFromText, stashStartExtras } from "./startCommunityExtras";
 
@@ -242,6 +244,13 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
   );
 }
 
+export type LaunchConnectedAppResult = {
+  appId: string;
+  name: string;
+  appUrl: string | null;
+  secret: string;
+};
+
 // Step 3, shown for the community once it exists.
 export function KitStartLaunch(props: {
   titleId: string;
@@ -254,16 +263,30 @@ export function KitStartLaunch(props: {
   opening: boolean;
   copied: boolean;
   onCopy: () => void;
+  aiCopied?: boolean;
+  onCopyAiSetup?: () => void;
+  connectedApp?: LaunchConnectedAppResult | null;
+  connectingApp?: boolean;
+  connectAppError?: string | null;
+  appSecretCopied?: boolean;
+  appPromptCopied?: boolean;
+  onConnectApp?: (input: { name: string; appUrl: string }) => Promise<void> | void;
+  onCopyAppSecret?: () => void;
+  onCopyAppPrompt?: () => void;
   onOpen: () => void;
 }) {
   const link = `https://${communityPageAddress(props.card.slug)}`;
+  const [showAppConnect, setShowAppConnect] = useState(false);
+  const [appName, setAppName] = useState("");
+  const [appUrl, setAppUrl] = useState("");
+  const appExpanded = showAppConnect || Boolean(props.connectedApp);
   return (
     <StartStepFrame step={3} card={props.card}
       forward={<Btn go disabled={props.saving || props.opening} onClick={props.onOpen}>{props.opening ? "Opening…" : <>Open community <Icon name="arrow" /></>}</Btn>}
       cardLine={startCommunityListingLine({ listed: props.listed, hasPicture: Boolean(props.card.avatarUrl), hasBanner: Boolean(props.card.bannerUrl), oneLiner: props.card.oneLiner })}>
       <div>
         <h2 id={props.titleId}>{props.card.name.trim() || "Your community"} is ready</h2>
-        <p className={cx("startc-sub")}>{props.saving ? "Saving what you wrote…" : "Send this link to the first people you want in."}</p>
+        <p className={cx("startc-sub")}>{props.saving ? "Saving what you wrote…" : "Share your link, or connect your AI to set everything up in minutes."}</p>
       </div>
       <div className={cx("startc-field")}>
         <span>Your invite link</span>
@@ -272,6 +295,94 @@ export function KitStartLaunch(props: {
           <Btn small onClick={props.onCopy}>{props.copied ? "Copied" : "Copy"}</Btn>
         </div>
       </div>
+      {props.onCopyAiSetup ? (
+        <div className={cx("startc-ai")}>
+          <div className={cx("startc-ai-head")}>
+            <div>
+              <strong>Connect your AI</strong>
+              <p>Paste one prompt into your favorite AI tool to link Polynet and have it help set up channels, courses, and your Member Board.</p>
+            </div>
+            <Btn small onClick={props.onCopyAiSetup}>{props.aiCopied ? "Copied" : "Copy setup prompt"}</Btn>
+          </div>
+          <KitAiHarnessLogos compact />
+        </div>
+      ) : null}
+      {props.onConnectApp ? (
+        <div className={cx("startc-app-wrap")}>
+          <button
+            type="button"
+            className={cx("startc-app-toggle")}
+            aria-expanded={appExpanded}
+            onClick={() => setShowAppConnect((open) => !open)}
+          >
+            {appExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+            <span>{props.connectedApp ? `Connected app: ${props.connectedApp.name}` : "Have a software product? Connect your app"}</span>
+            <em>Optional</em>
+          </button>
+          {appExpanded ? (
+            <div className={cx("startc-app-box")}>
+              {props.connectedApp ? (
+                <>
+                  <p className={cx("startc-app-copy")}>
+                    {props.connectedApp.appUrl
+                      ? `Members will see a Launch ${props.connectedApp.name} button in your sidebar.`
+                      : `${props.connectedApp.name} is connected. You can add its link anytime in Settings.`}
+                  </p>
+                  <div className={cx("startc-field")}>
+                    <span>App secret <em>· shown once</em></span>
+                    <div className={cx("startc-link")}>
+                      <input type="text" readOnly value={props.connectedApp.secret} aria-label="App secret" onFocus={(event) => event.target.select()} />
+                      <Btn small onClick={props.onCopyAppSecret}>{props.appSecretCopied ? "Copied" : "Copy"}</Btn>
+                    </div>
+                  </div>
+                  {props.onCopyAppPrompt ? (
+                    <div className={cx("startc-app-acts")}>
+                      <Btn small onClick={props.onCopyAppPrompt}>{props.appPromptCopied ? "Copied" : "Copy app prompt"}</Btn>
+                      <span>Paste in your app&apos;s coding AI to wire up access.</span>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div className={cx("startc-app-fields")}>
+                    <label className={cx("startc-field")}>
+                      <span>App name</span>
+                      <input
+                        type="text"
+                        maxLength={60}
+                        value={appName}
+                        placeholder="e.g. Acme Studio"
+                        onChange={(event) => setAppName(event.target.value)}
+                      />
+                    </label>
+                    <label className={cx("startc-field")}>
+                      <span>App address <em>· optional</em></span>
+                      <input
+                        type="text"
+                        inputMode="url"
+                        value={appUrl}
+                        placeholder="https://your-app.com"
+                        onChange={(event) => setAppUrl(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className={cx("startc-app-acts")}>
+                    <Btn
+                      small
+                      disabled={props.connectingApp || !appName.trim()}
+                      onClick={() => void props.onConnectApp?.({ name: appName.trim(), appUrl: appUrl.trim() })}
+                    >
+                      {props.connectingApp ? "Connecting…" : "Connect app"}
+                    </Btn>
+                    <span>Adds a Launch button in your sidebar and gives you a setup prompt.</span>
+                  </div>
+                  {props.connectAppError ? <p className={cx("startc-err")} role="alert">{props.connectAppError}</p> : null}
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {props.note ? <p className={cx("startc-sub")} role="status">{props.note}</p> : null}
       {props.error ? <p className={cx("startc-err")} role="alert">{props.error}</p> : null}
     </StartStepFrame>

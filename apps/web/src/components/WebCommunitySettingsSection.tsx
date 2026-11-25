@@ -836,6 +836,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         communityId={resolvedActiveCommunity.id}
                         communityName={resolvedActiveCommunity.name}
                         communitySlug={resolvedActiveCommunity.slug}
+                        communityOneLiner={resolvedActiveCommunity.one_liner}
                         session={props.session}
                         ensureSession={props.ensureSession}
                       />

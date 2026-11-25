@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { eventDateBlock, eventDayWord, featuredEventLabel, splitCommunityEvents } from "../apps/web/src/components/communityEventsList";
+import {
+  earlierCancelledForEvent,
+  eventDateBlock,
+  eventDayWord,
+  featuredEventLabel,
+  splitCommunityEvents,
+} from "../apps/web/src/components/communityEventsList";
 
 const now = new Date(2026, 10, 13, 9, 40).getTime(); // Fri 13 Nov 2026, 9:40
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
@@ -40,6 +46,35 @@ test("upcoming cancelled dates stay visible without hijacking featured; cancelle
   expect(parts.comingUp.map((event) => event.id)).toEqual(["call:27"]);
   expect(parts.cancelled.map((event) => event.id)).toEqual(["call:13", "series:14", "call:20"]);
   expect(parts.past).toEqual([]);
+});
+
+test("earlierCancelledForEvent surfaces only an earlier upcoming cancelled occurrence of the same series", () => {
+  const weekly = (
+    id: string,
+    starts: string,
+    extra: Partial<{ ends_at: string | null; status: string; cancellation_scope: "occurrence" | "series" | null; parent_event_id: string }> = {},
+  ) => ({
+    ...ev(id, starts, extra),
+    parent_event_id: extra.parent_event_id ?? "call",
+    cancellation_scope: extra.cancellation_scope ?? null,
+  });
+
+  const parts = splitCommunityEvents([
+    weekly("call:27", at(27, 10), { status: "cancelled", cancellation_scope: "occurrence" }),
+    weekly("call:34", at(30, 10)),
+    weekly("other:20", at(20, 10), { status: "cancelled", cancellation_scope: "occurrence", parent_event_id: "other" }),
+  ], now);
+  expect(parts.featured?.id).toBe("call:34");
+  expect(earlierCancelledForEvent(parts.featured!, parts.cancelled)?.id).toBe("call:27");
+
+  // Once the cancelled date has passed, it drops out of cancelled and no longer shows.
+  const afterCancelled = new Date(2026, 10, 28, 12, 0).getTime();
+  const afterParts = splitCommunityEvents([
+    weekly("call:27", at(27, 10), { ends_at: at(27, 11), status: "cancelled", cancellation_scope: "occurrence" }),
+    weekly("call:34", at(30, 10)),
+  ], afterCancelled);
+  expect(afterParts.featured?.id).toBe("call:34");
+  expect(earlierCancelledForEvent(afterParts.featured!, afterParts.cancelled)).toBeNull();
 });
 
 test("a repeating event shows once: its next date coming up, its latest date in past", () => {

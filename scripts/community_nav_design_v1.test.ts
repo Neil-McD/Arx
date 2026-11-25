@@ -189,3 +189,29 @@ test("design v1 puts adding a channel at the end of the Channels heading; classi
   expect(v1).not.toContain("community-channel-add");
   expect(renderToStaticMarkup(React.createElement(CommunityNav, host))).toContain(">Add Channel<");
 });
+
+test("connected apps render as Launch buttons in the footer directly above Invite people", () => {
+  const html = renderToStaticMarkup(React.createElement(CommunityNav, {
+    ...hostProps,
+    activeCommunity: { name: "Test", slug: "dawn-patrol" },
+    onCopyCommunityJoinLink: async () => true,
+    appLinks: [
+      { name: "Acme Studio", url: "https://acme.example" },
+      { name: "Launch Ops", url: "https://ops.example" },
+    ],
+  }));
+  const labels = labelsInOrder(html);
+  expect(labels.slice(-4)).toEqual(["Analytics", "Launch Acme Studio", "Launch Ops", "Invite people"]);
+  expect(html).toContain('href="https://acme.example"');
+  expect(html).toContain('title="Launch Acme Studio"');
+  expect(html).not.toContain("Launch Launch Ops");
+
+  // Regular members without invite or analytics permissions still see the footer launch button.
+  const memberHtml = renderToStaticMarkup(React.createElement(CommunityNav, {
+    ...baseProps,
+    layout: "v1" as const,
+    appLinks: [{ name: "Acme Studio", url: "https://acme.example" }],
+  }));
+  expect(memberHtml).toContain("community-nav-footer");
+  expect(labelsInOrder(memberHtml)).toContain("Launch Acme Studio");
+});
