@@ -278,7 +278,10 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
           state.fundingSource === "stripe" && founderPlanTierAllowsUsageBoosts(state.planTier),
       });
 
-      const dedupeKey = `founder-allowance:${String(settings.communityId)}:${state.cycleKey}:${milestone}`;
+      // Include the cycle's effective allowance ceiling so mid-cycle upgrades
+      // (e.g. Guide $3 -> Chief of Staff $20) or prepaid usage boosts generate
+      // distinct delivery keys while keeping retries at the same ceiling idempotent.
+      const dedupeKey = `founder-allowance:${String(settings.communityId)}:${state.cycleKey}:${state.allowanceMicros}:${milestone}`;
       const lifecycle = normalizeCommunityLifecycle(community);
 
       // Persist the notified milestone atomically alongside delivery so retries never double-alert.

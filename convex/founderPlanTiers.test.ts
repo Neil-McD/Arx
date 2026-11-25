@@ -634,13 +634,18 @@ describe("3-Tier Pricing ($0 Free / $20 Guide / $100 Chief of Staff) — Step 1"
       );
       await t.run(async (ctx: any) => {
         await ctx.db.patch(guideSync.usageCycleId, { settledCostMicros: 2_700_000 });
-        const cycle = await ctx.db.get(guideSync.usageCycleId);
-        // Simulate 100% alert already sent on Guide at $2.70/$3.00.
-        await ctx.db.patch(fx.guideSettingsId, {
-          allowanceAlertCycleKey: cycle.cycleKey,
-          allowanceAlertNotifiedPercent: 100,
-        });
       });
+      // Deliver the 80% allowance alert while on Guide ($2.70 / $3.00 = 90%).
+      const guideAlertPass: any = await t.mutation(
+        internal.communityAllowanceGuardrails.processFounderAllowanceAlertsPageInternal,
+        { nowMs: NOW + 500 },
+      );
+      expect(guideAlertPass.alertsSent).toBe(1);
+      const settingsAfterGuideAlert = await t.run(async (ctx: any) =>
+        ctx.db.get(fx.guideSettingsId),
+      );
+      expect(settingsAfterGuideAlert.allowanceAlertNotifiedPercent).toBe(80);
+
       // At $2.70 spent on $3.00 allowance, a $0.25 reservation succeeds ($2.70 + $0.25 = $2.95 <= $3.00)!
       const reserveAt270 = await t.run(async (ctx: any) =>
         await reserveFounderUsage({
@@ -665,7 +670,8 @@ describe("3-Tier Pricing ($0 Free / $20 Guide / $100 Chief of Staff) — Step 1"
         }),
       );
 
-      // 3. Mid-cycle upgrade Guide -> Chief of Staff re-arms allowanceAlertNotifiedPercent from 100 -> 0.
+      // 3. Mid-cycle upgrade Guide -> Chief of Staff re-arms allowanceAlertNotifiedPercent from 80 -> 0
+      //    AND later hitting 80% of $20 ($16.50) delivers a distinct thread notice + email job!
       await t.mutation(internal.founderBilling.syncFounderSubscriptionFromStripeInternal, {
         providerSubscriptionId: "sub_step2_guide",
         providerCustomerId: "cus_step2",
@@ -680,6 +686,27 @@ describe("3-Tier Pricing ($0 Free / $20 Guide / $100 Chief of Staff) — Step 1"
         ctx.db.get(fx.guideSettingsId),
       );
       expect(settingsAfterUpgrade.allowanceAlertNotifiedPercent).toBe(0);
+
+      await t.run(async (ctx: any) => {
+        await ctx.db.patch(guideSync.usageCycleId, { settledCostMicros: 16_500_000 });
+      });
+      const cosAlertPass: any = await t.mutation(
+        internal.communityAllowanceGuardrails.processFounderAllowanceAlertsPageInternal,
+        { nowMs: NOW + 2_500 },
+      );
+      expect(cosAlertPass.alertsSent).toBe(1);
+      const alertDeliveryCounts = await t.run(async (ctx: any) => {
+        const emails = await ctx.db.query("emailOutbox").collect();
+        const allowanceEmails = emails.filter(
+          (e: any) => e.templateKey === "founder_allowance_notice",
+        );
+        const messages = await ctx.db.query("cloudMessages").collect();
+        const allowanceMsgs = messages.filter(
+          (m: any) => m.contentJson?.meta?.kind === "founder_allowance_notice",
+        );
+        return { emailCount: allowanceEmails.length, messageCount: allowanceMsgs.length };
+      });
+      expect(alertDeliveryCounts).toEqual({ emailCount: 2, messageCount: 2 });
 
       // 4. Tier switch preparation fails closed on non-owners, same-tier no-op (incl. grandfathered $79),
       //    and risk-revoked subscriptions, while permitting valid active Guide <-> Chief of Staff switches.
