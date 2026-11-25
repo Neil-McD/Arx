@@ -8,10 +8,11 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation } from "./_generated/server";
+import { internalAction, internalMutation } from "./_generated/server";
 import { communityAgentIsOn } from "./communityApps";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
+import { readFounderInferencePricingFromEnv } from "./founderPlanPricing";
 import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
@@ -29,6 +30,7 @@ const internalRefs = internal as any;
 const DAY_MS = 24 * 60 * 60_000;
 const ALERT_PAGE_SIZE = 50;
 const MAX_ALERT_PAGES_PER_RUN = 20;
+const MAX_ALERT_CONTINUATION_ROUNDS = 20;
 const REENGAGEMENT_DRAFT_SCAN_LIMIT = 60;
 const REENGAGEMENT_MEMBER_CHECK_CAP = 25;
 
@@ -84,7 +86,16 @@ export async function readActiveCommunityAllowanceState(
     Math.floor(Number(activeCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)),
   );
   const settledMicros = Math.max(0, Math.floor(Number(activeCycle.settledCostMicros ?? 0)));
-  const maxReservation = Math.max(0, Math.floor(Number((activeCycle as any).maxRunReservationCostMicros ?? 0)));
+  // Stripe cycles store maxRunReservationCostMicros on the row; operator-grant
+  // cycles reserve from the same env pricing configuration used by admission.
+  const rowMaxReservation = Math.max(
+    0,
+    Math.floor(Number((activeCycle as any).maxRunReservationCostMicros ?? 0)),
+  );
+  const maxReservation =
+    rowMaxReservation > 0
+      ? rowMaxReservation
+      : Math.max(0, Math.floor(Number(readFounderInferencePricingFromEnv()?.maxRunReservationCostMicros ?? 0)));
   const exhausted =
     allowanceMicros > 0 &&
     (settledMicros >= allowanceMicros ||
@@ -293,18 +304,50 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
   },
 });
 
-export async function runFounderAllowanceAlertsForAction(ctx: any, nowMs: number) {
-  let cursor: string | null = null;
+export async function runFounderAllowanceAlertsForAction(
+  ctx: any,
+  nowMs: number,
+  options?: { cursor?: string | null; continuationRound?: number; pageSize?: number },
+) {
+  let cursor: string | null = options?.cursor ?? null;
+  const round = Math.max(0, Math.floor(options?.continuationRound ?? 0));
   let totalAlertsSent = 0;
+  let isDone = true;
   for (let page = 0; page < MAX_ALERT_PAGES_PER_RUN; page += 1) {
     const res: { alertsSent: number; isDone: boolean; continueCursor: string | null } =
       await ctx.runMutation(
         internalRefs.communityAllowanceGuardrails.processFounderAllowanceAlertsPageInternal,
-        { nowMs, cursor },
+        {
+          nowMs,
+          cursor,
+          ...(options?.pageSize !== undefined ? { pageSize: options.pageSize } : {}),
+        },
       );
     totalAlertsSent += res.alertsSent;
-    if (res.isDone || !res.continueCursor) break;
+    isDone = res.isDone || !res.continueCursor;
     cursor = res.continueCursor;
+    if (isDone) break;
   }
-  return { alertsSent: totalAlertsSent };
+  if (!isDone && cursor && round < MAX_ALERT_CONTINUATION_ROUNDS) {
+    await ctx.scheduler.runAfter(
+      2_000,
+      internalRefs.communityAllowanceGuardrails.continueFounderAllowanceAlertsInternal,
+      { nowMs, cursor, continuationRound: round + 1 },
+    );
+  }
+  return { alertsSent: totalAlertsSent, continued: !isDone && Boolean(cursor) };
 }
+
+export const continueFounderAllowanceAlertsInternal = internalAction({
+  args: {
+    nowMs: v.number(),
+    cursor: v.string(),
+    continuationRound: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await runFounderAllowanceAlertsForAction(ctx, args.nowMs, {
+      cursor: args.cursor,
+      continuationRound: args.continuationRound,
+    });
+  },
+});

@@ -306,4 +306,112 @@ describe("Monthly AI allowance guardrails & founder alerts (Slice 1)", () => {
     );
     expect(repeat100.alertsSent).toBe(0);
   });
+
+  test("resolves operator-funded cycle reservation headroom from env pricing and paginates alerts across multiple pages", async () => {
+    const t = convexTest(schema, modules);
+    const prevInput = process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+    const prevOutput = process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+    const prevMaxRes = process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
+    process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "100000";
+    process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = "500000";
+    process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
+
+    try {
+      const fx = await t.run(async (ctx: any) => {
+        const ownerId = await ctx.db.insert("users", {
+          authSubject: "op-owner-ag",
+          displayName: "Operator",
+          email: "op@example.com",
+          emailVerifiedAt: NOW - 60 * DAY_MS,
+          createdAt: NOW - 60 * DAY_MS,
+          updatedAt: NOW - 60 * DAY_MS,
+        });
+        await ctx.db.insert("operatorRoles", {
+          userId: ownerId,
+          role: "owner",
+          active: true,
+          createdAt: NOW - 60 * DAY_MS,
+          updatedAt: NOW - 60 * DAY_MS,
+        });
+        const communityA = await ctx.db.insert("communities", {
+          ownerId,
+          slug: "op-club-a",
+          name: "Op Club A",
+          visibility: "published",
+          inferenceFundingPolicy: "managed_required",
+          entryPolicy: "open",
+          activeMemberCount: 1,
+          createdAt: NOW - 60 * DAY_MS,
+          updatedAt: NOW - 60 * DAY_MS,
+        });
+        const communityB = await ctx.db.insert("communities", {
+          ownerId,
+          slug: "op-club-b",
+          name: "Op Club B",
+          visibility: "published",
+          inferenceFundingPolicy: "managed_required",
+          entryPolicy: "open",
+          activeMemberCount: 1,
+          createdAt: NOW - 60 * DAY_MS,
+          updatedAt: NOW - 60 * DAY_MS,
+        });
+        await ctx.db.insert("communityMemberCoachSettings", {
+          communityId: communityA,
+          enabled: true,
+          autoReasons: [],
+          createdAt: NOW - 10 * DAY_MS,
+          updatedAt: NOW - 10 * DAY_MS,
+        });
+        await ctx.db.insert("communityMemberCoachSettings", {
+          communityId: communityB,
+          enabled: true,
+          autoReasons: [],
+          createdAt: NOW - 10 * DAY_MS,
+          updatedAt: NOW - 10 * DAY_MS,
+        });
+        // Operator cycle for communityB sits at $19.20 / $20.00 -> cannot reserve $1.00 headroom -> exhausted!
+        await ctx.db.insert("operatorGrantUsageCycles", {
+          communityId: communityB,
+          cycleKey: `${String(communityB)}:2026-11`,
+          cycleStartAt: Date.UTC(2026, 10, 1, 0, 0, 0),
+          cycleEndAt: Date.UTC(2026, 11, 1, 0, 0, 0),
+          includedCostMicros: 20_000_000,
+          reservedCostMicros: 0,
+          settledCostMicros: 19_200_000,
+          createdAt: NOW - 10 * DAY_MS,
+          updatedAt: NOW - HOUR_MS,
+        });
+        return { communityB };
+      });
+
+      // Page size 1 forces continuation across both communities.
+      const page1: any = await t.mutation(
+        internal.communityAllowanceGuardrails.processFounderAllowanceAlertsPageInternal,
+        { nowMs: NOW, cursor: null, pageSize: 1 },
+      );
+      expect(page1.isDone).toBe(false);
+      expect(page1.continueCursor).toBeTruthy();
+
+      const page2: any = await t.mutation(
+        internal.communityAllowanceGuardrails.processFounderAllowanceAlertsPageInternal,
+        { nowMs: NOW, cursor: page1.continueCursor, pageSize: 1 },
+      );
+      expect(page1.alertsSent + page2.alertsSent).toBe(1);
+
+      const msgs = await t.run(async (ctx: any) => await ctx.db.query("cloudMessages").collect());
+      expect(msgs).toHaveLength(1);
+      expect(msgs[0]?.contentJson?.meta).toMatchObject({
+        kind: "founder_allowance_notice",
+        milestone: 100,
+        cycle_key: `${String(fx.communityB)}:2026-11`,
+      });
+    } finally {
+      if (prevInput === undefined) delete process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+      else process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = prevInput;
+      if (prevOutput === undefined) delete process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+      else process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = prevOutput;
+      if (prevMaxRes === undefined) delete process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
+      else process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = prevMaxRes;
+    }
+  });
 });
