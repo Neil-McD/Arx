@@ -4,20 +4,30 @@
 // outcome note, and an optional founder instruction the proactive agent reads
 // on its next check-in.
 
-export type JourneyCardStatus = "on_track" | "stuck" | "needs_you" | "done";
+export type JourneyCardStatus = "needs_you" | "stuck" | "on_track" | "quiet" | "done";
 
 export const JOURNEY_CARD_STATUSES: readonly JourneyCardStatus[] = [
   "needs_you",
   "stuck",
   "on_track",
+  "quiet",
   "done",
 ] as const;
 
 export const JOURNEY_CARD_STATUS_LABELS: Record<JourneyCardStatus, string> = {
-  on_track: "On track",
-  stuck: "Stuck",
   needs_you: "Needs you",
+  stuck: "Stuck",
+  on_track: "On track",
+  quiet: "Quiet",
   done: "Done",
+};
+
+export const JOURNEY_CARD_STATUS_SORT_RANK: Record<JourneyCardStatus, number> = {
+  needs_you: 0,
+  stuck: 1,
+  on_track: 2,
+  done: 3,
+  quiet: 4,
 };
 
 export type JourneyStageDefinition = {
@@ -108,11 +118,16 @@ export function defaultStageKeyForMember(args: {
   stages: readonly JourneyStageDefinition[];
   joinedAtMs: number | null;
   lastActiveAtMs: number | null;
+  participationCount?: number;
   nowMs: number;
 }): string {
   const stages = args.stages.length > 0 ? args.stages : DEFAULT_JOURNEY_STAGES;
   const firstKey = stages[0]!.key;
   const secondKey = stages[Math.min(1, stages.length - 1)]!.key;
+  const thirdKey = stages.length >= 3 ? stages[2]!.key : secondKey;
+  const participation = Math.max(0, Math.floor(Number(args.participationCount ?? 0)));
+  if (stages.length >= 3 && participation >= 3) return thirdKey;
+  if (stages.length >= 2 && participation >= 1) return secondKey;
   if (!args.joinedAtMs) return firstKey;
   const ageDays = (args.nowMs - args.joinedAtMs) / DAY_MS;
   if (ageDays <= 7) return firstKey;
@@ -136,8 +151,30 @@ export function deriveMemberJourneyStatus(args: {
   if (lastStage && args.stages.length >= 2 && args.stageKey === lastStage.key) return "done";
   const referenceAt = args.lastActiveAtMs ?? args.joinedAtMs;
   const quietDays = referenceAt ? (args.nowMs - referenceAt) / DAY_MS : 0;
-  if (quietDays >= 14 || args.unansweredCoachCount >= 1) return "stuck";
+  // Separate long-dormant members (30+ days) into calm "Quiet" so actionable
+  // "Stuck" cards (recent stalls or unanswered check-ins) stay high-signal.
+  if (quietDays >= 30) return "quiet";
+  if (args.unansweredCoachCount >= 1 || quietDays >= 10) return "stuck";
   return "on_track";
+}
+
+export function formatMemberActivitySummary(args: {
+  postsCount: number;
+  lessonsDoneCount: number;
+  lessonsCapped?: boolean;
+}): string | null {
+  const parts: string[] = [];
+  if (args.postsCount > 0) {
+    parts.push(args.postsCount >= 5 ? "5+ posts" : `${args.postsCount} ${args.postsCount === 1 ? "post" : "posts"}`);
+  }
+  if (args.lessonsDoneCount > 0) {
+    parts.push(
+      args.lessonsCapped
+        ? `${args.lessonsDoneCount}+ lessons`
+        : `${args.lessonsDoneCount} ${args.lessonsDoneCount === 1 ? "lesson" : "lessons"}`,
+    );
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export function formatCoachOutcomeSummary(check: {

@@ -327,53 +327,64 @@ export function KitMembersPage(props: {
   );
 
   const page = (
-    <section className={`members-page is-kit${picked ? " has-picked" : ""}`} aria-label="Community members">
+    <section className={`members-page is-kit${picked ? " has-picked" : ""}${surfaceMode === "board" ? " is-board-mode" : ""}`} aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
           {/* One header style everywhere: the title plus the Table/Board switch. */}
           <Top title="Members" titleView={5} actions={modeToggle} />
-          <div className={cx("page")} style={{ overflowY: "auto" }}>
+          <div
+            className={cx("page")}
+            style={
+              surfaceMode === "board"
+                ? {
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                    paddingLeft: 28,
+                    paddingRight: 28,
+                  }
+                : { minWidth: 0, overflowY: "auto" }
+            }
+          >
             <p className={cx("sub")} style={{ margin: 0 }}>{lead}</p>
             <WhoCanJoinLine admission={props.admission} waiting={waiting} />
             <JoinRequestsLine count={waiting} open={side === "requests"} onOpen={() => setSide(side === "requests" ? null : "requests")} />
             {surfaceMode === "board" ? (
-              <>
-                <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => { setView(id as MembersView); setSurfaceMode("table"); }}
-                  onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />
-                <Suspense fallback={<p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>}>
-                  <KitMembersBoard
-                    board={board}
-                    loading={boardLoading}
-                    error={boardError}
-                    search={search}
-                    openKey={side === "record" ? openKey : null}
-                    now={now}
-                    timeFor={memberTimeFor}
-                    onOpenCard={openRecord}
-                    onMoveCard={async (membershipId, stageKey) => {
-                      if (!scope) return;
-                      await updateCloudMemberJourneyCard({
-                        session: scope.session,
-                        communityId: scope.communityId,
-                        membershipId,
-                        stageKey,
-                      });
-                      setBoardVersion((version) => version + 1);
-                    }}
-                    onSaveStages={async (stages) => {
-                      if (!scope) return;
-                      await saveCloudCommunityJourneyStages({
-                        session: scope.session,
-                        communityId: scope.communityId,
-                        stages,
-                      });
-                      setBoardVersion((version) => version + 1);
-                    }}
-                    getAvatarColor={props.getAvatarColor}
-                    getInitials={props.getInitials}
-                  />
-                </Suspense>
-              </>
+              <Suspense fallback={<p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>}>
+                <KitMembersBoard
+                  board={board}
+                  loading={boardLoading}
+                  error={boardError}
+                  search={search}
+                  onSearch={setSearch}
+                  openKey={side === "record" ? openKey : null}
+                  now={now}
+                  timeFor={memberTimeFor}
+                  onOpenCard={openRecord}
+                  onMoveCard={async (membershipId, stageKey) => {
+                    if (!scope) return;
+                    await updateCloudMemberJourneyCard({
+                      session: scope.session,
+                      communityId: scope.communityId,
+                      membershipId,
+                      stageKey,
+                    });
+                    setBoardVersion((version) => version + 1);
+                  }}
+                  onSaveStages={async (stages) => {
+                    if (!scope) return;
+                    await saveCloudCommunityJourneyStages({
+                      session: scope.session,
+                      communityId: scope.communityId,
+                      stages,
+                    });
+                    setBoardVersion((version) => version + 1);
+                  }}
+                  getAvatarColor={props.getAvatarColor}
+                  getInitials={props.getInitials}
+                />
+              </Suspense>
             ) : (
             <>
             <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => setView(id as MembersView)}

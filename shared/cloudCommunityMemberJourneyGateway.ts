@@ -21,6 +21,7 @@ export type CloudMemberJourneyCard = {
   agent_outcome: string | null;
   agent_outcome_at: string | null;
   working_on: string | null;
+  activity_summary: string | null;
   joined_at: string | null;
   last_active_at: string | null;
 };

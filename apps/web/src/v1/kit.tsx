@@ -247,7 +247,14 @@ export function Top(props: { title?: ReactNode; titleView?: number; actions?: Re
     <>
       <header className={cx("top")}>
         {props.title ? <h1 className={cx(`t${props.titleView ?? 1}`)}>{props.title}</h1> : null}
-        {props.actions ? <div className="kit-top-actions">{props.actions}</div> : null}
+        {props.actions ? (
+          <div
+            className="kit-top-actions"
+            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flex: "none" }}
+          >
+            {props.actions}
+          </div>
+        ) : null}
       </header>
       <div className={cx("hline")} />
     </>
