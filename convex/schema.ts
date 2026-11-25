@@ -219,6 +219,10 @@ export default defineSchema({
     cycleStartAt: v.number(),
     cycleEndAt: v.number(),
     includedCostMicros: v.number(),
+    // Additive paid usage boosts granted for this active billing cycle (Step 1/2
+    // of docs/specs/agent-pricing-and-overage-v1.md). Absent means 0.
+    paidBoostCostMicros: v.optional(v.number()),
+    paidBoostCount: v.optional(v.number()),
     reservedCostMicros: v.number(),
     settledCostMicros: v.number(),
     pricingVersion: v.string(),
@@ -2062,6 +2066,9 @@ export default defineSchema({
     // Idempotent 80% / 100% founder allowance alerts scoped to the active billing cycle.
     allowanceAlertCycleKey: v.optional(v.string()),
     allowanceAlertNotifiedPercent: v.optional(v.number()),
+    // Founder-chosen monthly safety cap for prepaid community usage boosts in USD cents
+    // (0 or absent = paused at $20 included allowance).
+    usageBoostCapCents: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),

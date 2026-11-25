@@ -17,6 +17,7 @@ import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS } from "../shared/founderPlan";
+import { computeEffectiveCycleAllowanceMicros } from "../shared/founderUsageBoosts";
 import { countReengagedMembersFromSentChecks } from "../shared/agentRoiSummary";
 import {
   buildFounderAllowanceAlertCopy,
@@ -81,10 +82,18 @@ export async function readActiveCommunityAllowanceState(
         : null;
   if (!activeCycle) return null;
 
-  const allowanceMicros = Math.max(
+  const includedMicros = Math.max(
     0,
     Math.floor(Number(activeCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)),
   );
+  const paidBoostMicros = Math.max(
+    0,
+    Math.floor(Number((activeCycle as any).paidBoostCostMicros ?? 0)),
+  );
+  const allowanceMicros = computeEffectiveCycleAllowanceMicros({
+    includedCostMicros: includedMicros,
+    paidBoostCostMicros: paidBoostMicros,
+  });
   const settledMicros = Math.max(0, Math.floor(Number(activeCycle.settledCostMicros ?? 0)));
   // Stripe cycles store maxRunReservationCostMicros on the row; operator-grant
   // cycles reserve from the same env pricing configuration used by admission.

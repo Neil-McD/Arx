@@ -30,6 +30,12 @@ import {
 } from "./communityAllowanceGuardrails";
 import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { shouldPauseBackgroundAiForAllowance } from "../shared/allowanceGuardrails";
+import {
+  computeEffectiveCycleAllowanceMicros,
+  isSubscriptionInFirstBillingCycle,
+  isValidFounderUsageBoostCapCents,
+  normalizeFounderUsageBoostCapCents,
+} from "../shared/founderUsageBoosts";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
@@ -1519,9 +1525,26 @@ async function buildCoachSettingsView(
   const cycleEndMs = activeLedgerCycle
     ? Number(activeLedgerCycle.cycleEndAt)
     : utcMonthWindow(nowMs).endAt;
-  const allowanceMicros = activeLedgerCycle
+  const includedAllowanceMicros = activeLedgerCycle
     ? Number(activeLedgerCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)
     : POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS;
+  const paidBoostMicros = activeFounderCycle
+    ? Math.max(0, Math.floor(Number((activeFounderCycle as any).paidBoostCostMicros ?? 0)))
+    : 0;
+  const allowanceMicros = computeEffectiveCycleAllowanceMicros({
+    includedCostMicros: includedAllowanceMicros,
+    paidBoostCostMicros: paidBoostMicros,
+  });
+  const activeSubscription = activeFounderCycle
+    ? await ctx.db.get(activeFounderCycle.founderSubscriptionId)
+    : null;
+  const firstCycleCapActive =
+    activeFounderCycle && activeSubscription
+      ? isSubscriptionInFirstBillingCycle({
+          subscriptionCreatedAtMs: Number(activeSubscription.createdAt ?? 0),
+          cycleStartAtMs: Number(activeFounderCycle.cycleStartAt ?? 0),
+        })
+      : false;
 
   const rawCycleReceipts = await ctx.db
     .query("communityInferenceReceipts")
@@ -1630,6 +1653,10 @@ async function buildCoachSettingsView(
       proactive_micros: spend.proactiveMicros,
       brief_micros: spend.briefMicros,
       allowance_micros: allowanceMicros,
+      included_allowance_micros: includedAllowanceMicros,
+      paid_boost_micros: paidBoostMicros,
+      usage_boost_cap_cents: normalizeFounderUsageBoostCapCents(row?.usageBoostCapCents),
+      first_cycle_cap_active: firstCycleCapActive,
       percent_used: authoritativePercentUsed,
       spend_truncated: spend.truncated,
       cycle_end_at: cycleEndMs,
@@ -1661,9 +1688,16 @@ export const setMemberCoachSettings = mutation({
     autoReplyEnabled: v.optional(v.boolean()),
     threadFollowupEnabled: v.optional(v.boolean()),
     weeklyDigestEnabled: v.optional(v.boolean()),
+    usageBoostCapCents: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<MemberCoachSettingsView> => {
     const { userId } = await requireOwner(ctx, args.authSubject, args.communityId);
+    if (
+      args.usageBoostCapCents !== undefined &&
+      !isValidFounderUsageBoostCapCents(args.usageBoostCapCents)
+    ) {
+      throw new Error("community_usage_boost_cap_invalid");
+    }
     const nowMs = Date.now();
     const autoReasons = normalizeMemberCoachReasons(args.autoReasons);
     const existing = await ctx.db
@@ -1680,6 +1714,10 @@ export const setMemberCoachSettings = mutation({
       args.weeklyDigestEnabled !== undefined
         ? args.weeklyDigestEnabled
         : existing?.weeklyDigestEnabled !== false;
+    const nextUsageBoostCapCents =
+      args.usageBoostCapCents !== undefined
+        ? args.usageBoostCapCents
+        : normalizeFounderUsageBoostCapCents(existing?.usageBoostCapCents);
     if (existing) {
       await ctx.db.patch(existing._id, {
         enabled: args.enabled,
@@ -1687,6 +1725,7 @@ export const setMemberCoachSettings = mutation({
         autoReplyEnabled: nextAutoReply,
         threadFollowupEnabled: nextThreadFollowup,
         weeklyDigestEnabled: nextWeeklyDigest,
+        usageBoostCapCents: nextUsageBoostCapCents,
         ...(args.enabled && !existing.nextScanAt ? { nextScanAt: nowMs } : {}),
         ...(existing.builderNextScanAt === undefined ? { builderNextScanAt: nowMs } : {}),
         updatedByUserId: userId,
@@ -1700,6 +1739,7 @@ export const setMemberCoachSettings = mutation({
         autoReplyEnabled: nextAutoReply,
         threadFollowupEnabled: nextThreadFollowup,
         weeklyDigestEnabled: nextWeeklyDigest,
+        usageBoostCapCents: nextUsageBoostCapCents,
         ...(args.enabled ? { nextScanAt: nowMs } : {}),
         builderNextScanAt: nowMs,
         updatedByUserId: userId,

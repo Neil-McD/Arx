@@ -69,6 +69,10 @@ export type MemberCoachImpactSummary = {
   proactive_micros: number;
   brief_micros: number;
   allowance_micros: number;
+  included_allowance_micros?: number;
+  paid_boost_micros?: number;
+  usage_boost_cap_cents?: number;
+  first_cycle_cap_active?: boolean;
   percent_used: number;
   spend_truncated: boolean;
   cycle_end_at?: number | null;
