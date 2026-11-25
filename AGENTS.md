@@ -19,11 +19,11 @@ Three layers:
    private thread per member, a daily founder brief, approval cards, and a
    Linear-style board where members are the cards
    ([spec](docs/specs/proactive-community-agent-v0.md)).
-3. **The founder's own surface.** Each community gets its own vibe-coded site on
-   `<slug>.polynet.page`, built by the founder's AI agent with `@polynet/cli`
-   and served by Polynet's Cloudflare edge. Polynet Studio (this repo's web app)
-   is where founders run everything else: settings, members, billing, messages,
-   analytics.
+3. **The founder's own surface.** Polynet Studio (this repo's web app) is
+   where founders run their community: settings, members, billing, messages,
+   analytics. A founder's own app can sell access through "Your app" (one
+   door). Custom community sites on `polynet.page` were retired by Neil on
+   2026-11-13; their leftovers are being removed.
 
 Builders' own AI agents (Claude, Codex, Cursor) reach the core through the
 official Polynet MCP.
@@ -48,19 +48,17 @@ plus a 2.9% fee on paid-member revenue across all tiers.
 - **Reliability over cleverness.** Deterministic code protects authority, money,
   privacy, idempotency and side effects; the model supplies intelligence.
 - **Fail closed** on every permission boundary.
-- **Founders compose, Polynet guarantees.** Sites and agent programs are the
+- **Founders compose, Polynet guarantees.** Connected apps and agent programs are the
   founder's; the core's guarantees are not.
 
 ## 3) Protected core (ask Neil before removing)
 
-- The community agent harness (Agent page, @mentions, site conversations) under
-  explicit community context.
+- The community agent harness (Agent page, @mentions) under explicit community
+  context.
 - Community knowledge: resources, the founder's handbook, and community notes
   (what the agent saves for everyone, `memory/`). Neil retired the memory
   compiler and its steward on 2026-11-03 (POL-39).
 - The official Polynet MCP.
-- Community sites: the edge, sign-in with Polynet, the SDK, the shell, the CLI,
-  deploys.
 - The founder brief and the proactive agent's pipeline.
 - The release gate and receipts.
 - Required references and research context (`references/`, `docs/research/`).
@@ -76,13 +74,12 @@ product.
 - Community creation and management; visibility is only `Published` or
   `Unlisted`, and `Published` never means ungated.
 - Joining: open, approval or paid, through one join logic per community,
-  shown in the community's own world (its site's private twin, `/join`) or on
-  Studio (`/c/:slug`). Both use the same Polynet cores and checkout; a site's
-  own code links to it and cannot grant access.
+  shown on Studio (`/c/:slug`) and the community's `/join`, both using the
+  same Polynet cores and checkout. A founder's own app links to it and cannot
+  grant access.
 - Discover: communities only.
 - Core member experience: channels, posts, replies, reactions, attachments,
   mentions, DMs, voice, courses, events.
-- Community sites on `polynet.page` through the edge, SDK, shell and CLI.
 - The community agent, including the founder brief and the proactive work in
   its spec.
 - Weekly community digest email automation with indexed due-work, bounded
@@ -97,6 +94,9 @@ product.
 
 Do not build or expand these:
 
+- Custom community sites on `polynet.page` (the edge, site SDK, shell, CLI and
+  deploys). Retired by Neil on 2026-11-13; remove their leftovers rather than
+  maintain them.
 - Member workflows' rule builder and forms (being removed; the proactive agent
   replaces them).
 - The funnel editor and AI funnel composer.
@@ -121,17 +121,16 @@ every change must respect:
   not product truth.
 - Authority is re-derived from stored state on every request; tokens identify,
   they never grant.
-- Studio, sites, the SDK, the CLI, the MCP and the agent reach the same domain
-  owners with the same authorization.
+- Studio, a founder's connected app, the MCP and the agent reach the same
+  domain owners with the same authorization.
 
 ### The community agent
-- One agent per community: Agent-page conversations, @mention replies, site
-  conversations and proactive work share its identity. What it writes for a
+- One agent per community: Agent-page conversations, @mention replies and
+  proactive work share its identity. What it writes for a
   member is the agent's post, attributed to that member.
 - Access follows the surface: a private conversation uses the requesting
   member's access (owners may also use builder drafting in Studio, which they
-  approve); public replies use the channel audience's access; sites are member
-  lane only; through the MCP a person's own AI gets the lens of their role:
+  approve); public replies use the channel audience's access; through the MCP a person's own AI gets the lens of their role:
   member, moderator (join review, removing posts) or builder (owners and
   admins). See docs/community-lens-contract-v1.md.
 - Every turn is bound to one explicit, server-validated community context, fails
@@ -158,7 +157,6 @@ every change must respect:
 - The web runtime cannot run local filesystem or shell tools.
 - Cloud tools are provider-bounded and approval-gated.
 - Path traversal and symlink escape fail closed.
-- Sites never see Polynet cookies; the edge strips them.
 
 ## 7) How to change things
 
