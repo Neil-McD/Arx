@@ -23,6 +23,7 @@ import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
+import { runDueBuilderHeartbeatsForAction } from "./communityBuilderHeartbeat";
 import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -234,6 +235,7 @@ async function checkMemberEligibleForCoach(
     readMemberMutedState(ctx, community._id, memberUserId),
   ]);
   if (!communityMembershipRowIsActive(membership)) return { ok: false, code: "member_inactive" };
+  if (membership?.role === "admin") return { ok: false, code: "admin_excluded" };
   if (block) return { ok: false, code: "member_blocked" };
   if (muteState.muted || muteState.coachMuted) return { ok: false, code: "member_muted" };
   return { ok: true, membership };
@@ -273,10 +275,16 @@ export const enrollFounderSubscriptionsPageInternal = internalMutation({
           enabled: true,
           autoReasons: [],
           nextScanAt: args.nowMs,
+          builderNextScanAt: args.nowMs,
           createdAt: args.nowMs,
           updatedAt: args.nowMs,
         });
         enrolled += 1;
+      } else if (existing.builderNextScanAt === undefined) {
+        await ctx.db.patch(existing._id, {
+          builderNextScanAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
       }
       if (existing?.weeklyDigestEnabled !== false) {
         await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
@@ -319,7 +327,13 @@ export const enrollAndListDueMemberCoachCommunitiesInternal = internalMutation({
             enabled: true,
             autoReasons: [],
             nextScanAt: args.nowMs,
+            builderNextScanAt: args.nowMs,
             createdAt: args.nowMs,
+            updatedAt: args.nowMs,
+          });
+        } else if (existing.builderNextScanAt === undefined) {
+          await ctx.db.patch(existing._id, {
+            builderNextScanAt: args.nowMs,
             updatedAt: args.nowMs,
           });
         }
@@ -570,6 +584,7 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
     for (const membership of memberships) {
       if (!communityMembershipRowIsActive(membership)) continue;
       if (String(membership.userId) === String(community.ownerId)) continue;
+      if (membership.role === "admin") continue;
       const eligibility = await checkMemberEligibleForCoach(ctx, community, membership.userId);
       if (!eligibility.ok) continue;
 
@@ -1249,7 +1264,16 @@ export const processDueMemberCoachScansInternal = internalAction({
       internalRefs.communityMemberCoach.processUnseenMemberCoachEmailsInternal,
       { nowMs },
     );
-    return { scanned: due.length, outcomes, unseenEmailsEnqueued: unseen?.enqueued ?? 0 };
+    // Builder's Own Proactive Heartbeat (Owner + active Admins private commitments).
+    const builders = await runDueBuilderHeartbeatsForAction(ctx, nowMs);
+    return {
+      scanned: due.length,
+      outcomes,
+      unseenEmailsEnqueued: unseen?.enqueued ?? 0,
+      builderScanned: builders.scanned,
+      builderOutcomes: builders.outcomes,
+      builderUnseenEmailsEnqueued: builders.unseenEmailsEnqueued,
+    };
   },
 });
 
@@ -1638,6 +1662,7 @@ export const setMemberCoachSettings = mutation({
         threadFollowupEnabled: nextThreadFollowup,
         weeklyDigestEnabled: nextWeeklyDigest,
         ...(args.enabled && !existing.nextScanAt ? { nextScanAt: nowMs } : {}),
+        ...(existing.builderNextScanAt === undefined ? { builderNextScanAt: nowMs } : {}),
         updatedByUserId: userId,
         updatedAt: nowMs,
       });
@@ -1650,6 +1675,7 @@ export const setMemberCoachSettings = mutation({
         threadFollowupEnabled: nextThreadFollowup,
         weeklyDigestEnabled: nextWeeklyDigest,
         ...(args.enabled ? { nextScanAt: nowMs } : {}),
+        builderNextScanAt: nowMs,
         updatedByUserId: userId,
         createdAt: nowMs,
         updatedAt: nowMs,

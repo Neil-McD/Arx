@@ -2055,12 +2055,17 @@ export default defineSchema({
     nextScanAt: v.optional(v.number()),
     scanCursorCreatedAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
+    // Independent schedule for Builder's Own Proactive Heartbeat (Owner + Admins)
+    // so pausing member check-ins never silences a builder's private commitment follow-ups.
+    builderNextScanAt: v.optional(v.number()),
+    builderLeaseUntil: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
-    .index("by_enabled_nextScanAt", ["enabled", "nextScanAt"]),
+    .index("by_enabled_nextScanAt", ["enabled", "nextScanAt"])
+    .index("by_builderNextScanAt", ["builderNextScanAt"]),
 
   // Proactive Member Coach drafts and delivery receipts: one row per judged
   // member signal. Drafts wait on the owner's Home ("Your guide suggests");
@@ -2108,6 +2113,35 @@ export default defineSchema({
     .index("by_status_unseenEmailState_sentAt", ["status", "unseenEmailState", "sentAt"])
     .index("by_community_member_createdAt", ["communityId", "memberUserId", "createdAt"])
     .index("by_community_member_dedupe", ["communityId", "memberUserId", "dedupeKey"]),
+
+  // Builder's Own Proactive Heartbeat receipts (Owner + active Admins):
+  // Strictly isolated from Member Coach drafts & win-back metrics so private
+  // co-builder commitments never appear in shared approval queues or owner summaries.
+  communityBuilderHeartbeats: defineTable({
+    communityId: v.id("communities"),
+    builderUserId: v.id("users"),
+    dedupeKey: v.string(),
+    status: v.union(v.literal("sent"), v.literal("judge_skipped")),
+    sentText: v.optional(v.string()),
+    skipReason: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+    threadMessageKey: v.optional(v.string()),
+    unseenEmailState: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("enqueued"),
+        v.literal("seen"),
+        v.literal("suppressed"),
+      ),
+    ),
+    unseenEmailCheckedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_builder_createdAt", ["communityId", "builderUserId", "createdAt"])
+    .index("by_community_builder_dedupe", ["communityId", "builderUserId", "dedupeKey"])
+    .index("by_status_unseenEmailState_sentAt", ["status", "unseenEmailState", "sentAt"]),
 
   // What the guide asked a person before doing something for them in their
   // private talk (shared/operationCatalog.ts, guideAskFor): the exact call,
@@ -2845,6 +2879,7 @@ export default defineSchema({
     userId: v.id("users"),
     muted: v.boolean(),
     coachMuted: v.optional(v.boolean()),
+    builderCoachMuted: v.optional(v.boolean()),
     mutedUntil: v.optional(v.number()),
     chatLastSeenSeq: v.optional(v.number()),
     // Timestamp boundary for the canonical chat "new messages" divider (roots order by created_at).

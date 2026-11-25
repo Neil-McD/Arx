@@ -48,6 +48,7 @@ import type * as communityAttachmentUploads from "../communityAttachmentUploads.
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityBrain from "../communityBrain.js";
 import type * as communityBriefs from "../communityBriefs.js";
+import type * as communityBuilderHeartbeat from "../communityBuilderHeartbeat.js";
 import type * as communityBuilderKnowledgeSetup from "../communityBuilderKnowledgeSetup.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChannelAccess from "../communityChannelAccess.js";
@@ -74,6 +75,7 @@ import type * as communityFunnelEvents from "../communityFunnelEvents.js";
 import type * as communityGuidePictures from "../communityGuidePictures.js";
 import type * as communityGuideQuestions from "../communityGuideQuestions.js";
 import type * as communityHandbook from "../communityHandbook.js";
+import type * as communityHeartbeatWake from "../communityHeartbeatWake.js";
 import type * as communityHeldTiers from "../communityHeldTiers.js";
 import type * as communityHomeMoments from "../communityHomeMoments.js";
 import type * as communityInteractionAttachmentBridge from "../communityInteractionAttachmentBridge.js";
@@ -292,6 +294,7 @@ declare const fullApi: ApiFromModules<{
   communityAttention: typeof communityAttention;
   communityBrain: typeof communityBrain;
   communityBriefs: typeof communityBriefs;
+  communityBuilderHeartbeat: typeof communityBuilderHeartbeat;
   communityBuilderKnowledgeSetup: typeof communityBuilderKnowledgeSetup;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChannelAccess: typeof communityChannelAccess;
@@ -318,6 +321,7 @@ declare const fullApi: ApiFromModules<{
   communityGuidePictures: typeof communityGuidePictures;
   communityGuideQuestions: typeof communityGuideQuestions;
   communityHandbook: typeof communityHandbook;
+  communityHeartbeatWake: typeof communityHeartbeatWake;
   communityHeldTiers: typeof communityHeldTiers;
   communityHomeMoments: typeof communityHomeMoments;
   communityInteractionAttachmentBridge: typeof communityInteractionAttachmentBridge;

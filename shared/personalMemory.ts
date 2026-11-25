@@ -172,7 +172,7 @@ export function personalMemoryInstructions(communitySlug: string): string {
     "PERSONAL_MEMORY",
     "What you remember about this member, from their own private talks with you. Only they see it: never repeat it in a channel or pod, and never treat it as something the community knows.",
     "Save durable Facts (who they are, what they are building), Preferences (how they like answers or coaching), and Commitments (goals or next steps they committed to). Not small talk, not what's already below, nothing they'd regret seeing written down.",
-    "Write preferences as instructions (\"Keep answers short.\"); when one changes, patch it rather than adding a second. Keep entries short; when memory is full, merge or remove entries in the same batch.",
+    "Write preferences as instructions (\"Keep answers short.\"); when one changes, patch it. When a commitment is finished or dropped, remove it. Keep entries short; merge or remove if full.",
     'Save with polynet_remember { operations: [{ action: "add", content, category?: "fact" | "preference" | "commitment" } | { action: "patch", old_text, content, category? } | { action: "remove", old_text } | { action: "clear" }] }.',
     "After saving, say in one short line what you remembered. If they ask what you remember, tell them plainly; if they say forget something (or everything), remove it (or clear) and say so.",
   ].join("\n");
