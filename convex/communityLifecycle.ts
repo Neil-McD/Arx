@@ -49,14 +49,18 @@ import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeekly
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import {
   founderSubscriptionStatusGrantsAccess,
+  normalizeFounderPlanTier,
 } from "../shared/founderPlan";
 import {
   syncFounderUsageCycle,
   type FounderSubscriptionRow,
 } from "./founderPlanCore";
 import {
+  isConfiguredFounderTierPriceId,
   requireFounderInferencePricingFromEnv,
   requireFounderStripePriceIdFromEnv,
+  resolveFounderInferencePricingForTier,
+  resolveFounderPlanTierFromPriceId,
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import {
@@ -620,8 +624,9 @@ export const createCommunity = mutation({
       if (founderSubscription.riskAccessState === "revoked") {
         throw new Error("founder_subscription_risk_revoked");
       }
+      requireFounderStripePriceIdFromEnv();
       if (
-        founderSubscription.providerPriceId !== requireFounderStripePriceIdFromEnv()
+        !isConfiguredFounderTierPriceId(founderSubscription.providerPriceId)
       ) {
         throw new Error("founder_subscription_price_mismatch");
       }
@@ -723,8 +728,13 @@ export const createCommunity = mutation({
       nowMs,
     });
     if (founderSubscription) {
+      const planTier = normalizeFounderPlanTier(
+        founderSubscription.planTier ??
+          resolveFounderPlanTierFromPriceId(founderSubscription.providerPriceId),
+      );
       await ctx.db.patch(founderSubscription._id, {
         communityId,
+        planTier,
         attachedAt: nowMs,
         updatedAt: nowMs,
       });
@@ -733,12 +743,16 @@ export const createCommunity = mutation({
         subscription: {
           ...founderSubscription,
           communityId,
+          planTier,
           attachedAt: nowMs,
           updatedAt: nowMs,
         },
         cycleStartAt: founderSubscription.currentPeriodStartAt,
         cycleEndAt: founderSubscription.currentPeriodEndAt,
-        pricing: requireFounderInferencePricingFromEnv(),
+        pricing: resolveFounderInferencePricingForTier(
+          planTier,
+          requireFounderInferencePricingFromEnv(),
+        ),
         nowMs,
       });
     }
