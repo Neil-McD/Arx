@@ -79,6 +79,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
   `communityMemberRecords` (Members for people who manage members: plan and price per person, money states,
   past members, one member's record with host-only notes and who did what; docs/design/members-invariants.md),
+  `communityMemberJourney` (Member Journey Board: ordered plain-English stages, member cards with derived health
+  status, privacy-safe agent outcome notes, and founder instructions read by the proactive Member Coach;
+  `apps/web/src/v1/KitMembersBoard.tsx`),
   `communityMemberProfiles` (Members for members: who is here, and the one profile of a person that channels and Members both open, `apps/web/src/v1/KitProfile.tsx`),
   `memberEntryDestination`, `platformHomeCommunity`, `communityPeople` (one person, one action, from someone's
   own AI).
@@ -95,6 +98,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).
 - **Tables:** `communities`, `communityMemberships`, `communityMemberSearch`, `communityMemberViewCounts`, `communityJoinRequests`, `communityMemberNotes`,
+  `communityJourneyConfig`, `communityMemberJourneyCards`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`. Tags on people
   (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7.
