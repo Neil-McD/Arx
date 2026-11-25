@@ -434,7 +434,9 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
 
 // Sections fade in once as they come into view. Without the observer (or with
 // motion turned down) everything is simply there.
-function useReveal() {
+// `late` changes when a section arrives after the first draw (the community
+// showcase), so that section is watched too and never stays hidden.
+function useReveal(late: unknown) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const root = ref.current;
@@ -448,18 +450,18 @@ function useReveal() {
       }
     }, { threshold: 0.12 });
     root.setAttribute("data-anim", "1");
-    root.querySelectorAll("[data-rv]").forEach((node) => seen.observe(node));
+    root.querySelectorAll("[data-rv]:not([data-in])").forEach((node) => seen.observe(node));
     return () => {
       seen.disconnect();
       root.removeAttribute("data-anim");
     };
-  }, []);
+  }, [late]);
   return ref;
 }
 
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
-  const reveal = useReveal();
+  const reveal = useReveal(communities.length);
   const guide = guideScene();
   const brain = brainScene();
   const chief = chiefScene();
