@@ -20,6 +20,8 @@ import {
   MAX_AGENT_OUTCOME_CHARS,
   MAX_CARD_OUTCOMES,
   MAX_CHECKPOINT_LABEL_CHARS,
+  MAX_JOURNEY_STAGES,
+  MAX_STAGE_CHECKPOINTS,
   defaultStageKeyForMember,
   deriveMemberJourneyStatus,
   evaluateStageCheckpoints,
@@ -818,7 +820,16 @@ export const updateMemberJourneyCard = mutation({
           source: "founder" as const,
         });
       }
-      nextCompletedMilestones = without.slice(-40);
+      const configuredKeys = new Set(stages.flatMap((stage) => stage.checkpoints.map((cp) => cp.key)));
+      const maxStoredMilestones = Math.max(64, MAX_JOURNEY_STAGES * MAX_STAGE_CHECKPOINTS);
+      if (without.length > maxStoredMilestones) {
+        const active = without.filter((row: any) => configuredKeys.has(String(row.key)));
+        const historical = without.filter((row: any) => !configuredKeys.has(String(row.key)));
+        const remainingSlots = Math.max(0, maxStoredMilestones - active.length);
+        nextCompletedMilestones = [...historical.slice(-remainingSlots), ...active];
+      } else {
+        nextCompletedMilestones = without;
+      }
     }
 
     let nextOutcomes = Array.isArray(existing?.outcomes) ? [...existing.outcomes] : undefined;
