@@ -249,6 +249,7 @@
 /* Pricing */
 .pn-landing .price-label { color: var(--muted); font-size: 14px; }
 .pn-landing .price strong { font-size: 34px; font-weight: 400; letter-spacing: -0.03em; }
+.pn-landing .pricing-footnote { margin-top: 20px; text-align: left; }
 
 /* Showcase */
 .pn-landing .showcase-grid {

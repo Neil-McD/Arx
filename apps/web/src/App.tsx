@@ -902,9 +902,9 @@ export default function App() {
     onRequiredCommunityCreateUnavailable: (founderSubscriptionId) => {
       suppressBuilderSetupSubscription(founderSubscriptionId, "unavailable");
       showAppToastMessage(
-        "This Agent plan payment is no longer available for setup. Review Billing to continue.",
+        "This Agent plan payment is no longer available for setup. Review Account settings to continue.",
       );
-      navigateTo("/settings/billing");
+      navigateTo("/settings/account");
       void founderBilling.refresh(sessionRef.current);
     },
     readBannerFileAsWideDataUrlWithinLimit,
@@ -1332,9 +1332,14 @@ export default function App() {
       // This community's Agent plan, shown on Guide (owners only: it's their billing).
       aiAgentPlanProps: {
         community: founderBilling.overview.communities.find((community) => community.community_id === activeCommunityId && community.lifecycle_status === "active") ?? null,
+        guideTierAvailable: founderBilling.overview.guide_tier_available === true,
+        guideMonthlyPriceBaseUnits: founderBilling.overview.guide_monthly_price_base_units,
+        chiefOfStaffMonthlyPriceBaseUnits: founderBilling.overview.chief_of_staff_monthly_price_base_units,
         isLoading: founderBilling.isLoading,
         isActing: founderBilling.actionCommunityId === activeCommunityId,
         error: founderBilling.error,
+        startCheckout: founderBilling.startCheckout,
+        switchTier: founderBilling.switchTier,
         openPortal: founderBilling.openPortal,
         onOpenBuilderOffer: (community) => builderOffer.open({ community }),
         refresh: founderBilling.refresh,
@@ -1747,7 +1752,14 @@ export default function App() {
             shellChromeHostProps.communityShell.onSelectCommunityChannel(channel),
           navigateTo,
           onSelectCommunityTab: handleSelectCommunityTab,
-          onTurnOnAgent: () => openGlobalSettings("billing"),
+          onTurnOnAgent: () => {
+            if (selectedActiveCommunitySlug) {
+              leavePhoneHome();
+              navigateTo(`/c/${encodeURIComponent(selectedActiveCommunitySlug)}/settings/agent`);
+              return;
+            }
+            openGlobalSettings("account");
+          },
           presence: activeCommunityPresenceSummary,
         }),
         pageMode: communityAgentPageMode,

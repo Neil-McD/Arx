@@ -1213,7 +1213,7 @@ function WebCommunityAgentDock(props, ref) {
               <p>{memberLimitNotice}</p>
               {props.onStartBuilder ? (
                 <button type="button" onClick={props.onStartBuilder}>
-                  Build your own community — $79/mo
+                  Build your own community — free
                 </button>
               ) : null}
             </div>

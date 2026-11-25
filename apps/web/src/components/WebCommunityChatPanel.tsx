@@ -1030,7 +1030,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               type="button"
               onClick={onStartBuilderFromServeIssue}
             >
-              Build your own community — $79/mo
+              Build your own community — free
             </button>
           ) : null}
           <button

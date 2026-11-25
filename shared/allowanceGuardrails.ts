@@ -2,6 +2,7 @@
 // Keeps the 90% live-chat reserve, 80%/100% alert milestones, reset-date formatting,
 // and calm founder alert copy deterministic and testable.
 import { formatMicrosUsd } from "./agentRoiSummary";
+import type { FounderPlanTier } from "./founderPlan";
 
 // Reserve the final 10% of each community's monthly AI allowance ($2 of $20)
 // for live member/builder chats, @mentions, and the Daily Founder Brief by
@@ -78,6 +79,7 @@ export function buildFounderAllowanceAlertCopy(input: {
   contacted30d: number;
   actionUrl?: string | null;
   boostAvailable?: boolean;
+  planTier?: FounderPlanTier;
 }): {
   subject: string;
   headline: string;
@@ -87,21 +89,26 @@ export function buildFounderAllowanceAlertCopy(input: {
   const name = String(input.communityName || "your community").trim() || "your community";
   const usedLabel = formatMicrosUsd(input.settledMicros);
   const allowanceLabel = formatMicrosUsd(input.allowanceMicros);
+  const isGuideTier = input.planTier === "guide";
   const resetClause = input.resetDateLabel
     ? `Your allowance resets automatically on ${input.resetDateLabel}.`
     : "Your allowance resets automatically at the start of your next billing cycle.";
   const winBackLine =
-    input.contacted30d > 0 && input.reengaged30d > 0
+    !isGuideTier && input.contacted30d > 0 && input.reengaged30d > 0
       ? `In the last 30 days, ${input.reengaged30d} of ${input.contacted30d} members checked in by your guide came back to participate.`
       : null;
-  const boostClause = input.boostAvailable
-    ? "If you need extra room before reset, you can add an optional $30 boost (+$20 AI allowance) anytime in Guide settings."
-    : null;
+  const upgradeOrBoostClause = isGuideTier
+    ? "Upgrade to Chief of Staff ($100/month with $20 AI included) anytime in Guide settings to expand your allowance immediately and unlock Daily Briefs, proactive member check-ins, and auto-replies."
+    : input.boostAvailable
+      ? "If you need extra room before reset, you can add an optional $30 boost (+$20 AI allowance) anytime in Guide settings."
+      : null;
   const actionUrl = String(input.actionUrl ?? "").trim();
   const threadActionLine = actionUrl
-    ? input.boostAvailable
-      ? `[Manage allowance & boosts](${actionUrl})`
-      : `[View allowance & impact](${actionUrl})`
+    ? isGuideTier
+      ? `[Upgrade to Chief of Staff](${actionUrl})`
+      : input.boostAvailable
+        ? `[Manage allowance & boosts](${actionUrl})`
+        : `[View allowance & impact](${actionUrl})`
     : null;
 
   if (input.milestone === 100) {
@@ -110,7 +117,7 @@ export function buildFounderAllowanceAlertCopy(input: {
       `Your community has used ${usedLabel} of its ${allowanceLabel} monthly AI allowance — a great sign of active member conversations.`,
       ...(winBackLine ? [winBackLine] : []),
       `${resetClause} Your community, channels, courses, events, and zero-AI weekly digests keep running normally in the meantime.`,
-      ...(boostClause ? [boostClause] : []),
+      ...(upgradeOrBoostClause ? [upgradeOrBoostClause] : []),
     ];
     return {
       subject: `${name} reached its monthly AI allowance`,
@@ -128,8 +135,10 @@ export function buildFounderAllowanceAlertCopy(input: {
   const bodyLines = [
     `Your community has used ${usedLabel} of its ${allowanceLabel} monthly AI allowance.`,
     ...(winBackLine ? [winBackLine] : []),
-    `At 90%, background check-ins and reply drafts will pause automatically to reserve the final 10% for live member chats, @mentions, and your Daily Brief. ${resetClause}`,
-    ...(boostClause ? [boostClause] : []),
+    isGuideTier
+      ? resetClause
+      : `At 90%, background check-ins and reply drafts will pause automatically to reserve the final 10% for live member chats, @mentions, and your Daily Brief. ${resetClause}`,
+    ...(upgradeOrBoostClause ? [upgradeOrBoostClause] : []),
   ];
   return {
     subject: `${name} is at 80% of its monthly AI allowance`,

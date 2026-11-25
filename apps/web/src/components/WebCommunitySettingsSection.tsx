@@ -100,6 +100,9 @@ function BuilderHeartbeatPreferenceSection(props: {
   communityId: string;
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
+  planTier?: "guide" | "chief_of_staff" | null;
+  isUpgradingPlan?: boolean;
+  onUpgradeToChiefOfStaff?: () => void;
 }) {
   const [pref, setPref] = useState<BuilderHeartbeatPreferenceView | null>(null);
   const [saving, setSaving] = useState(false);
@@ -144,6 +147,28 @@ function BuilderHeartbeatPreferenceSection(props: {
     }
   };
   if (pref && !pref.eligible) return null;
+  if (props.planTier === "guide") {
+    return (
+      <SettingsGroup label="Personal check-ins">
+        <SettingsRow
+          label="Check in on my private goals & commitments"
+          help="Included on Chief of Staff ($100/month with $20 AI included). Your guide follows up privately on commitments you share here."
+        >
+          {props.onUpgradeToChiefOfStaff ? (
+            <SettingsButton
+              variant="primary"
+              disabled={props.isUpgradingPlan}
+              onClick={props.onUpgradeToChiefOfStaff}
+            >
+              {props.isUpgradingPlan ? "Upgrading…" : "Upgrade to Chief of Staff"}
+            </SettingsButton>
+          ) : (
+            <span className="settings-v1-value">Chief of Staff</span>
+          )}
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
   return (
     <SettingsGroup label="Personal check-ins">
       <SettingsRow
@@ -853,6 +878,18 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityId={resolvedActiveCommunity.id}
                 session={props.session}
                 ensureSession={props.ensureSession}
+                planTier={aiAgentProps.agentPlan?.community?.plan_tier ?? null}
+                isUpgradingPlan={aiAgentProps.agentPlan?.isActing}
+                onUpgradeToChiefOfStaff={
+                  aiAgentProps.agentPlan?.community?.plan_tier === "guide" &&
+                  aiAgentProps.agentPlan?.switchTier
+                    ? () =>
+                        void aiAgentProps.agentPlan?.switchTier?.(
+                          resolvedActiveCommunity.id,
+                          "chief_of_staff",
+                        )
+                    : undefined
+                }
               />
             ) : null}
             {selectedSettingsPane === "agent" ? (
@@ -880,11 +917,35 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   communityId={resolvedActiveCommunity.id}
                   session={props.session}
                   ensureSession={props.ensureSession}
+                  planTier={aiAgentProps.agentPlan?.community?.plan_tier ?? null}
+                  isUpgradingPlan={aiAgentProps.agentPlan?.isActing}
+                  onUpgradeToChiefOfStaff={
+                    aiAgentProps.agentPlan?.community?.plan_tier === "guide" &&
+                    aiAgentProps.agentPlan?.switchTier
+                      ? () =>
+                          void aiAgentProps.agentPlan?.switchTier?.(
+                            resolvedActiveCommunity.id,
+                            "chief_of_staff",
+                          )
+                      : undefined
+                  }
                 />
                 <CommunityMemberCoachSettingsSection
                   communityId={resolvedActiveCommunity.id}
                   session={props.session}
                   ensureSession={props.ensureSession}
+                  planTier={aiAgentProps.agentPlan?.community?.plan_tier ?? null}
+                  isUpgradingPlan={aiAgentProps.agentPlan?.isActing}
+                  onUpgradeToChiefOfStaff={
+                    aiAgentProps.agentPlan?.community?.plan_tier === "guide" &&
+                    aiAgentProps.agentPlan?.switchTier
+                      ? () =>
+                          void aiAgentProps.agentPlan?.switchTier?.(
+                            resolvedActiveCommunity.id,
+                            "chief_of_staff",
+                          )
+                      : undefined
+                  }
                 />
               </Suspense>
             ) : null}

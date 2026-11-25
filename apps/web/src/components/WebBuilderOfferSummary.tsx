@@ -22,14 +22,14 @@ export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
           : props.communityName && props.purpose === "restore"
           ? `Restore ${props.communityName}`
           : props.communityName
-          ? `Activate Builder for ${props.communityName}`
+          ? `Turn on the agent for ${props.communityName}`
           : POLYNET_BUILDER_OFFER.headline}
       </h2>
       <p>
         {props.purpose === "purchase"
           ? POLYNET_BUILDER_OFFER.purchaseDescription
           : props.purpose === "restore"
-          ? "Builder restores this community, its member experience, and its preserved content."
+          ? "Restores this community, its member experience, and its preserved content."
           : POLYNET_BUILDER_OFFER.description}
       </p>
       <div className="builder-offer-benefits">
@@ -44,7 +44,7 @@ export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
         ))}
       </div>
       <div className="builder-offer-price">
-        <strong>{formatBuilderOfferPrice()}</strong>
+        <strong>{formatBuilderOfferPrice(POLYNET_BUILDER_OFFER.guidePriceBaseUnits)} – {formatBuilderOfferPrice(POLYNET_BUILDER_OFFER.chiefOfStaffPriceBaseUnits)}</strong>
         <span>{POLYNET_BUILDER_OFFER.scopeLabel}</span>
       </div>
       {props.compact ? null : (

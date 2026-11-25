@@ -8,7 +8,8 @@ import {
   setCloudFounderBriefSettings,
   type CloudFounderBriefSettings,
 } from "../../../../shared/cloudCommunityAdminGateway";
-import { SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
+import type { FounderPlanTier } from "../../../../shared/founderPlan";
+import { SettingsButton, SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -30,6 +31,9 @@ export function CommunityFounderBriefSection(props: {
   communityId: string;
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
+  planTier?: FounderPlanTier | null;
+  isUpgradingPlan?: boolean;
+  onUpgradeToChiefOfStaff?: () => void;
 }) {
   const [settings, setSettings] = useState<CloudFounderBriefSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -74,6 +78,29 @@ export function CommunityFounderBriefSection(props: {
       setSaving(false);
     }
   };
+
+  if (props.planTier === "guide") {
+    return (
+      <SettingsGroup label="Daily brief">
+        <SettingsRow
+          label="Daily founder brief"
+          help="Included on Chief of Staff ($100/month with $20 AI included). Each morning: what your guide sent and drafted, join requests, stalled learners, quiet paying members, rising contributors, and upcoming events."
+        >
+          {props.onUpgradeToChiefOfStaff ? (
+            <SettingsButton
+              variant="primary"
+              disabled={props.isUpgradingPlan}
+              onClick={props.onUpgradeToChiefOfStaff}
+            >
+              {props.isUpgradingPlan ? "Upgrading…" : "Upgrade to Chief of Staff"}
+            </SettingsButton>
+          ) : (
+            <span className="settings-v1-value">Chief of Staff</span>
+          )}
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
 
   const enabled = Boolean(settings?.enabled);
   const localHour = settings?.local_hour ?? 8;

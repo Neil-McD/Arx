@@ -18,6 +18,7 @@ import {
   resolveCommunityInferenceFundingAdmission,
 } from "./founderInferenceCore";
 import { reserveFounderUsage, settleFounderUsageReservation } from "./founderPlanCore";
+import { buildFounderAllowanceAlertCopy } from "../shared/allowanceGuardrails";
 import {
   expectedFounderStripeUnitAmountForTierPriceId,
   resolveFounderPlanTierFromPriceId,
@@ -66,6 +67,25 @@ describe("3-Tier Pricing ($0 Free / $20 Guide / $100 Chief of Staff) — Step 1"
     expect(
       resolveFounderPlanTierFromPriceId("price_legacy_79", { guidePriceId: "price_guide_20" }),
     ).toBe("chief_of_staff");
+
+    // Step 3: Guide-tier 80%/100% allowance alerts recommend upgrading to Chief of Staff
+    // (never mentioning $30 boosts or 90% proactive background pause).
+    const guideAlert80 = buildFounderAllowanceAlertCopy({
+      milestone: 80,
+      communityName: "Founders Lab",
+      settledMicros: 2_400_000,
+      allowanceMicros: 3_000_000,
+      resetDateLabel: "Dec 1",
+      reengaged30d: 0,
+      contacted30d: 0,
+      actionUrl: "https://www.polynet.ai/c/founders-lab/settings?pane=agent",
+      boostAvailable: false,
+      planTier: "guide",
+    });
+    expect(guideAlert80.bodyText).toContain("Upgrade to Chief of Staff");
+    expect(guideAlert80.bodyText).not.toContain("$30 boost");
+    expect(guideAlert80.bodyText).not.toContain("At 90%");
+    expect(guideAlert80.threadMarkdown).toContain("[Upgrade to Chief of Staff]");
   });
 
   test("Guide ($20/$3 AI) admits reactive chats, gates all 5 Chief of Staff engines, and handles mid-cycle upgrade & safe downgrade", async () => {
