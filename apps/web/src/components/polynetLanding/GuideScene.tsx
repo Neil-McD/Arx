@@ -31,16 +31,17 @@ const WINS_TARGET: EntityTarget = {
 export function guideAsks(now: number): AskItem[] {
   const { next } = EVENTS(now);
   const day = new Date(next.at).toLocaleDateString("en-US", { weekday: "long" });
+  // The channel first: it's the one that plays by itself (Neil, Nov 25).
   return [
-    {
-      question: "How should I price my first offer?", source: "lesson",
-      before: "Start with one clear result and one price. Priya and Jon both gave their first ten a founding price. ",
-      target: LESSON_TARGET, label: "Pricing your first offer", after: " has three examples from members here.",
-    },
     {
       question: "Where do people share what's working?", source: "wins",
       before: "In ", target: WINS_TARGET, label: "wins",
       after: ". Jon posted the invitation that got him 11 members in two days, word for word.",
+    },
+    {
+      question: "How should I price my first offer?", source: "lesson",
+      before: "Start with one clear result and one price. Priya and Jon both gave their first ten a founding price. ",
+      target: LESSON_TARGET, label: "Pricing your first offer", after: " has three examples from members here.",
     },
     {
       question: "Is there a call this week?", source: "call",
@@ -250,7 +251,7 @@ export function GuideScene() {
   }, []);
 
   const current = asked === null ? null : asks[asked];
-  const source: Source = current?.source ?? "lesson";
+  const source: Source = current?.source ?? "wins";
   const lit = answered && current !== null;
 
   return (

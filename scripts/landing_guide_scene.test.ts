@@ -16,8 +16,8 @@ const { ConversionLanding } = await import("../apps/web/src/components/polynetLa
 test("each question points to a different kind of place, and the chip names it exactly", () => {
   const now = Date.UTC(2026, 10, 25, 12);
   const asks = guideAsks(now);
-  expect(asks.map((item) => item.source)).toEqual(["lesson", "wins", "call"]);
-  expect(asks.map((item) => item.target.kind)).toEqual(["lesson", "channel", "event"]);
+  expect(asks.map((item) => item.source)).toEqual(["wins", "lesson", "call"]);
+  expect(asks.map((item) => item.target.kind)).toEqual(["channel", "lesson", "event"]);
   // The chips are only ever lessons, courses, channels, pods and events (the app's
   // chips never cite posts or notes), and the event is the preview's own next call.
   expect(asks[2].target.name).toBe(EVENTS(now).next.title);
