@@ -11,6 +11,7 @@ import {
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
 import { brainScene, chiefScene, FeatureSection, guideScene, StatementFigures } from "./LandingScenes";
+import { ProductPreview } from "./ProductPreview";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -182,75 +183,6 @@ function OrbitScene() {
   );
 }
 
-// What the community knows, as the app draws it: clusters around a bright centre.
-function BrainPicture(props: { small?: boolean }) {
-  const spokes: Array<[number, number, Array<[number, number]>]> = [
-    [130, 60, [[96, 38], [90, 72], [140, 28], [164, 46], [112, 94]]],
-    [346, 64, [[320, 38], [358, 30], [384, 48], [382, 84], [326, 96]]],
-    [222, 184, [[182, 170], [176, 200], [200, 216], [236, 218], [268, 206], [270, 176]]],
-  ];
-  return (
-    <svg className={props.small ? "brain small" : "brain"} viewBox="60 14 380 216" role="img" aria-label="A map of what the community knows, in clusters around a glowing centre">
-      <defs><radialGradient id={props.small ? "pnBrainS" : "pnBrain"} cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#C2A9FF" stopOpacity=".75" /><stop offset="1" stopColor="#7C5CF0" stopOpacity="0" /></radialGradient></defs>
-      <g fill="none" stroke="#3A3D46" strokeWidth="1.2">
-        {spokes.map(([x, y, leaves], index) => (
-          <Fragment key={index}>
-            <line x1="240" y1="112" x2={x} y2={y} />
-            {leaves.map(([lx, ly], leaf) => <line key={leaf} x1={x} y1={y} x2={lx} y2={ly} />)}
-          </Fragment>
-        ))}
-        <path d="M240 112 Q352 162 416 150" />
-      </g>
-      <circle cx="240" cy="112" r="42" fill={`url(#${props.small ? "pnBrainS" : "pnBrain"})`} />
-      <circle cx="240" cy="112" r="7.5" fill="#FFFFFF" />
-      {spokes.map(([x, y, leaves], index) => (
-        <Fragment key={index}>
-          {leaves.map(([lx, ly], leaf) => <circle key={leaf} cx={lx} cy={ly} r="3.6" fill={index === 1 ? "#EEF0F4" : "#8A8F98"} />)}
-          <circle cx={x} cy={y} r="6" fill="#EEF0F4" />
-        </Fragment>
-      ))}
-      <circle cx="416" cy="150" r="4.5" fill="#C4B5FD" />
-    </svg>
-  );
-}
-
-function BriefCard(props: { action: ReactNode; line: string; big?: boolean }) {
-  return (
-    <>
-      <span className="shot-eyebrow">Your guide · 9:24 am</span>
-      <strong className={props.big ? "shot-hello big" : "shot-hello"}>Good morning.</strong>
-      <span className="shot-text">{props.line}</span>
-      <div className="shot-ask">
-        <div><b>Check in with Josh</b><span>Quiet for 25 days · next call is Friday</span></div>
-        <div className="shot-acts">{props.action}</div>
-      </div>
-    </>
-  );
-}
-
-// The app itself, drawn small: left menu, the morning brief, the brain beside it.
-function ProductShot() {
-  return (
-    <div className="shot" role="img" aria-label="Polynet's Home: the left menu, the guide's morning brief, and the community brain">
-      <div className="shot-side" aria-hidden="true">
-        <b>Polynet</b>
-        <span className="on">Home</span><span>Inbox</span>
-        <em>Channels</em><span># General</span><span># wins</span>
-        <em>Community</em><span>Knowledge</span><span>Events</span><span>Members</span>
-      </div>
-      <div className="shot-main" aria-hidden="true">
-        <BriefCard big line="Two people finished Start here. Dev asked about pricing overnight and got an answer. One person needs you." action={<i>Review</i>} />
-        <div className="shot-box">Ask your guide anything</div>
-      </div>
-      <div className="shot-rail" aria-hidden="true">
-        <em>The community brain</em>
-        <BrainPicture small />
-        <span>1 learned · 1 new this week</span>
-      </div>
-    </div>
-  );
-}
-
 function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
   if (props.communities.length === 0) return null;
   return (
@@ -397,47 +329,56 @@ function ProductMenu() {
   );
 }
 
-// On a phone or narrow window the top-bar links don't fit, so one Menu button
-// opens them all in a panel under the bar.
+// On a phone or narrow window the top-bar links don't fit, so one menu button
+// opens them all on a full-screen panel, in big type, grouped like the footer.
+const PHONE_MENU: Array<[string, Array<[string, string]>]> = [
+  ["Product", PRODUCT_MENU.flat().map(([title, , href]) => [title, href] as [string, string])],
+  ["Polynet", [["Communities", "/discover"], ["Pricing", "/pricing"], ["See it live", LIVE_COMMUNITY_PATH]]],
+  ["Resources", [["The Polynet community", LIVE_COMMUNITY_PATH], ["Questions", "/pricing#questions"], ["Contact support", `mailto:${SUPPORT_EMAIL}`]]],
+];
+
+function MenuIcon(props: { open: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      {props.open ? <path d="M5 5l10 10M15 5L5 15" /> : <path d="M3 7h14M3 13h14" />}
+    </svg>
+  );
+}
+
 export function PhoneMenu(props: { onJoin: () => void }) {
   const [open, setOpen] = useState(false);
-  const [productOpen, setProductOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    const onPointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && wrap.current?.contains(event.target)) return;
-      setOpen(false);
-    };
     document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointer);
+    // The page behind stays put while the menu is open.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer);
+      document.body.style.overflow = previous;
     };
   }, [open]);
   const close = () => setOpen(false);
   return (
-    <div className="phone-menu" ref={wrap}>
-      <button type="button" className={open ? "phone-menu-button open" : "phone-menu-button"} aria-expanded={open} aria-controls="phone-menu"
-        onClick={() => setOpen((value) => !value)}>
-        {open ? "Close" : "Menu"}
+    <div className="phone-menu">
+      <button type="button" className="phone-menu-button" aria-expanded={open} aria-controls="phone-menu" aria-label="Open menu" onClick={() => setOpen(true)}>
+        <MenuIcon open={false} />
       </button>
       {open ? (
-        <div className="phone-menu-panel" id="phone-menu">
-          <button type="button" className="phone-menu-row" aria-expanded={productOpen} onClick={() => setProductOpen((value) => !value)}>
-            Product<span aria-hidden="true">{productOpen ? "\u2212" : "+"}</span>
-          </button>
-          {productOpen ? (
-            <div className="phone-menu-sub">
-              {PRODUCT_MENU.flat().map(([title, , href]) => <a key={title} href={href} onClick={close}>{title}</a>)}
+        <div className="phone-menu-panel" id="phone-menu" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="phone-menu-bar">
+            <Brand />
+            <button type="button" className="phone-menu-button" aria-label="Close menu" onClick={close}><MenuIcon open /></button>
+          </div>
+          {PHONE_MENU.map(([group, links]) => (
+            <div className="phone-menu-group" key={group}>
+              <span>{group}</span>
+              {links.map(([title, href]) => (
+                <a key={`${group}-${title}`} href={href} onClick={() => { if (href === "/discover") trackFind("phone_menu")(); close(); }}>{title}</a>
+              ))}
             </div>
-          ) : null}
-          <a className="phone-menu-row" href="/discover" onClick={() => { trackFind("phone_menu")(); close(); }}>Communities</a>
-          <a className="phone-menu-row" href="/pricing" onClick={close}>Pricing</a>
-          {RESOURCES_MENU.filter(([, , href]) => href !== "/ai").map(([title, , href]) => <a className="phone-menu-row" key={title} href={href} onClick={close}>{title}</a>)}
-          <a className="phone-menu-row" href="/pricing#questions" onClick={close}>Questions</a>
+          ))}
           <div className="phone-menu-foot">
             <a href="/login">Sign in</a>
             <button className="cta" type="button" onClick={() => { close(); trackStart("phone_menu", props.onJoin)(); }}>Start a community</button>
@@ -482,7 +423,9 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
           </nav>
           <nav aria-label="Account">
             <a href="/login">Sign in</a>
-            <button className="cta cta-small" type="button" onClick={trackStart("header", props.onJoin)}>Start a community</button>
+            <button className="cta cta-small" type="button" onClick={trackStart("header", props.onJoin)}>
+              <span className="long">Start a community</span><span className="short" aria-hidden="true">Start</span>
+            </button>
             <PhoneMenu onJoin={props.onJoin} />
           </nav>
         </header>
@@ -645,8 +588,8 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         </section>
 
         <section className="product" id="how" aria-label="The product" data-rv>
-          <ProductShot />
-          <p className="caption">One workspace for your members, your courses, your events and your community's memory.</p>
+          <ProductPreview />
+          <p className="caption">Try it: review the morning brief, ask the guide in #general, open a member.</p>
         </section>
 
         <StatementFigures />
