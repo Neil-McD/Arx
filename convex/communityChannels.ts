@@ -466,6 +466,30 @@ export const applyChannelOperationForTrustedUserInternal = internalMutation({
       return view(await moveActiveCommunityChannel({ ctx, communityId: args.communityId, channelId: channel._id,
         afterChannelId: after?._id ?? null, beforeChannelId: before?._id ?? null, expectedPosition: channel.position }));
     }
+    if (args.operation === "community.channel.set_pinned_post") {
+      const rawPost = input.post;
+      let rootId: any = null;
+      if (rawPost !== null && rawPost !== undefined) {
+        const match = typeof rawPost === "string" ? /^interaction:root:([A-Za-z0-9]+)$/.exec(rawPost.trim()) : null;
+        rootId = match ? ctx.db.normalizeId("communityInteractionRoots", match[1]) : null;
+        if (!rootId) throw new Error("community_channel_pin_post_not_found");
+      }
+      const updated = await setActiveCommunityChannelPinnedRoot({
+        ctx,
+        communityId: args.communityId,
+        channelId: channel._id,
+        rootId,
+        actorUserId: args.userId,
+        actor,
+      });
+      return {
+        channel: {
+          slug: updated.slug,
+          name: updated.name,
+        },
+        pinned_post: updated.pinnedRootId ? `interaction:root:${normalizeIdValue(updated.pinnedRootId)}` : null,
+      };
+    }
     throw new Error("operation_not_found");
   },
 });

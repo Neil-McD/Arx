@@ -4,7 +4,7 @@
 // access check. A listed pod shows members who aren't in it only its outside:
 // what it is for, its hosts and seats left, never who is in it or what is said.
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
@@ -583,5 +583,495 @@ export const getPodPage = query({
       can_edit: manages,
       can_enter: canEnter,
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal helpers for Official Polynet MCP & Studio Guide Chat (builder/pods.json
+// and community.pod.* operations). Owners & admins only for builder actions;
+// members may only request to join listed non-paid pods.
+// ---------------------------------------------------------------------------
+
+async function resolveActivePodBySlug(ctx: Ctx, communityId: any, slugRaw: unknown) {
+  const slug = String(slugRaw ?? "").trim().toLowerCase();
+  if (!slug) throw new Error("community_pod_not_found");
+  const channel = await ctx.db
+    .query("communityChannels")
+    .withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug))
+    .first();
+  if (!channel || channel.accessMode !== "restricted" || channel.status !== "active") {
+    throw new Error("community_pod_not_found");
+  }
+  return channel;
+}
+
+function parsePodUserRef(ctx: Ctx, raw: unknown) {
+  const match = typeof raw === "string" ? /^user:([A-Za-z0-9]+)$/.exec(raw.trim()) : null;
+  const userId = match ? ctx.db.normalizeId("users", match[1]) : null;
+  if (!userId) throw new Error("community_member_not_found");
+  return userId;
+}
+
+async function memberHasPaidPodCommitment(ctx: Ctx, channelId: any, userId: any, seatRow: any): Promise<boolean> {
+  if (seatReasons(seatRow).includes("paid")) return true;
+  const payments = await paymentRows(ctx, channelId, userId);
+  if (podPaymentStateOf(payments)) return true;
+  return payments.some((row: any) =>
+    row.status === "active" ||
+    row.status === "past_due" ||
+    row.status === "cancel_at_period_end" ||
+    row.status === "pending",
+  );
+}
+
+async function podMemberProjection(
+  ctx: Ctx,
+  userId: any,
+  names: Map<string, string>,
+  usersCache?: Map<string, { handle?: string; normalizedHandle?: string } | null>,
+) {
+  const key = normalizeIdValue(userId);
+  let user = usersCache?.get(key);
+  if (user === undefined) {
+    user = (await ctx.db.get(userId)) as { handle?: string; normalizedHandle?: string } | null;
+    usersCache?.set(key, user);
+  }
+  const name = await displayName(ctx, userId, names);
+  return {
+    member_ref: `user:${key}`,
+    handle: user?.normalizedHandle ?? user?.handle ?? null,
+    name,
+  };
+}
+
+export const readBuilderPodsForTrustedManagerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const channels = await ctx.db
+      .query("communityChannels")
+      .withIndex("by_community_access_status_position", (q: any) =>
+        q.eq("communityId", args.communityId).eq("accessMode", "restricted").eq("status", "active"),
+      )
+      .take(PODS_CAP);
+    const totalPodCount = channels.length;
+    const names = new Map<string, string>();
+    const usersCache = new Map<string, { handle?: string; normalizedHandle?: string } | null>();
+    const pods: any[] = [];
+    const MEMBER_HYDRATION_CAP = 30;
+    const REQUEST_HYDRATION_CAP = 25;
+    for (const channel of channels as any[]) {
+      const [record, grants, agentSeat, pendingRows, waitlistRows] = await Promise.all([
+        podRecord(ctx, args.communityId, channel._id),
+        memberGrants(ctx, channel._id),
+        ctx.db
+          .query("communityChannelParticipants")
+          .withIndex("by_channel_principal", (q: any) =>
+            q.eq("channelId", channel._id).eq("principalKey", "community_agent"),
+          )
+          .first(),
+        ctx.db
+          .query("communityPodRequests")
+          .withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "pending"))
+          .take(REQUEST_HYDRATION_CAP + 1),
+        ctx.db
+          .query("communityPodRequests")
+          .withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "waitlist"))
+          .take(REQUEST_HYDRATION_CAP + 1),
+      ]);
+      const hosts = [];
+      for (const hostId of (record?.hostUserIds ?? []).slice(0, 10)) {
+        hosts.push(await podMemberProjection(ctx, hostId, names, usersCache));
+      }
+      const members = [];
+      for (const grant of grants.slice(0, MEMBER_HYDRATION_CAP)) {
+        const memberId = ctx.db.normalizeId("users", userIdOf(String(grant.principalKey)));
+        if (!memberId) continue;
+        const [proj, paidSeat] = await Promise.all([
+          podMemberProjection(ctx, memberId, names, usersCache),
+          memberHasPaidPodCommitment(ctx, channel._id, memberId, grant),
+        ]);
+        members.push({
+          ...proj,
+          is_host: isHost(record, memberId),
+          from_plan: seatReasons(grant).includes("plan"),
+          paid_seat: paidSeat,
+        });
+      }
+      const pendingSlice = pendingRows.slice(0, REQUEST_HYDRATION_CAP);
+      const waitlistSlice = waitlistRows.slice(0, REQUEST_HYDRATION_CAP);
+      const requestsTruncated =
+        pendingRows.length > REQUEST_HYDRATION_CAP || waitlistRows.length > REQUEST_HYDRATION_CAP;
+      const requests = [];
+      for (const row of [...pendingSlice, ...waitlistSlice]) {
+        const proj = await podMemberProjection(ctx, row.userId, names, usersCache);
+        requests.push({
+          ...proj,
+          status: row.status,
+          created_at: new Date(row.createdAt).toISOString(),
+        });
+      }
+      pods.push({
+        slug: String(channel.slug ?? ""),
+        name: String(channel.name ?? ""),
+        purpose: record?.purpose ?? "",
+        about_md: record?.aboutMd ?? "",
+        what_you_get: record?.whatYouGet ?? [],
+        visibility: podVisibilityOf(record),
+        seats: typeof record?.seats === "number" ? record.seats : null,
+        member_count: grants.length,
+        guide_seated: agentSeat?.status === "active",
+        paid_pod: Boolean(podPriceOf(record)),
+        hosts,
+        members,
+        ...(grants.length > members.length ? { members_truncated: true } : {}),
+        requests,
+        ...(requestsTruncated ? { requests_truncated: true } : {}),
+      });
+    }
+    const buildPayload = (truncated: boolean) => ({
+      read_at: new Date().toISOString(),
+      pod_count: totalPodCount,
+      shown_pod_count: pods.length,
+      pods,
+      ...(truncated ? { truncated: true } : {}),
+    });
+    // Measure pretty-printed JSON (matching canonicalJsonDocument's 2-space indent)
+    // so the returned document never overflows the 24 KB canonical read cap.
+    let truncated = false;
+    while (JSON.stringify(buildPayload(truncated), null, 2).length > 22_000) {
+      truncated = true;
+      const biggestMembersPod = pods.reduce<any>(
+        (best, pod) => (!best || pod.members.length > best.members.length ? pod : best),
+        null,
+      );
+      const biggestRequestsPod = pods.reduce<any>(
+        (best, pod) => (!best || pod.requests.length > best.requests.length ? pod : best),
+        null,
+      );
+      if (biggestMembersPod && biggestMembersPod.members.length > 0) {
+        const drop = Math.max(1, Math.ceil(biggestMembersPod.members.length / 4));
+        biggestMembersPod.members.splice(-drop);
+        biggestMembersPod.members_truncated = true;
+      } else if (biggestRequestsPod && biggestRequestsPod.requests.length > 0) {
+        const drop = Math.max(1, Math.ceil(biggestRequestsPod.requests.length / 4));
+        biggestRequestsPod.requests.splice(-drop);
+        biggestRequestsPod.requests_truncated = true;
+      } else {
+        const longAboutPod = pods.find((pod) => typeof pod.about_md === "string" && pod.about_md.length > 160);
+        if (longAboutPod) {
+          longAboutPod.about_md = `${longAboutPod.about_md.slice(0, 159)}…`;
+        } else if (pods.length > 1) {
+          pods.pop();
+        } else {
+          break;
+        }
+      }
+    }
+    return buildPayload(truncated);
+  },
+});
+
+export const describePodActionForTrustedManagerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    action: v.union(v.literal("remove_members"), v.literal("set_guide_seat")),
+    podSlug: v.string(),
+    members: v.optional(v.array(v.string())),
+    seated: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    } catch {
+      return { ok: false as const, code: "community_forbidden" };
+    }
+    let channel: any;
+    try {
+      channel = await resolveActivePodBySlug(ctx, args.communityId, args.podSlug);
+    } catch {
+      return { ok: false as const, code: "community_pod_not_found" };
+    }
+    if (args.action === "set_guide_seat") {
+      return {
+        ok: true as const,
+        podName: String(channel.name ?? channel.slug),
+        seated: Boolean(args.seated),
+      };
+    }
+    const refs = args.members ?? [];
+    if (!refs.length) return { ok: false as const, code: "invalid_tool_args" };
+    const namesMap = new Map<string, string>();
+    const names: string[] = [];
+    for (const ref of refs) {
+      let targetUserId: any;
+      try {
+        targetUserId = parsePodUserRef(ctx, ref);
+      } catch {
+        return { ok: false as const, code: "community_member_not_found" };
+      }
+      const seat = await ctx.db
+        .query("communityChannelParticipants")
+        .withIndex("by_channel_principal", (q: any) =>
+          q.eq("channelId", channel._id).eq("principalKey", `user:${normalizeIdValue(targetUserId)}`),
+        )
+        .first();
+      if (!seat || seat.status !== "active") {
+        return { ok: false as const, code: "community_pod_member_not_found" };
+      }
+      if (seatReasons(seat).includes("plan")) {
+        return { ok: false as const, code: "community_pod_seat_from_plan" };
+      }
+      if (await memberHasPaidPodCommitment(ctx, channel._id, targetUserId, seat)) {
+        return { ok: false as const, code: "paid_pod_member_use_studio" };
+      }
+      names.push(await displayName(ctx, targetUserId, namesMap));
+    }
+    return {
+      ok: true as const,
+      podName: String(channel.name ?? channel.slug),
+      names,
+    };
+  },
+});
+
+export const applyPodOperationForTrustedManagerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    operation: v.string(),
+    input: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const ownerIdStr = String(community.ownerId);
+    const input = (args.input ?? {}) as Record<string, unknown>;
+    const channel = await resolveActivePodBySlug(ctx, args.communityId, input.pod);
+    const nowMs = Date.now();
+
+    if (args.operation === "community.pod.update_details") {
+      const patch: Record<string, unknown> = {};
+      if (typeof input.purpose === "string") {
+        patch.purpose = input.purpose.replace(/\s+/g, " ").trim().slice(0, PURPOSE_MAX);
+      }
+      if (typeof input.about === "string") {
+        patch.aboutMd = cleanPodAbout(input.about) || undefined;
+      }
+      if (Array.isArray(input.what_you_get)) {
+        patch.whatYouGet = cleanWhatYouGet(input.what_you_get.map((item) => String(item ?? "")));
+      }
+      if (input.pod_visibility === "listed" || input.pod_visibility === "hidden") {
+        patch.visibility = input.pod_visibility;
+      }
+      if (typeof input.seats === "number" && Number.isFinite(input.seats)) {
+        patch.seats = input.seats > 0 ? Math.min(SEATS_MAX, Math.floor(input.seats)) : undefined;
+      }
+      if (Object.keys(patch).length === 0) throw new Error("invalid_tool_args");
+      const existing = await podRecord(ctx, args.communityId, channel._id);
+      if (existing) {
+        await ctx.db.patch(existing._id, { ...patch, updatedAt: nowMs });
+      } else {
+        await ctx.db.insert("communityPods", {
+          communityId: args.communityId,
+          channelId: channel._id,
+          purpose: "",
+          visibility: "listed",
+          ...patch,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        } as any);
+      }
+      return { pod: channel.slug, updated: Object.keys(patch) };
+    }
+
+    if (args.operation === "community.pod.set_host") {
+      const targetUserId = parsePodUserRef(ctx, input.member);
+      const makeHost = Boolean(input.host);
+      if (makeHost) {
+        await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: targetUserId });
+        if (String(targetUserId) !== ownerIdStr) {
+          await setChannelParticipantCore(ctx, {
+            communityId: args.communityId,
+            channelId: channel._id,
+            createdByUserId: args.userId,
+            active: true,
+            target: { kind: "member", userId: targetUserId },
+          });
+        }
+      }
+      const existing = await podRecord(ctx, args.communityId, channel._id);
+      const current = (existing?.hostUserIds ?? []).filter((id: any) => String(id) !== String(targetUserId));
+      const hostUserIds = makeHost ? [...current, targetUserId] : current;
+      if (existing) {
+        await ctx.db.patch(existing._id, { hostUserIds, updatedAt: nowMs });
+      } else {
+        await ctx.db.insert("communityPods", {
+          communityId: args.communityId,
+          channelId: channel._id,
+          purpose: "",
+          visibility: "listed",
+          hostUserIds,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+      return { pod: channel.slug, member: `user:${normalizeIdValue(targetUserId)}`, host: makeHost };
+    }
+
+    if (args.operation === "community.pod.add_members") {
+      const refs = Array.isArray(input.members) ? input.members : [];
+      if (!refs.length) throw new Error("invalid_tool_args");
+      const targetIds = refs.map((ref) => parsePodUserRef(ctx, ref));
+      for (const targetUserId of targetIds) {
+        await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: targetUserId });
+      }
+      for (const targetUserId of targetIds) {
+        if (String(targetUserId) !== ownerIdStr) {
+          await setChannelParticipantCore(ctx, {
+            communityId: args.communityId,
+            channelId: channel._id,
+            createdByUserId: args.userId,
+            active: true,
+            target: { kind: "member", userId: targetUserId },
+          });
+        }
+        const request = await ctx.db
+          .query("communityPodRequests")
+          .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", targetUserId))
+          .first();
+        if (request && (request.status === "pending" || request.status === "waitlist")) {
+          await ctx.db.patch(request._id, { status: "approved", decidedByUserId: args.userId, updatedAt: nowMs });
+        }
+      }
+      return {
+        pod: channel.slug,
+        added: targetIds.map((id) => `user:${normalizeIdValue(id)}`),
+      };
+    }
+
+    if (args.operation === "community.pod.remove_members") {
+      const refs = Array.isArray(input.members) ? input.members : [];
+      if (!refs.length) throw new Error("invalid_tool_args");
+      const targetIds = refs.map((ref) => parsePodUserRef(ctx, ref));
+      // Fail closed on every member BEFORE revoking anyone: never touch plan-bound
+      // seats or paid pod subscriptions from an AI tool.
+      for (const targetUserId of targetIds) {
+        const seat = await ctx.db
+          .query("communityChannelParticipants")
+          .withIndex("by_channel_principal", (q: any) =>
+            q.eq("channelId", channel._id).eq("principalKey", `user:${normalizeIdValue(targetUserId)}`),
+          )
+          .first();
+        if (!seat || seat.status !== "active") throw new Error("community_pod_member_not_found");
+        if (seatReasons(seat).includes("plan")) throw new Error("community_pod_seat_from_plan");
+        if (await memberHasPaidPodCommitment(ctx, channel._id, targetUserId, seat)) {
+          throw new Error("paid_pod_member_use_studio");
+        }
+      }
+      for (const targetUserId of targetIds) {
+        await setChannelParticipantCore(ctx, {
+          communityId: args.communityId,
+          channelId: channel._id,
+          createdByUserId: args.userId,
+          active: false,
+          target: { kind: "member", userId: targetUserId },
+        });
+      }
+      return {
+        pod: channel.slug,
+        removed: targetIds.map((id) => `user:${normalizeIdValue(id)}`),
+      };
+    }
+
+    if (args.operation === "community.pod.decide_request") {
+      const targetUserId = parsePodUserRef(ctx, input.member);
+      const approve = Boolean(input.approve);
+      const request = await ctx.db
+        .query("communityPodRequests")
+        .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", targetUserId))
+        .first();
+      if (!request || (request.status !== "pending" && request.status !== "waitlist")) {
+        throw new Error("community_pod_request_not_found");
+      }
+      if (approve) {
+        await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: targetUserId });
+        await setChannelParticipantCore(ctx, {
+          communityId: args.communityId,
+          channelId: channel._id,
+          createdByUserId: args.userId,
+          active: true,
+          target: { kind: "member", userId: targetUserId },
+        });
+      }
+      await ctx.db.patch(request._id, {
+        status: approve ? "approved" : "declined",
+        decidedByUserId: args.userId,
+        updatedAt: nowMs,
+      });
+      return {
+        pod: channel.slug,
+        member: `user:${normalizeIdValue(targetUserId)}`,
+        status: approve ? ("approved" as const) : ("declined" as const),
+      };
+    }
+
+    if (args.operation === "community.pod.set_guide_seat") {
+      const seated = Boolean(input.seated);
+      const result = await setChannelParticipantCore(ctx, {
+        communityId: args.communityId,
+        channelId: channel._id,
+        createdByUserId: args.userId,
+        active: seated,
+        target: { kind: "community_agent" },
+      });
+      return { pod: channel.slug, guide_seated: seated, changed: result.changed };
+    }
+
+    throw new Error("operation_not_found");
+  },
+});
+
+export const requestJoinPodForTrustedMemberInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    podSlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const channel = await resolveActivePodBySlug(ctx, args.communityId, args.podSlug);
+    const record = await podRecord(ctx, args.communityId, channel._id);
+    if (podVisibilityOf(record) !== "listed") throw new Error("community_pod_not_found");
+    if (podPriceOf(record)) throw new Error("community_pod_paid");
+    if (String(args.userId) === String(community.ownerId)) {
+      return { pod: channel.slug, status: "member" as const };
+    }
+    const grants = await memberGrants(ctx, channel._id);
+    if (grants.some((row: any) => row.principalKey === `user:${normalizeIdValue(args.userId)}`)) {
+      return { pod: channel.slug, status: "member" as const };
+    }
+    const status = typeof record?.seats === "number" && grants.length >= record.seats ? ("waitlist" as const) : ("pending" as const);
+    const nowMs = Date.now();
+    const existing = await ctx.db
+      .query("communityPodRequests")
+      .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", args.userId))
+      .first();
+    if (existing && (existing.status === "pending" || existing.status === "waitlist")) {
+      return { pod: channel.slug, status: existing.status };
+    }
+    if (existing) {
+      await ctx.db.patch(existing._id, { status, decidedByUserId: undefined, updatedAt: nowMs });
+    } else {
+      await ctx.db.insert("communityPodRequests", {
+        communityId: args.communityId,
+        channelId: channel._id,
+        userId: args.userId,
+        status,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+    return { pod: channel.slug, status };
   },
 });

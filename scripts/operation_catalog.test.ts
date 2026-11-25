@@ -25,9 +25,25 @@ describe("the operations list", () => {
 
   it("says which operations take something away or reach many people", () => {
     const of = (effect: string) => CALL_OPERATION_NAMES.filter((name) => CALL_OPERATIONS[name].effect === effect);
-    expect(of("destroy")).toEqual(["community.interaction.remove", "community.course.delete", "community.members.remove", "community.members.ban", "community.journey.remove_stage"]);
+    expect(of("destroy")).toEqual([
+      "community.interaction.remove",
+      "community.note.delete",
+      "community.pod.remove_members",
+      "community.course.delete",
+      "community.members.remove",
+      "community.members.ban",
+      "community.journey.remove_stage",
+    ]);
     // What every member is told. Opening the community is join_mode.set's variant.
-    expect(of("broadcast")).toEqual(["community.agent.instructions.set", "community.handbook.approve", "community.event.cancel", "community.announcement.post", "community.course.publish", "community.guide_draft.send"]);
+    expect(of("broadcast")).toEqual([
+      "community.agent.instructions.set",
+      "community.handbook.approve",
+      "community.pod.set_guide_seat",
+      "community.event.cancel",
+      "community.announcement.post",
+      "community.course.publish",
+      "community.guide_draft.send",
+    ]);
     expect(CALL_OPERATION_VARIANTS["community.join_mode.set:open"]).toMatchObject({ effect: "broadcast", ask: "every_time" });
   });
 
@@ -41,6 +57,9 @@ describe("the operations list", () => {
       "community.interaction.remove": "every_time",
       "community.agent.instructions.set": "every_time",
       "community.handbook.approve": "every_time",
+      "community.note.delete": "every_time",
+      "community.pod.remove_members": "every_time",
+      "community.pod.set_guide_seat": "every_time",
       "community.event.cancel": "every_time",
       "community.announcement.post": "every_time",
       "community.course.publish": "every_time",

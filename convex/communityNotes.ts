@@ -4,7 +4,7 @@
 // both a private-room leak path and a shared-memory injection path).
 import { communityScopeKey, insertNote, noteBySlug, notesByUpdated, podScopeKey, searchNotes } from "./communityNotesStore";
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -179,5 +179,94 @@ export const deleteCommunityNote = mutation({
     if (row && noteAuthorKind(row) === "guide") await removeGuideNote(ctx, row, userId, Date.now());
     else if (row) await ctx.db.delete(row._id);
     return { deleted: Boolean(row) };
+  },
+});
+
+// Builder-only (owners & admins) internal helpers for Official Polynet MCP and Studio Guide Chat.
+export const describeCommunityNoteForTrustedManagerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), slug: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    } catch {
+      return { ok: false as const, code: "community_forbidden" };
+    }
+    const slug = args.slug.trim();
+    if (!slug) return { ok: false as const, code: "community_note_not_found" };
+    const row = await noteBySlug(ctx, communityScopeKey(args.communityId), slug);
+    if (!row) return { ok: false as const, code: "community_note_not_found" };
+    return { ok: true as const, slug: row.slug, title: row.title };
+  },
+});
+
+export const applyCommunityNoteOperationForTrustedManagerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    operation: v.string(),
+    input: v.any(),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const input = (args.input ?? {}) as Record<string, unknown>;
+    const scope = communityScopeKey(args.communityId);
+
+    if (args.operation === "community.note.save") {
+      const slugArg = typeof input.slug === "string" ? input.slug.trim() : "";
+      const text = normalizeCommunityNoteBody(String(input.text ?? ""));
+      if (!text) throw new Error("invalid_tool_args");
+      if (slugArg) {
+        const row = await noteBySlug(ctx, scope, slugArg);
+        if (!row) throw new Error("community_note_not_found");
+        const title = normalizeCommunityNoteTitle(String(input.title ?? "")) ?? row.title;
+        await ctx.db.patch(row._id, {
+          title,
+          bodyMd: text,
+          searchText: buildCommunityNoteSearchText({ title, bodyMd: text }),
+          updatedByUserId: args.userId,
+          updatedAt: Date.now(),
+          authorKind: "builder",
+        });
+        return { action: "updated" as const, slug: row.slug, title };
+      }
+      const title = normalizeCommunityNoteTitle(String(input.title ?? ""));
+      if (!title) throw new Error("invalid_tool_args");
+      const existing = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+      if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) throw new Error("community_notes_full");
+      const base = communityNoteSlug(title) || "note";
+      const taken = new Set<string>(existing.map((row: any) => row.slug));
+      let slug = base;
+      for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
+      const nowMs = Date.now();
+      await insertNote(ctx, scope, {
+        communityId: args.communityId,
+        slug,
+        title,
+        bodyMd: text,
+        source: "founder",
+        authorKind: "builder",
+        searchText: buildCommunityNoteSearchText({ title, bodyMd: text }),
+        createdByUserId: args.userId,
+        updatedByUserId: args.userId,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { action: "created" as const, slug, title };
+    }
+
+    if (args.operation === "community.note.delete") {
+      const slugArg = String(input.slug ?? "").trim();
+      if (!slugArg) throw new Error("community_note_not_found");
+      const row = await noteBySlug(ctx, scope, slugArg);
+      if (!row) throw new Error("community_note_not_found");
+      if (noteAuthorKind(row) === "guide") {
+        await removeGuideNote(ctx, row, args.userId, Date.now());
+      } else {
+        await ctx.db.delete(row._id);
+      }
+      return { action: "deleted" as const, slug: row.slug, title: row.title };
+    }
+
+    throw new Error("operation_not_found");
   },
 });

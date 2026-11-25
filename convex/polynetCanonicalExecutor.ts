@@ -21,6 +21,7 @@ import {
   POLYNET_BUILDER_DIRECTORY_PATH,
   POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH,
   POLYNET_BUILDER_JOURNEY_PATH,
+  POLYNET_BUILDER_PODS_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_BUILDER_SUGGESTIONS_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
@@ -48,7 +49,7 @@ import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  announcementQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideDraftSendQuestion, guideInstructionsQuestion, handbookQuestion, journeyStageRemoveQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
+  announcementQuestion, communityNoteDeleteQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideDraftSendQuestion, guideInstructionsQuestion, handbookQuestion, journeyStageRemoveQuestion, memberRemovalQuestion, openCommunityQuestion, podGuideSeatQuestion, podRemoveMembersQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
 import {
   JOURNEY_CARD_STATUSES,
@@ -124,7 +125,36 @@ const CHANNEL_CREATE_OPERATION = "community.channel.create";
 const CHANNEL_RENAME_OPERATION = "community.channel.rename";
 const CHANNEL_DESCRIBE_OPERATION = "community.channel.describe";
 const CHANNEL_MOVE_OPERATION = "community.channel.move";
-const CHANNEL_OPERATIONS = [CHANNEL_CREATE_OPERATION, CHANNEL_RENAME_OPERATION, CHANNEL_DESCRIBE_OPERATION, CHANNEL_MOVE_OPERATION];
+const CHANNEL_SET_PINNED_POST_OPERATION = "community.channel.set_pinned_post";
+const CHANNEL_OPERATIONS = [
+  CHANNEL_CREATE_OPERATION,
+  CHANNEL_RENAME_OPERATION,
+  CHANNEL_DESCRIBE_OPERATION,
+  CHANNEL_MOVE_OPERATION,
+  CHANNEL_SET_PINNED_POST_OPERATION,
+];
+// Shared community notes (owners and admins).
+const NOTE_SAVE_OPERATION = "community.note.save";
+const NOTE_DELETE_OPERATION = "community.note.delete";
+const NOTE_OPERATIONS = [NOTE_SAVE_OPERATION, NOTE_DELETE_OPERATION];
+// Pods (owners and admins; request_join for members).
+const POD_REQUEST_JOIN_OPERATION = "community.pod.request_join";
+const POD_UPDATE_DETAILS_OPERATION = "community.pod.update_details";
+const POD_SET_HOST_OPERATION = "community.pod.set_host";
+const POD_ADD_MEMBERS_OPERATION = "community.pod.add_members";
+const POD_REMOVE_MEMBERS_OPERATION = "community.pod.remove_members";
+const POD_DECIDE_REQUEST_OPERATION = "community.pod.decide_request";
+const POD_SET_GUIDE_SEAT_OPERATION = "community.pod.set_guide_seat";
+const POD_MULTI_MEMBER_OPERATIONS = [POD_ADD_MEMBERS_OPERATION, POD_REMOVE_MEMBERS_OPERATION];
+const POD_SINGLE_MEMBER_OPERATIONS = [POD_SET_HOST_OPERATION, POD_DECIDE_REQUEST_OPERATION];
+const POD_BUILDER_OPERATIONS = [
+  POD_UPDATE_DETAILS_OPERATION,
+  POD_SET_HOST_OPERATION,
+  POD_ADD_MEMBERS_OPERATION,
+  POD_REMOVE_MEMBERS_OPERATION,
+  POD_DECIDE_REQUEST_OPERATION,
+  POD_SET_GUIDE_SEAT_OPERATION,
+];
 // Events members see: made, changed and cancelled (convex/communityEvents.ts).
 const EVENT_CREATE_OPERATION = "community.event.create";
 const EVENT_UPDATE_OPERATION = "community.event.update";
@@ -163,7 +193,8 @@ const JOURNEY_OPERATIONS = [
   JOURNEY_REMOVE_STAGE_OPERATION,
 ];
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS, ANNOUNCEMENT_POST_OPERATION,
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...NOTE_OPERATIONS, ...POD_BUILDER_OPERATIONS,
+  ...EVENT_OPERATIONS, ANNOUNCEMENT_POST_OPERATION,
   COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION, ...JOURNEY_OPERATIONS, ...GUIDE_DRAFT_OPERATIONS];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
@@ -948,6 +979,7 @@ function capabilityDocument(args: {
   const isReactCapability = args.operation === REACT_OPERATION && lensCalls(lens, "react");
   const isLessonDoneCapability = args.operation === LESSON_DONE_OPERATION && lensCalls(lens, "lesson_done");
   const isMarkReadCapability = args.operation === MARK_READ_OPERATION && lensCalls(lens, "mark_read");
+  const isPodRequestJoinCapability = args.operation === POD_REQUEST_JOIN_OPERATION && lensCalls(lens, "request_join_pod");
   const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&
     lensCalls(lens, "presence");
   const isPersonalMemoryCapability =
@@ -956,7 +988,7 @@ function capabilityDocument(args: {
   const isMembersCapability = MEMBERS_OPERATIONS.includes(args.operation) && lensCalls(lens, "builder_change");
   const isCommunityCapability = COMMUNITY_OPERATIONS.includes(args.operation) && lensCalls(lens, "builder_change");
   if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isMembersCapability && !isReactCapability && !isLessonDoneCapability &&
-    !isMarkReadCapability && !isPresenceCapability && !isPersonalMemoryCapability) {
+    !isMarkReadCapability && !isPodRequestJoinCapability && !isPresenceCapability && !isPersonalMemoryCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -1077,6 +1109,42 @@ function capabilityDocument(args: {
       required: ["channel"], optional: ["after"], channel: "a channel slug from the channels listing",
       after: "the slug of the channel it should follow; leave out or null to put it first",
       result: "result: { channel }", effects: ["reorder_channels"], forbidden_effects: ["move_general"] }
+    : args.operation === CHANNEL_SET_PINNED_POST_OPERATION ? {
+      required: ["channel", "post"], channel: "a channel slug from the channels listing",
+      post: "interaction:root:<id> of a live top-level post in that channel, or null to unpin",
+      result: "result: { channel, pinned_post }", effects: ["pin_or_unpin_channel_post"] }
+    : args.operation === NOTE_SAVE_OPERATION ? {
+      required: ["title", "text"], optional: ["slug"], slug: "optional existing note slug from memory/ to update; omit to create a new note",
+      title: "the note's title (up to 120 characters)", text: "the note's markdown body (up to 4,000 characters)",
+      result: "result: { action, slug, title }", effects: ["save_community_note"] }
+    : args.operation === NOTE_DELETE_OPERATION ? {
+      required: ["slug"], slug: "the note's slug from memory/",
+      result: "the person is shown the note title with Yes and No, every time: waiting_for_person until they say. Then result: { action: deleted, slug, title }",
+      effects: ["delete_community_note_after_the_persons_yes"] }
+    : args.operation === POD_UPDATE_DETAILS_OPERATION ? {
+      required: ["pod"], optional: ["purpose", "about", "what_you_get", "pod_visibility", "seats"],
+      pod: "the pod's slug from builder/pods.json",
+      result: "result: { pod, updated }", effects: ["update_pod_details"] }
+    : args.operation === POD_SET_HOST_OPERATION ? {
+      required: ["pod", "member", "host"], pod: "the pod's slug from builder/pods.json",
+      member: "an active member handle or user:<id>", host: "true makes them a host; false removes host status",
+      result: "result: { pod, member, host }", effects: ["set_pod_host"] }
+    : args.operation === POD_ADD_MEMBERS_OPERATION ? {
+      required: ["pod", "members"], pod: "the pod's slug from builder/pods.json", members,
+      result: "result: { pod, added }", effects: ["add_pod_members"] }
+    : args.operation === POD_REMOVE_MEMBERS_OPERATION ? {
+      required: ["pod", "members"], pod: "the pod's slug from builder/pods.json", members,
+      result: "the person is shown who with Yes and No, every time: waiting_for_person until they say. Plan-bound and paid pod seats must be changed in Studio.",
+      effects: ["remove_non_paying_pod_members_after_the_persons_yes"], forbidden_effects: ["cancel_paid_pod_subscriptions"] }
+    : args.operation === POD_DECIDE_REQUEST_OPERATION ? {
+      required: ["pod", "member", "approve"], pod: "the pod's slug from builder/pods.json",
+      member: "the requesting member handle or user:<id>", approve: "true approves and adds them; false declines",
+      result: "result: { pod, member, status }", effects: ["decide_pod_join_request"] }
+    : args.operation === POD_SET_GUIDE_SEAT_OPERATION ? {
+      required: ["pod", "seated"], pod: "the pod's slug from builder/pods.json",
+      seated: "true seats the community AI in the pod; false removes it",
+      result: "the person is asked with Yes and No, every time: waiting_for_person until they say. Then result: { pod, guide_seated, changed }",
+      effects: ["set_pod_guide_seat_after_the_persons_yes"] }
     : args.operation === COURSE_PUBLISH_OPERATION ? {
       required: ["course", "published"], course: "the course's id from builder/resources/", published: "true publishes it, false makes it a draft again",
       result: "the person is shown the course with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { course, published }",
@@ -1160,6 +1228,11 @@ function capabilityDocument(args: {
       through_at: "the newest activity the member saw, in epoch milliseconds (default: everything readable now)",
       result: "{ channel, advanced, seen_through_at }",
       effects: ["advance_own_read_position"], forbidden_effects: ["mark_read_for_someone_else", "move_read_position_back"] };
+  } else if (isPodRequestJoinCapability) {
+    operationDefinition.input = { required: ["pod"],
+      pod: "a listed pod's slug from pods/",
+      result: "result: { pod, status: pending | waitlist | member }",
+      effects: ["request_to_join_listed_pod"], forbidden_effects: ["join_hidden_pod", "start_paid_checkout"] };
   } else if (isPersonalMemoryCapability) {
     operationDefinition.input = { required: ["operations"],
       operations: "1 to 10 of { action: \"add\", content } | { action: \"patch\", old_text, content } | { action: \"remove\", old_text } | { action: \"clear\" }; old_text is a unique part of one entry",
@@ -1630,6 +1703,7 @@ async function executeCanonicalList(args: {
           { path: mountedPath(target.communitySlug, POLYNET_BUILDER_SUGGESTIONS_PATH), kind: "document", type: "builder", name: "Waiting Chief of Staff suggestions on Home (stage moves, plus owner-only check-in and reply drafts)" },
           { path: mountedPath(target.communitySlug, POLYNET_BUILDER_JOURNEY_PATH), kind: "document", type: "builder", name: "The Member Board: stages, checkpoints, member placement, statuses, wins, and Guide notes" },
           { path: mountedPath(target.communitySlug, POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Filtered Member Board slices by stage or status" },
+          { path: mountedPath(target.communitySlug, POLYNET_BUILDER_PODS_PATH), kind: "document", type: "builder", name: "Pods: details, hosts, members, pending join requests, and AI seating" },
           joinRequests,
           {
             path: mountedPath(
@@ -2195,6 +2269,29 @@ async function executeCanonicalRead(args: {
         ok: true,
         value: {
           ...canonicalJsonDocument({ target, localPath: target.localPath, payload: board }),
+          writable: false,
+          searchable: false,
+        },
+      };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
+
+  // Pods management view, for owners and admins only (fail closed for members & moderators).
+  if (target.localPath === POLYNET_BUILDER_PODS_PATH) {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const podsPayload = await args.ctx.runQuery(
+        (internal as any).communityPods.readBuilderPodsForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId },
+      );
+      return {
+        ok: true,
+        value: {
+          ...canonicalJsonDocument({ target, localPath: target.localPath, payload: podsPayload }),
           writable: false,
           searchable: false,
         },
@@ -3174,6 +3271,33 @@ async function executeCanonicalCall(args: {
   if (operation === MARK_READ_OPERATION || operation === PRESENCE_HEARTBEAT_OPERATION || operation === TYPING_SET_OPERATION) {
     return await executeLiveMemberCall({ ...args, target, operation, input, idempotencyKey });
   }
+  if (operation === POD_REQUEST_JOIN_OPERATION) {
+    const podSlug = typeof rawInput.pod === "string" ? rawInput.pod.trim().toLowerCase() : "";
+    if (
+      target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
+      !podSlug ||
+      podSlug.length > 64 ||
+      Object.keys(rawInput).some((key) => key !== "pod")
+    ) {
+      return canonicalError("invalid_tool_args", "Give pod (the listed pod's slug from pods/).");
+    }
+    try {
+      const value = await args.ctx.runMutation(
+        (internal as any).communityPods.requestJoinPodForTrustedMemberInternal,
+        { userId: args.userId, communityId: target.communityId, podSlug },
+      );
+      return {
+        ok: true,
+        value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey, result: value }),
+      };
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "";
+      if (raw.includes("community_pod_paid")) {
+        return canonicalError("pod_is_paid", "That is a paid pod. Join it on its Pods page in Polynet.");
+      }
+      return canonicalError("pod_not_found", "No listed pod with that slug here. List pods/ first.");
+    }
+  }
   if (ADMISSION_OPERATIONS.includes(operation)) {
     if (args.principalKind !== "external_mcp" && args.principalKind !== "community_agent_for_member") {
       return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
@@ -3455,6 +3579,83 @@ async function askPersonFirst(args: {
         question = guideDraftSendQuestion({ draftKind: "reply", targetLabel: found.channelName });
         text = found.text;
       }
+    } else if (operation === NOTE_DELETE_OPERATION) {
+      const slug = typeof callInput.slug === "string" ? callInput.slug.trim() : "";
+      if (!slug || slug.length > 64 || Object.keys(callInput).some((key) => key !== "slug")) return null;
+      const found = (await args.ctx.runQuery(
+        (internal as any).communityNotes.describeCommunityNoteForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId, slug },
+      )) as { ok: true; slug: string; title: string } | { ok: false; code: string };
+      if (!found.ok) {
+        const refusal = COMMUNITY_REFUSALS[found.code] ?? [
+          "note_not_found",
+          "No community note with that slug. List memory/ first.",
+        ];
+        return canonicalError(refusal[0], refusal[1]);
+      }
+      question = communityNoteDeleteQuestion({ title: found.title });
+    } else if (operation === POD_REMOVE_MEMBERS_OPERATION) {
+      const podSlug = typeof callInput.pod === "string" ? callInput.pod.trim().toLowerCase() : "";
+      const members = Array.isArray(callInput.members) ? callInput.members : null;
+      if (
+        !podSlug ||
+        podSlug.length > 64 ||
+        !members ||
+        members.length === 0 ||
+        members.length > SELECTION_MAX ||
+        members.some((m) => typeof m !== "string" || !/^user:[A-Za-z0-9]+$/.test(m)) ||
+        new Set(members).size !== members.length ||
+        Object.keys(callInput).some((key) => key !== "pod" && key !== "members")
+      ) {
+        return null;
+      }
+      const found = (await args.ctx.runQuery(
+        (internal as any).communityPods.describePodActionForTrustedManagerInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          action: "remove_members",
+          podSlug,
+          members,
+        },
+      )) as { ok: true; podName: string; names: string[] } | { ok: false; code: string };
+      if (!found.ok) {
+        const refusal = COMMUNITY_REFUSALS[found.code] ?? [
+          "pod_action_refused",
+          "That pod member removal wasn't allowed. Read builder/pods.json first.",
+        ];
+        return canonicalError(refusal[0], refusal[1]);
+      }
+      question = podRemoveMembersQuestion({ podName: found.podName, names: found.names });
+      items = found.names.map((who) => ({ who, text: "" }));
+    } else if (operation === POD_SET_GUIDE_SEAT_OPERATION) {
+      const podSlug = typeof callInput.pod === "string" ? callInput.pod.trim().toLowerCase() : "";
+      if (
+        !podSlug ||
+        podSlug.length > 64 ||
+        typeof callInput.seated !== "boolean" ||
+        Object.keys(callInput).some((key) => key !== "pod" && key !== "seated")
+      ) {
+        return null;
+      }
+      const found = (await args.ctx.runQuery(
+        (internal as any).communityPods.describePodActionForTrustedManagerInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          action: "set_guide_seat",
+          podSlug,
+          seated: callInput.seated,
+        },
+      )) as { ok: true; podName: string; seated: boolean } | { ok: false; code: string };
+      if (!found.ok) {
+        const refusal = COMMUNITY_REFUSALS[found.code] ?? [
+          "pod_not_found",
+          "No active pod with that slug. Read builder/pods.json first.",
+        ];
+        return canonicalError(refusal[0], refusal[1]);
+      }
+      question = podGuideSeatQuestion({ podName: found.podName, seated: found.seated });
     } else if (operation === EVENT_CANCEL_OPERATION) {
       const eventId = typeof callInput.event === "string" ? callInput.event.trim() : "";
       const scope = callInput.scope === "occurrence" || callInput.scope === "series" ? callInput.scope : undefined;
@@ -3838,6 +4039,19 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_reply_draft_empty: ["invalid_tool_args", "Give non-empty words for the reply."],
   community_reply_draft_too_long: ["invalid_tool_args", "That reply is longer than 1,500 characters."],
   interaction_mention_everybody_reply_not_allowed: ["invalid_tool_args", "Replies can't mention @everybody. Remove @everybody and try again."],
+  community_channel_pin_post_not_found: ["post_not_found", "No live top-level post with that ref in that channel. List the channel first."],
+  community_channel_pin_target_invalid: ["post_not_found", "No live top-level post with that ref in that channel. List the channel first."],
+  community_user_blocked: ["member_not_found", "That user is blocked from this community."],
+  community_entitlement_required: ["member_not_found", "They aren't an active member of this community."],
+  community_note_not_found: ["note_not_found", "No community note with that slug. List memory/ first."],
+  community_notes_full: ["notes_full", "This community has reached its maximum number of community notes."],
+  community_pod_not_found: ["pod_not_found", "No active pod with that slug. Read builder/pods.json first."],
+  community_pod_paid: ["pod_is_paid", "That is a paid pod. Joining is done on its Pods page in Polynet."],
+  community_pod_member_not_found: ["pod_member_not_found", "That member isn't currently active in this pod. Read builder/pods.json first."],
+  community_pod_seat_from_plan: ["pod_seat_from_plan", "That member's pod seat comes from their membership plan and can't be removed separately."],
+  paid_pod_member_use_studio: ["paid_pod_member_use_studio", "Removing a paying pod member cancels their pod subscription, so a host must do that directly on the Pods page in Polynet."],
+  community_pod_request_not_found: ["pod_request_not_found", "No pending or waitlisted join request for that member in this pod. Read builder/pods.json first."],
+  community_channel_member_inactive: ["member_not_found", "They aren't an active member of this community."],
 };
 
 // The community itself: profile, how people join, the agent's instructions and
@@ -3907,6 +4121,32 @@ async function executeCommunityOperation(args: {
     : operation === CHANNEL_DESCRIBE_OPERATION ? only(["channel", "description"]) && text("channel", 64) && text("description", 400)
     : operation === CHANNEL_MOVE_OPERATION ? only(["channel", "after"]) && text("channel", 64) &&
       (rawInput.after === undefined || rawInput.after === null || text("after", 64))
+    : operation === CHANNEL_SET_PINNED_POST_OPERATION ? only(["channel", "post"]) && text("channel", 64) &&
+      (rawInput.post === null || (typeof rawInput.post === "string" && /^interaction:root:[A-Za-z0-9_-]+$/.test(rawInput.post) && rawInput.post.length <= 180))
+    : operation === NOTE_SAVE_OPERATION ? only(["slug", "title", "text"]) &&
+      (rawInput.slug === undefined || (text("slug", 64) && String(rawInput.slug).trim().length > 0)) &&
+      text("title", 120) && String(rawInput.title).trim().length > 0 &&
+      text("text", 4_000) && String(rawInput.text).trim().length > 0
+    : operation === NOTE_DELETE_OPERATION ? only(["slug"]) && text("slug", 64) && String(rawInput.slug).trim().length > 0
+    : operation === POD_UPDATE_DETAILS_OPERATION ? only(["pod", "purpose", "about", "what_you_get", "pod_visibility", "seats"]) &&
+      text("pod", 64) && String(rawInput.pod).trim().length > 0 &&
+      ["purpose", "about", "what_you_get", "pod_visibility", "seats"].some((key) => key in rawInput) &&
+      (!("purpose" in rawInput) || text("purpose", 280)) &&
+      (!("about" in rawInput) || text("about", 1_500)) &&
+      (!("what_you_get" in rawInput) || (Array.isArray(rawInput.what_you_get) && rawInput.what_you_get.length <= 4 &&
+        rawInput.what_you_get.every((item) => typeof item === "string" && item.length <= 80))) &&
+      (!("pod_visibility" in rawInput) || rawInput.pod_visibility === "listed" || rawInput.pod_visibility === "hidden") &&
+      (!("seats" in rawInput) || (typeof rawInput.seats === "number" && Number.isInteger(rawInput.seats) && rawInput.seats >= 0 && rawInput.seats <= 500))
+    : operation === POD_SET_HOST_OPERATION ? only(["pod", "member", "host"]) && text("pod", 64) && String(rawInput.pod).trim().length > 0 &&
+      isUserRef(rawInput.member) && typeof rawInput.host === "boolean"
+    : operation === POD_ADD_MEMBERS_OPERATION ? only(["pod", "members"]) && text("pod", 64) && String(rawInput.pod).trim().length > 0 &&
+      isUserRefArray(rawInput.members)
+    : operation === POD_REMOVE_MEMBERS_OPERATION ? only(["pod", "members"]) && text("pod", 64) && String(rawInput.pod).trim().length > 0 &&
+      isUserRefArray(rawInput.members)
+    : operation === POD_DECIDE_REQUEST_OPERATION ? only(["pod", "member", "approve"]) && text("pod", 64) && String(rawInput.pod).trim().length > 0 &&
+      isUserRef(rawInput.member) && typeof rawInput.approve === "boolean"
+    : operation === POD_SET_GUIDE_SEAT_OPERATION ? only(["pod", "seated"]) && text("pod", 64) && String(rawInput.pod).trim().length > 0 &&
+      typeof rawInput.seated === "boolean"
     : operation === COURSE_PUBLISH_OPERATION ? only(["course", "published"]) && text("course", 180) && typeof rawInput.published === "boolean"
     : operation === COURSE_DELETE_OPERATION ? only(["course", "lesson"]) && (text("course", 180) !== text("lesson", 180))
     : operation === JOURNEY_MOVE_STAGE_OPERATION ? only(["members", "stage"]) && isUserRefArray(rawInput.members) && text("stage", 64) && String(rawInput.stage).trim().length > 0
@@ -3949,6 +4189,15 @@ async function executeCommunityOperation(args: {
       : operation === CHANNEL_RENAME_OPERATION ? "Give channel (its slug) and name."
       : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
       : operation === CHANNEL_MOVE_OPERATION ? "Give channel (its slug) and, to put it after another, after (that channel's slug)."
+      : operation === CHANNEL_SET_PINNED_POST_OPERATION ? "Give channel (its slug) and post (interaction:root:... to pin, or null to unpin)."
+      : operation === NOTE_SAVE_OPERATION ? "Give title (up to 120 chars), text (up to 4,000 chars), and optional existing slug."
+      : operation === NOTE_DELETE_OPERATION ? "Give slug of the community note from memory/."
+      : operation === POD_UPDATE_DETAILS_OPERATION ? "Give pod (its slug from builder/pods.json) and at least one field to update."
+      : operation === POD_SET_HOST_OPERATION ? "Give pod (its slug), member (handle or user:<id>), and host (true or false)."
+      : operation === POD_ADD_MEMBERS_OPERATION ? `Give pod (its slug) and members (1 to ${SELECTION_MAX} handles or user:<id> refs).`
+      : operation === POD_REMOVE_MEMBERS_OPERATION ? `Give pod (its slug) and members (1 to ${SELECTION_MAX} handles or user:<id> refs).`
+      : operation === POD_DECIDE_REQUEST_OPERATION ? "Give pod (its slug), member (handle or user:<id>), and approve (true or false)."
+      : operation === POD_SET_GUIDE_SEAT_OPERATION ? "Give pod (its slug) and seated (true or false)."
       : operation === COURSE_PUBLISH_OPERATION ? "Give course (its id from builder/resources/) and published (true or false)."
       : operation === COURSE_DELETE_OPERATION ? "Give course or lesson (its id from builder/resources/), not both."
       : operation === JOURNEY_MOVE_STAGE_OPERATION ? `Give members (1 to ${SELECTION_MAX} handles or user:<id> refs) and stage (a stage key or name from builder/journey.json).`
@@ -3987,6 +4236,13 @@ async function executeCommunityOperation(args: {
       : operation === GUIDE_DRAFT_SEND_OPERATION
         ? personOnly({ what: "Sending a Guide check-in or channel reply draft", where: "Home: Your guide suggests",
           path: buildCommunityTabPath(target.communitySlug, "agent") })
+      : operation === NOTE_DELETE_OPERATION
+        ? personOnly({ what: "Deleting a community note", where: "Knowledge: Notes, then Delete",
+          path: buildCommunityTabPath(target.communitySlug, "resources") })
+      : operation === POD_REMOVE_MEMBERS_OPERATION || operation === POD_SET_GUIDE_SEAT_OPERATION
+        ? personOnly({ what: operation === POD_REMOVE_MEMBERS_OPERATION ? "Removing members from a pod" : "Changing the community AI's seat in a pod",
+          where: "Pods: open the pod, then Manage",
+          path: buildCommunityTabPath(target.communitySlug, "pods") })
         : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
           path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }
@@ -4316,9 +4572,13 @@ export async function executePolynetCanonicalTool(args: {
   const callOperationName = String(input.operation ?? "");
   const resolvesMemberList =
     args.toolName === "polynet_call" &&
-    (MEMBERS_OPERATIONS.includes(callOperationName) || JOURNEY_MULTI_MEMBER_OPERATIONS.includes(callOperationName));
+    (MEMBERS_OPERATIONS.includes(callOperationName) ||
+      JOURNEY_MULTI_MEMBER_OPERATIONS.includes(callOperationName) ||
+      POD_MULTI_MEMBER_OPERATIONS.includes(callOperationName));
   const resolvesSingleMember =
-    args.toolName === "polynet_call" && JOURNEY_SINGLE_MEMBER_OPERATIONS.includes(callOperationName);
+    args.toolName === "polynet_call" &&
+    (JOURNEY_SINGLE_MEMBER_OPERATIONS.includes(callOperationName) ||
+      POD_SINGLE_MEMBER_OPERATIONS.includes(callOperationName));
   if (resolvesMemberList || resolvesSingleMember) {
     const callInput = input.input && typeof input.input === "object" ? input.input as Record<string, unknown> : null;
     const named = resolvesMemberList

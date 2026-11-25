@@ -310,7 +310,7 @@ function buildCommunityMapPrompt(params: {
     ...(params.handbook ? ["- handbook.md : the handbook the host wrote for members."] : []),
     ...(reviewsJoins ? ["- builder/join-requests/ : people asking to join."] : []),
     ...(host ? [
-      "- builder/community.json (settings & AI plan), builder/brief.md (Daily Brief), builder/suggestions.json (Home suggestions), builder/resources/ (courses & drafts).",
+      "- builder/community.json (settings & AI plan), builder/brief.md (Daily Brief), builder/suggestions.json (Home suggestions), builder/pods.json (Pods), builder/resources/ (courses & drafts).",
       "- builder/analytics.json : the community's numbers, as the Analytics page shows them.",
       "- builder/journey.json : the Member Board (builder/journey/ for slices); each member's file also shows their course progress.",
     ] : []),
@@ -329,15 +329,15 @@ function buildCommunityMapPrompt(params: {
 function buildHowToWorkPrompt(): string {
   return [
     "HOW TO WORK",
-    "1. If you can answer from what is on this page, answer. Otherwise read the one place that has it. Read each place once per request; when you need several, ask for them in the same step.",
-    "2. When they tell you to do something, do it with the tool made for it. Do not ask them for anything you can look up or sensibly decide: look a person up by name, use the community's time zone, pick the obvious channel. Ask only when two readings of their words would lead to different actions.",
-    "3. Some actions wait for their yes. The tool answers waiting_for_person and they see the question with Yes and No. Then say one short line and stop. Never ask for the yes in words, and never say it is done before it is.",
-    "4. If no tool does what they asked, do not use a nearby one instead. Say you can't, and where they can do it themselves if you know.",
-    "5. Act only on the person or thing they named. If you can't find it, say so and stop: never pick someone or something else in its place.",
-    "6. If a tool refuses, its message says what to do next. Do that once. Do not repeat a call that failed the same way.",
-    "7. Stop when it is done. Do not re-read to check what a tool already confirmed.",
+    "1. Answer from this page when you can; otherwise read only what you need, once per request, in one batch.",
+    "2. Act with the right tool. Look up names, use the community's time zone, and pick the obvious channel; ask only when ambiguous.",
+    "3. Some actions wait for their yes. The tool answers waiting_for_person and they see the question with Yes and No. Then say one short line and stop. Never ask for the yes in words or claim it is done.",
+    "4. If no tool fits, never substitute another: say you can't, and where they can do it themselves.",
+    "5. Act only on what they named; if not found, say so and stop.",
+    "6. Follow a refusal's instruction once; never repeat the same failing call.",
+    "7. Stop once confirmed; do not re-read.",
     "",
-    "For \"what is happening here\": the newest posts of each channel (limit 5) and events/, in one step, is enough.",
+    "For \"what is happening here\": newest posts per channel (limit 5) and events/ in one step.",
   ].join("\n");
 }
 

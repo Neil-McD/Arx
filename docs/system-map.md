@@ -223,10 +223,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** community notes: short markdown notes that are the guide's memory.
   The community agent reads them under `memory/` to answer; owners and admins
-  read, edit and delete them (Knowledge → Community brain → Notes & files). Since Nov 14
+  read, edit and delete them (Knowledge → Community brain → Notes & files, and
+  through Builder-lens `community.note.save` / confirmed `community.note.delete`
+  in Official Polynet MCP and Studio Guide chat). Since Nov 14
   a member is never handed them: not in the app, not through their own AI
-  (MCP), not in search, Home or a channel. Members get them through answers. No member or connected AI writes
-  them (Nov 5: closed a private-room leak and an injection path). Since Nov 15
+  (MCP), not in search, Home or a channel. Members get them through answers. No
+  member or moderator ever writes or deletes community notes. Since Nov 15
   the guide writes its own notes again, only through one checked write
   (`communityMemory`, docs/specs/agent-system-slice-1.md): each cites the
   open-channel posts it came from, never changes a builder's note, and a
