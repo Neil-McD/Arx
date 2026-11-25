@@ -517,10 +517,14 @@ export function KitClassroom(props: {
         ))}
       </PanelPart>
     ) : null,
-    // Nothing in the brain and no unread files: no part, so an empty panel closes.
-    brain && (brainHasContent(brain) || guideSources.some(sourceFailed)) ? (
+    // Nothing in the brain and no unread files: hide for members, but keep the
+    // community brain entry reachable for hosts so empty communities can add notes & files.
+    brain && (brainHasContent(brain) || guideSources.some(sourceFailed) || (props.canManage && Boolean(props.onOpenBrain))) ? (
       <PanelBrain key="brain" map={brain} now={now} onOpen={props.onOpenBrain}>
         {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
+        {props.canManage && !brainHasContent(brain) && !guideSources.some(sourceFailed) ? (
+          <PanelLine>Add notes, links, or files for your guide.</PanelLine>
+        ) : null}
       </PanelBrain>
     ) : null,
     props.canManage && liveCourses.length ? (

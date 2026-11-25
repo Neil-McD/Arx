@@ -100,6 +100,45 @@ describe("community brain visibility with published courses and pods", () => {
       React.createElement(PanelBrain, { map: makeMap(), now: NOW, onOpen: () => undefined }),
     );
     expect(emptyHtml).toBe("");
+
+    // Hosts on empty desktop communities still get an entry into the community brain
+    // (where "Notes & files" lives) when a prompt child is passed to PanelBrain.
+    const hostEmptyHtml = renderToStaticMarkup(
+      React.createElement(
+        PanelBrain,
+        { map: makeMap(), now: NOW, onOpen: () => undefined },
+        React.createElement("span", null, "Add notes, links, or files for your guide."),
+      ),
+    );
+    expect(hostEmptyHtml).toContain("The community brain");
+    expect(hostEmptyHtml).toContain("Open");
+    expect(hostEmptyHtml).toContain("Add notes, links, or files for your guide.");
+  });
+
+  test("KitBrainPageView exposes Notes & files for hosts even when the brain is empty", () => {
+    const emptyHostHtml = renderToStaticMarkup(
+      React.createElement(KitBrainPageView, {
+        session: null,
+        communityId: "comm1",
+        canManage: true,
+        onOpenCourse: () => undefined,
+        onOpenGuideMemory: () => undefined,
+        map: makeMap(),
+      }),
+    );
+    expect(emptyHostHtml).toContain("Notes &amp; files");
+
+    const emptyMemberHtml = renderToStaticMarkup(
+      React.createElement(KitBrainPageView, {
+        session: null,
+        communityId: "comm1",
+        canManage: false,
+        onOpenCourse: () => undefined,
+        onOpenGuideMemory: () => undefined,
+        map: makeMap(),
+      }),
+    );
+    expect(emptyMemberHtml).not.toContain("Notes &amp; files");
   });
 
   test("KitBrainPageView renders the full interactive map with clickable course hubs for courses-only communities", () => {
