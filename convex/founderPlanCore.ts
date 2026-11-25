@@ -248,11 +248,14 @@ export async function reserveFounderUsage(args: {
   ) {
     return { ok: false, code: "funding_authority_changed" };
   }
-  if (!founderSubscriptionStatusGrantsAccess({
-    status: subscription.status,
-    currentPeriodEndAt: subscription.currentPeriodEndAt,
-    nowMs: args.nowMs,
-  })) {
+  if (
+    subscription.riskAccessState === "revoked" ||
+    !founderSubscriptionStatusGrantsAccess({
+      status: subscription.status,
+      currentPeriodEndAt: subscription.currentPeriodEndAt,
+      nowMs: args.nowMs,
+    })
+  ) {
     return { ok: false, code: "founder_subscription_inactive" };
   }
   const cycles = (await args.ctx.db

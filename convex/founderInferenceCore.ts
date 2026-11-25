@@ -217,11 +217,14 @@ export async function resolveCommunityInferenceFundingAdmission(
     throw error;
   }
   if (attachedSubscription) {
-    if (!founderSubscriptionStatusGrantsAccess({
-      status: attachedSubscription.status,
-      currentPeriodEndAt: attachedSubscription.currentPeriodEndAt,
-      nowMs,
-    })) {
+    if (
+      attachedSubscription.riskAccessState === "revoked" ||
+      !founderSubscriptionStatusGrantsAccess({
+        status: attachedSubscription.status,
+        currentPeriodEndAt: attachedSubscription.currentPeriodEndAt,
+        nowMs,
+      })
+    ) {
       return { ok: false, code: "founder_subscription_inactive" };
     }
     if (String(attachedSubscription.ownerUserId) !== String(community.ownerId)) {

@@ -31,6 +31,7 @@ import {
 import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { shouldPauseBackgroundAiForAllowance } from "../shared/allowanceGuardrails";
 import {
+  canGrantAdditionalUsageBoost,
   computeEffectiveCycleAllowanceMicros,
   isSubscriptionInFirstBillingCycle,
   isValidFounderUsageBoostCapCents,
@@ -1545,6 +1546,20 @@ async function buildCoachSettingsView(
           cycleStartAtMs: Number(activeFounderCycle.cycleStartAt ?? 0),
         })
       : false;
+  const usageBoostCapCents = normalizeFounderUsageBoostCapCents(row?.usageBoostCapCents);
+  const subscriptionEligibleForBoost = Boolean(
+    activeFounderCycle &&
+      activeSubscription &&
+      activeSubscription.status === "active" &&
+      activeSubscription.riskAccessState !== "revoked",
+  );
+  const boostAdmission = subscriptionEligibleForBoost
+    ? canGrantAdditionalUsageBoost({
+        requestedCapCents: usageBoostCapCents,
+        isFirstCycle: firstCycleCapActive,
+        paidBoostCountThisCycle: Number((activeFounderCycle as any).paidBoostCount ?? 0),
+      })
+    : { allowed: false as const, code: "founder_subscription_required", effectiveCapCents: 0 };
 
   const rawCycleReceipts = await ctx.db
     .query("communityInferenceReceipts")
@@ -1655,8 +1670,11 @@ async function buildCoachSettingsView(
       allowance_micros: allowanceMicros,
       included_allowance_micros: includedAllowanceMicros,
       paid_boost_micros: paidBoostMicros,
-      usage_boost_cap_cents: normalizeFounderUsageBoostCapCents(row?.usageBoostCapCents),
+      usage_boost_cap_cents: usageBoostCapCents,
       first_cycle_cap_active: firstCycleCapActive,
+      can_buy_usage_boost: boostAdmission.allowed,
+      usage_boost_remaining_this_cycle: boostAdmission.allowed ? boostAdmission.remainingBoosts : 0,
+      usage_boost_block_reason: boostAdmission.allowed ? null : boostAdmission.code,
       percent_used: authoritativePercentUsed,
       spend_truncated: spend.truncated,
       cycle_end_at: cycleEndMs,

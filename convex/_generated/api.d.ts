@@ -178,6 +178,7 @@ import type * as founderPaidToolRuntime from "../founderPaidToolRuntime.js";
 import type * as founderPaidTools from "../founderPaidTools.js";
 import type * as founderPlanCore from "../founderPlanCore.js";
 import type * as founderPlanPricing from "../founderPlanPricing.js";
+import type * as founderUsageBoosts from "../founderUsageBoosts.js";
 import type * as fundedInferenceGateway from "../fundedInferenceGateway.js";
 import type * as http from "../http.js";
 import type * as httpAuth from "../httpAuth.js";
@@ -425,6 +426,7 @@ declare const fullApi: ApiFromModules<{
   founderPaidTools: typeof founderPaidTools;
   founderPlanCore: typeof founderPlanCore;
   founderPlanPricing: typeof founderPlanPricing;
+  founderUsageBoosts: typeof founderUsageBoosts;
   fundedInferenceGateway: typeof fundedInferenceGateway;
   http: typeof http;
   httpAuth: typeof httpAuth;

@@ -115,3 +115,15 @@ export async function setMyBuilderHeartbeatPreference(
     enabled: params.enabled,
   });
 }
+
+export async function startFounderUsageBoostCheckout(
+  params: Params & { successUrl: string; cancelUrl: string },
+): Promise<{ ok: boolean; receipt_key: string; checkout_url: string }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
+  return await client.action("founderUsageBoosts:createFounderUsageBoostCheckout" as any, {
+    authSubject,
+    communityId: params.communityId,
+    successUrl: params.successUrl,
+    cancelUrl: params.cancelUrl,
+  });
+}

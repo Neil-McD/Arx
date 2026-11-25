@@ -73,6 +73,9 @@ export type MemberCoachImpactSummary = {
   paid_boost_micros?: number;
   usage_boost_cap_cents?: number;
   first_cycle_cap_active?: boolean;
+  can_buy_usage_boost?: boolean;
+  usage_boost_remaining_this_cycle?: number;
+  usage_boost_block_reason?: string | null;
   percent_used: number;
   spend_truncated: boolean;
   cycle_end_at?: number | null;
