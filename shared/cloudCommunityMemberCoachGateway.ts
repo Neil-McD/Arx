@@ -1,6 +1,7 @@
 // Proactive Member Coach gateway (convex/communityMemberCoach.ts).
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type {
+  BuilderHeartbeatPreferenceView,
   MemberCoachDraftView,
   MemberCoachPreferenceView,
   MemberCoachReason,
@@ -87,5 +88,26 @@ export async function setMyMemberCoachPreference(
     authSubject,
     communityId: params.communityId,
     coachMuted: params.coachMuted,
+  });
+}
+
+export async function getMyBuilderHeartbeatPreference(
+  params: Params,
+): Promise<BuilderHeartbeatPreferenceView> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
+  return await client.query("communityBuilderHeartbeat:getMyBuilderHeartbeatPreference" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+}
+
+export async function setMyBuilderHeartbeatPreference(
+  params: Params & { enabled: boolean },
+): Promise<BuilderHeartbeatPreferenceView> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
+  return await client.mutation("communityBuilderHeartbeat:setMyBuilderHeartbeatPreference" as any, {
+    authSubject,
+    communityId: params.communityId,
+    enabled: params.enabled,
   });
 }

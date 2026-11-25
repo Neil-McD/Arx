@@ -45,6 +45,18 @@ One pipeline joins them:
 - **Private commitment follow-ups:** commitment follow-ups read a member's
   private memory and Personal Soul only when delivering directly into their
   private thread (`auto` mode), never exposing private words to founder drafts.
+- **Builder's Own Proactive Heartbeat (Nov 24):** community owners and active
+  admins have their own strictly private commitment heartbeat lane, separate
+  from both the place-level Daily Founder Brief and Member Coach signals (admins
+  are excluded from member coaching signals so builders are never coached like
+  students). Each builder's check-ins read only their own private Soul and
+  Memory, deliver directly into their own private Agent thread (never a shared
+  draft queue, never visible to co-builders, and isolated from member win-back
+  metrics), follow the same Hot/Warm/Cooling/Cold ($0 AI) taper and interruption
+  caps (max 2/week, 48h apart, 12h mid-conversation guard, quiet hours, plus a
+  4-hour spacing buffer after the owner's Daily Founder Brief), send a neutral
+  privacy-safe email nudge if unseen after 24 hours, default on for funded
+  communities, and expose an independent per-builder toggle in Settings → Guide.
 - **24-hour unseen email nudge:** a sent proactive check-in still unanswered
   after 24 hours triggers one preference-gated, deduped email nudge back into
   the member's private thread.

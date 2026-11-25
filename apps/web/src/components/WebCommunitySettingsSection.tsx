@@ -20,8 +20,16 @@ import { buildStripeConnectPresentation } from "../controllers/buildStripeConnec
 import type { WebCommunityAiAgentSection as WebCommunityAiAgentSectionType } from "./WebCommunityAiAgentSection";
 import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import { platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
-import { getMyMemberCoachPreference, setMyMemberCoachPreference } from "../../../../shared/cloudCommunityMemberCoachGateway";
-import type { MemberCoachPreferenceView } from "../../../../shared/communityMemberCoachTypes";
+import {
+  getMyBuilderHeartbeatPreference,
+  getMyMemberCoachPreference,
+  setMyBuilderHeartbeatPreference,
+  setMyMemberCoachPreference,
+} from "../../../../shared/cloudCommunityMemberCoachGateway";
+import type {
+  BuilderHeartbeatPreferenceView,
+  MemberCoachPreferenceView,
+} from "../../../../shared/communityMemberCoachTypes";
 
 const WebCommunityAiAgentSection = lazy(() =>
   import("./WebCommunityAiAgentSection").then((m) => ({ default: m.WebCommunityAiAgentSection })),
@@ -85,6 +93,77 @@ function MemberCoachPreferenceRow(props: {
       <SettingsSwitch label="Pause guide check-ins" checked={Boolean(pref?.coach_muted)} disabled={!pref || saving}
         onChange={(checked) => void toggle(checked)} />
     </SettingsRow>
+  );
+}
+
+function BuilderHeartbeatPreferenceSection(props: {
+  communityId: string;
+  session: unknown;
+  ensureSession: (session: any) => Promise<any | null>;
+}) {
+  const [pref, setPref] = useState<BuilderHeartbeatPreferenceView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setPref(null);
+    setError(null);
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        const loaded = session
+          ? await getMyBuilderHeartbeatPreference({ session, communityId: props.communityId })
+          : null;
+        if (!cancelled) setPref(loaded);
+      } catch {
+        if (!cancelled) setError("Couldn't load personal check-in preference.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.communityId]);
+  const toggle = async (checked: boolean) => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) throw new Error("not_signed_in");
+      setPref(
+        await setMyBuilderHeartbeatPreference({
+          session,
+          communityId: props.communityId,
+          enabled: checked,
+        }),
+      );
+    } catch {
+      setError("That didn't save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (pref && !pref.eligible) return null;
+  return (
+    <SettingsGroup label="Personal check-ins">
+      <SettingsRow
+        label="Check in on my private goals & commitments"
+        help={
+          error ? (
+            <span className="settings-v1-error" role="alert">{error}</span>
+          ) : (
+            "Your guide follows up privately in your Agent thread on commitments you share here — separate from the daily brief, strictly private to you, and pauses automatically if you go quiet."
+          )
+        }
+      >
+        <SettingsSwitch
+          label="Check in on my private goals & commitments"
+          checked={pref ? pref.enabled : true}
+          disabled={!pref || saving}
+          onChange={(checked) => void toggle(checked)}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 import { discoverListingGap } from "../../../../shared/communityDiscoverListing";
@@ -768,6 +847,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ensureSession={props.ensureSession}
                 />
               </Suspense>
+            ) : null}
+            {selectedSettingsPane === "agent" ? (
+              <BuilderHeartbeatPreferenceSection
+                communityId={resolvedActiveCommunity.id}
+                session={props.session}
+                ensureSession={props.ensureSession}
+              />
             ) : null}
             {selectedSettingsPane === "agent" ? (
               <GuideAllowedSettings communityId={resolvedActiveCommunity.id} session={props.session} />

@@ -92,3 +92,9 @@ export type MemberCoachPreferenceView = {
   coach_muted: boolean;
   community_muted: boolean;
 };
+
+export type BuilderHeartbeatPreferenceView = {
+  eligible: boolean;
+  enabled: boolean;
+  community_muted: boolean;
+};
