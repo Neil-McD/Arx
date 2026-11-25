@@ -10,9 +10,10 @@ import {
 } from "../../../../../shared/founderPlan";
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
-import { brainScene, chiefScene, FeatureSection, guideScene, StatementFigures } from "./LandingScenes";
+import { brainScene, chiefScene, FeatureSection, StatementFigures } from "./LandingScenes";
 // The real app's kit is heavy, so the preview loads after the hero paints.
 const RealAppPreview = lazy(() => import("./RealAppPreview").then((module) => ({ default: module.RealAppPreview })));
+const GuideScene = lazy(() => import("./GuideScene").then((module) => ({ default: module.GuideScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -523,7 +524,6 @@ function useReveal(late: unknown) {
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
   const reveal = useReveal(communities.length);
-  const guide = guideScene();
   const brain = brainScene();
   const chief = chiefScene();
 
@@ -579,17 +579,18 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
         <StatementFigures />
 
-        <FeatureSection id="guide" plan="Guide" title={["Answers", "for every member"]} sceneLabel="A member asks the guide a question at night and gets an answer that points to a lesson" {...guide}
-          features={["Private guide for each member", "Replies when tagged in channels", "Answers with their source", "Follow-ups in active threads"]}>
-          Stop answering the same question twice. Every member gets a private guide that answers from your courses, notes and past discussions, at 2am, without you.
+        <FeatureSection id="guide" title={["Stop answering", "the same question twice."]} sceneLabel="Try the guide: pick a member's question, read the answer, and see the lesson, channel or event it points to"
+          live={<Suspense fallback={<div className="gsc-wait" />}><GuideScene /></Suspense>}
+          features={["A private guide for every member", "Replies when tagged in a channel", "Points to the lesson, channel or event it means"]}>
+          Every member gets a private guide. It answers from your courses, notes and past discussions, at any hour, and points to where the answer lives.
         </FeatureSection>
 
-        <FeatureSection id="brain" plan="Guide · Community brain" title={["A memory", "that builds"]} sceneLabel="A map of what the community knows, beside a list of what it learned this week" {...brain}
+        <FeatureSection id="brain" title={["A memory", "that builds"]} sceneLabel="A map of what the community knows, beside a list of what it learned this week" {...brain}
           features={["Community brain map", "Learned from courses and posts", "Memory for each member", "Yours to read and correct"]}>
           Your best answers stop disappearing. Courses, notes and helpful answers connect into one memory you can see, so what one member solves, the next one finds.
         </FeatureSection>
 
-        <FeatureSection id="chief-of-staff" plan="Chief of Staff" title={["Morning briefs", "and check-ins"]} sceneLabel="The morning brief, with a drafted check-in for a quiet member who is lit in the members list behind it" {...chief}
+        <FeatureSection id="chief-of-staff" title={["Morning briefs", "and check-ins"]} sceneLabel="The morning brief, with a drafted check-in for a quiet member who is lit in the members list behind it" {...chief}
           features={["Morning brief", "Member check-ins", "Win-backs", "Reply drafts", "Approve, edit or skip", "Usage and limits"]}>
           Know who's slipping before they cancel. Your chief of staff checks in on quiet members and drafts replies to unanswered questions, then waits for your yes.
         </FeatureSection>
