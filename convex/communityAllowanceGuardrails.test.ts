@@ -47,10 +47,28 @@ describe("Monthly AI allowance guardrails & founder alerts (Slice 1)", () => {
       resetDateLabel: "Dec 1",
       reengaged30d: 4,
       contacted30d: 7,
+      actionUrl: "https://www.polynet.ai/c/founders-lab/settings?pane=agent",
+      boostAvailable: true,
     });
     expect(copy80.headline).toContain("80%");
     expect(copy80.bodyText).toContain("4 of 7 members");
     expect(copy80.bodyText).toContain("Dec 1");
+    expect(copy80.bodyText).toContain("$30 boost");
+    expect(copy80.threadMarkdown).toContain("[Manage allowance & boosts](https://www.polynet.ai/c/founders-lab/settings?pane=agent)");
+
+    const copyOperator = buildFounderAllowanceAlertCopy({
+      milestone: 100,
+      communityName: "Op Lab",
+      settledMicros: 20_000_000,
+      allowanceMicros: allowance,
+      resetDateLabel: "Dec 1",
+      reengaged30d: 0,
+      contacted30d: 0,
+      actionUrl: "https://www.polynet.ai/c/op-lab/settings?pane=agent",
+      boostAvailable: false,
+    });
+    expect(copyOperator.bodyText).not.toContain("$30 boost");
+    expect(copyOperator.threadMarkdown).toContain("[View allowance & impact](https://www.polynet.ai/c/op-lab/settings?pane=agent)");
 
     const rendered = renderEmailTemplate({
       templateKey: "founder_allowance_notice",

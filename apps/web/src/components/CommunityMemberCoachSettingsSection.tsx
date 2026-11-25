@@ -19,6 +19,9 @@ import {
   FOUNDER_USAGE_BOOST_CAP_PRESETS_CENTS,
   FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS,
   FOUNDER_USAGE_BOOST_PRICE_CENTS,
+  buildBoostCheckoutReturnUrls,
+  consumeBoostCheckoutReturnStatus,
+  formatBoostCheckoutErrorMessage,
 } from "../../../../shared/founderUsageBoosts";
 import { SettingsButton, SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
@@ -30,23 +33,61 @@ export function CommunityMemberCoachSettingsSection(props: {
   const [settings, setSettings] = useState<MemberCoachSettingsView | null>(null);
   const [saving, setSaving] = useState(false);
   const [buyingBoost, setBuyingBoost] = useState(false);
+  const [boostNotice, setBoostNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const timers: number[] = [];
     setSettings(null);
     setError(null);
+    const returnState = consumeBoostCheckoutReturnStatus(window.location.href);
+    if (returnState.cleanedRelativeUrl) {
+      try {
+        window.history.replaceState(window.history.state, "", returnState.cleanedRelativeUrl);
+      } catch {
+        // Ignore history restrictions.
+      }
+    }
+    if (returnState.status === "success") {
+      setBoostNotice("Boost payment received — updating your allowance as soon as Stripe confirms it.");
+    } else {
+      setBoostNotice(null);
+    }
+
     void (async () => {
       try {
         const session = await props.ensureSession(props.session);
         const loaded = session ? await getCloudMemberCoachSettings({ session, communityId: props.communityId }) : null;
-        if (!cancelled) setSettings(loaded);
+        if (cancelled) return;
+        setSettings(loaded);
+
+        if (returnState.status === "success" && session) {
+          const initialBoostMicros = loaded?.impact?.paid_boost_micros ?? 0;
+          const scheduleRefresh = (delayMs: number) => {
+            const id = window.setTimeout(() => {
+              void getCloudMemberCoachSettings({ session, communityId: props.communityId })
+                .then((refreshed) => {
+                  if (cancelled) return;
+                  setSettings(refreshed);
+                  if ((refreshed?.impact?.paid_boost_micros ?? 0) > initialBoostMicros) {
+                    setBoostNotice("Boost applied — your extra +$20.00 AI allowance is live for this billing cycle.");
+                  }
+                })
+                .catch(() => {});
+            }, delayMs);
+            timers.push(id);
+          };
+          scheduleRefresh(2_500);
+          scheduleRefresh(6_000);
+        }
       } catch {
         if (!cancelled) setError("Couldn't load member check-in settings.");
       }
     })();
     return () => {
       cancelled = true;
+      for (const id of timers) window.clearTimeout(id);
     };
   }, [props.communityId]);
 
@@ -92,18 +133,18 @@ export function CommunityMemberCoachSettingsSection(props: {
     try {
       const session = await props.ensureSession(props.session);
       if (!session) throw new Error("not_signed_in");
-      const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+      const { successUrl, cancelUrl } = buildBoostCheckoutReturnUrls(window.location.href);
       const result = await startFounderUsageBoostCheckout({
         session,
         communityId: props.communityId,
-        successUrl: returnUrl,
-        cancelUrl: returnUrl,
+        successUrl,
+        cancelUrl,
       });
       if (result?.checkout_url) {
         window.location.assign(result.checkout_url);
       }
-    } catch {
-      setError("Couldn't start boost checkout. Try again.");
+    } catch (err) {
+      setError(formatBoostCheckoutErrorMessage(err));
       setBuyingBoost(false);
     }
   };
@@ -194,6 +235,7 @@ export function CommunityMemberCoachSettingsSection(props: {
                 />
               </div>
               <div className="guide-allowance-meta">
+                {boostNotice ? <strong>{boostNotice} </strong> : null}
                 {spendSummary} {reserveNote ? `${reserveNote} ` : ""}{winBackSummary ?? ""}
               </div>
             </div>

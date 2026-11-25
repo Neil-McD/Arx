@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pdfAssetsPlugin } from "./pdfAssetsPlugin";
@@ -42,6 +43,41 @@ function polynetBuildVersionPlugin(params: {
         fileName: "version.json",
         source: `${JSON.stringify(params, null, 2)}\n`,
       });
+    },
+  };
+}
+
+// `docs/product/generated/index.json` carries duplicated search `chunks` and
+// `search_text` (~340 KiB) for CLI/LLM ingestion. The in-app reader only renders
+// page metadata + `content`, so strip unused offline-search fields when bundling
+// for the browser while leaving the generated JSON on disk untouched.
+function slimProductDocsPlugin(root: string): Plugin {
+  const targetPath = resolve(root, "docs/product/generated/index.json").replace(/\\/g, "/");
+  return {
+    name: "polynet-slim-product-docs",
+    enforce: "pre",
+    load(id) {
+      const normalized = id.split("?")[0]?.replace(/\\/g, "/");
+      if (normalized !== targetPath) return null;
+      const parsed = JSON.parse(readFileSync(targetPath, "utf8")) as {
+        version: number;
+        default_slug: string;
+        docs: Array<Record<string, unknown>>;
+      };
+      const slim = {
+        version: parsed.version,
+        default_slug: parsed.default_slug,
+        docs: (parsed.docs ?? []).map((doc) => ({
+          id: doc.id,
+          slug: doc.slug,
+          title: doc.title,
+          section: doc.section,
+          summary: doc.summary,
+          audience: doc.audience,
+          content: doc.content,
+        })),
+      };
+      return JSON.stringify(slim);
     },
   };
 }
@@ -93,6 +129,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      slimProductDocsPlugin(repoRoot),
       react(),
       pdfAssetsPlugin(),
       publicPagesPlugin(repoRoot),

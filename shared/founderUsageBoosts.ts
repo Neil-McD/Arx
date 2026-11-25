@@ -112,3 +112,68 @@ export function canGrantAdditionalUsageBoost(input: {
     effectiveCapCents,
   };
 }
+
+export type BoostCheckoutReturnStatus = "success" | "canceled" | null;
+
+// Builds clean canonical Stripe return URLs for prepaid usage boosts, stripping
+// any stale boost/session query params so repeated purchases stay clean.
+export function buildBoostCheckoutReturnUrls(currentHref: string): {
+  successUrl: string;
+  cancelUrl: string;
+} {
+  const base = new URL(currentHref);
+  base.searchParams.delete("boost_checkout");
+  base.searchParams.delete("session_id");
+  base.searchParams.delete("checkout_canceled");
+
+  const success = new URL(base.toString());
+  success.searchParams.set("boost_checkout", "success");
+  const cancel = new URL(base.toString());
+  cancel.searchParams.set("boost_checkout", "canceled");
+  return {
+    successUrl: success.toString(),
+    cancelUrl: cancel.toString(),
+  };
+}
+
+// Reads `boost_checkout` from the return URL and returns a cleaned relative URL
+// (pathname + search + hash) with transient Stripe query parameters removed.
+export function consumeBoostCheckoutReturnStatus(currentHref: string): {
+  status: BoostCheckoutReturnStatus;
+  cleanedRelativeUrl: string | null;
+} {
+  try {
+    const parsed = new URL(currentHref);
+    const raw = parsed.searchParams.get("boost_checkout");
+    const status: BoostCheckoutReturnStatus =
+      raw === "success" ? "success" : raw === "canceled" ? "canceled" : null;
+    if (!status) {
+      return { status: null, cleanedRelativeUrl: null };
+    }
+    parsed.searchParams.delete("boost_checkout");
+    parsed.searchParams.delete("session_id");
+    parsed.searchParams.delete("checkout_canceled");
+    const search = parsed.searchParams.toString();
+    const cleanedRelativeUrl = `${parsed.pathname}${search ? `?${search}` : ""}${parsed.hash}`;
+    return { status, cleanedRelativeUrl };
+  } catch {
+    return { status: null, cleanedRelativeUrl: null };
+  }
+}
+
+export function formatBoostCheckoutErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  if (raw.includes("founder_usage_boost_payment_settling")) {
+    return "Your recent boost payment is still settling with Stripe — give it a moment and refresh.";
+  }
+  if (raw.includes("usage_boost_first_cycle_cap_reached")) {
+    return "You've reached the $60 boost limit for your first billing cycle.";
+  }
+  if (raw.includes("usage_boost_monthly_cap_reached")) {
+    return "You've reached your monthly extra usage safety cap.";
+  }
+  if (raw.includes("founder_usage_boost_checkout_expired_retry")) {
+    return "Your previous boost checkout expired — click again to open a fresh one.";
+  }
+  return "Couldn't start boost checkout. Try again.";
+}
