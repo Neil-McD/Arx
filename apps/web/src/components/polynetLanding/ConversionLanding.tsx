@@ -548,7 +548,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <Suspense fallback={<div className="rp rp-wait" aria-hidden="true" />}>
               <RealAppPreview />
             </Suspense>
-            <p className="caption">Try it: let someone in, send the check-in your guide drafted, ask it in #general, open a pod.</p>
+            <p className="caption">Try it: send Josh's check-in, let Kai in, ask the guide in #general, open a pod.</p>
           </div>
         </section>
 

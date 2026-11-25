@@ -4,7 +4,7 @@
 // and proactive member check-in drafts (shared/communityMemberCoach.ts).
 // A row opens to the exact words; the host sends/posts them, changes them
 // first, or skips. Nothing is sent without that click. Empty, it isn't drawn.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BookOpen, ChevronDown, MessageSquare, Sparkles } from "lucide-react";
 import { REPLY_DRAFT_EDIT_MAX_CHARS, replyDraftWaited, type ReplyDraftView } from "../../../../shared/communityReplyDrafts";
 import { MEMBER_COACH_EDIT_MAX_CHARS, type MemberCoachDraftView } from "../../../../shared/communityMemberCoachTypes";
@@ -32,8 +32,12 @@ export function GuideSuggests(props: {
   coachDrafts?: MemberCoachDraftView[];
   onSendCoach?: (id: string, text?: string) => Promise<string | null>;
   onSkipCoach?: (id: string) => void;
+  // Opens one row from outside ("reply:<id>" or "coach:<id>"); the home
+  // page's product preview uses it to show a draft once. The app leaves it unset.
+  openRow?: string | null;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
+  useEffect(() => { if (props.openRow) setOpenKey(props.openRow); }, [props.openRow]);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

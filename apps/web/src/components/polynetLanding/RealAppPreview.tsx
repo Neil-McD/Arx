@@ -481,6 +481,28 @@ export function RealAppPreview() {
   const [brain] = useState(() => buildClubBrain(now));
   const [rows] = useState(() => memberRows(now));
   const [played, setPlayed] = useState(false);
+  // Plays one step by itself: soon after the preview is first seen, Josh's
+  // drafted check-in opens on Home, then it waits for the visitor.
+  const [autoDraft, setAutoDraft] = useState<"waiting" | "show" | "done">("waiting");
+  useEffect(() => {
+    if (!played || autoDraft !== "waiting") return;
+    const timer = window.setTimeout(() => setAutoDraft((now) => (now === "waiting" ? "show" : now)), lessMotion() ? 0 : 1400);
+    return () => window.clearTimeout(timer);
+  }, [played, autoDraft]);
+  // When it opens, Home glides down so the drafted words are in view.
+  const homeScroll = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (autoDraft !== "show") return;
+    const timer = window.setTimeout(() => {
+      const node = homeScroll.current;
+      node?.scrollTo({ top: node.scrollHeight, behavior: lessMotion() ? "auto" : "smooth" });
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [autoDraft]);
+  // Once the visitor moves anywhere, it never opens by itself again.
+  useEffect(() => {
+    if (state.page !== "home") setAutoDraft("done");
+  }, [state.page]);
   useEffect(() => {
     const node = ref.current;
     if (!node || typeof IntersectionObserver === "undefined") { setPlayed(true); return; }
@@ -615,7 +637,7 @@ export function RealAppPreview() {
         return (
           <KitApp view="home" host talking={Boolean(state.talk)} part="main">
             <Main>
-            <Scroll>
+            <Scroll ref={homeScroll}>
               {state.talk ? (
                 <HomeBody>
                   <Talk>
@@ -646,7 +668,8 @@ export function RealAppPreview() {
                     onSkip={() => dispatch({ type: "skip_reply" })}
                     coachDrafts={state.checkIn === "waiting" ? [CHECK_IN] : []}
                     onSendCoach={async () => { track("check_in_sent"); dispatch({ type: "send_check_in" }); return null; }}
-                    onSkipCoach={() => dispatch({ type: "skip_check_in" })} />
+                    onSkipCoach={() => dispatch({ type: "skip_check_in" })}
+                    openRow={autoDraft === "show" ? "coach:c1" : null} />
                   {state.replyDraft !== "waiting" && state.checkIn !== "waiting" && requests.length === 0 ? <p className={cx("hnone")}>Nothing else needs you today.</p> : null}
                 </HomeBody>
               )}
