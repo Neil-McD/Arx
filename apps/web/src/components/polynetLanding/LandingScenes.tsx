@@ -3,19 +3,8 @@
 // under each feature. Everything here is drawn in markup, never a screenshot,
 // so it stays sharp, never goes stale and never shows a real member. The
 // people in the scenes are made up.
-import { Fragment, useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { FigureActs, FigureDecides, FigureLearns } from "./LandingFigures";
-import { Sparkles } from "lucide-react";
-
-const INK = "#08090A";
-
-function Glow(props: { id: string }) {
-  return (
-    <radialGradient id={props.id} cx=".5" cy=".5" r=".5">
-      <stop offset="0" stopColor="#A78BFA" stopOpacity=".55" /><stop offset="1" stopColor="#A78BFA" stopOpacity="0" />
-    </radialGradient>
-  );
-}
 
 const FIGURES: Array<[number, ReactNode, string, string]> = [
   [1, <FigureLearns key="a" />, "It learns", "Courses, answers and conversations add up to one memory. What one member figures out, the next one finds."],
@@ -61,26 +50,13 @@ export function StatementFigures() {
 
 // ---------- the scenes ----------
 
-type Person = [initials: string, name: string, colour: string];
-const MAYA: Person = ["MA", "Maya Alvarez", "#7A4E9E"];
-const JOSH: Person = ["JU", "Josh Underwood", "#2F6B5A"];
-const DEV: Person = ["DO", "Dev Okafor", "#3B5B8C"];
-const PRIYA: Person = ["PS", "Priya Shah", "#8C6A2F"];
-const TOM: Person = ["TR", "Tom Reyes", "#9E4E5F"];
-const LENA: Person = ["LN", "Lena Novak", "#4E6B9E"];
-const AMIR: Person = ["AK", "Amir Khan", "#5F7A3A"];
-
-function Face(props: { person: Person; small?: boolean }) {
-  return <span className={props.small ? "sc-face small" : "sc-face"} style={{ background: props.person[2] }}>{props.person[0]}</span>;
-}
-
 // One feature: a label-like title, one paragraph, a wide scene that runs off
 // the page's right edge and fades, and the names of what's inside.
 export function FeatureSection(props: {
   id: string; title: [string, string]; children: ReactNode; sceneLabel: string;
-  front?: ReactNode; back?: ReactNode; features: string[];
-  // A scene you use, made from the app's own parts, in place of the picture.
-  live?: ReactNode;
+  features: string[];
+  // The scene you use, made from the app's own parts.
+  live: ReactNode;
 }) {
   const half = Math.ceil(props.features.length / 2);
   return (
@@ -91,14 +67,7 @@ export function FeatureSection(props: {
         </div>
         <p>{props.children}</p>
       </div>
-      {props.live ? (
-        <div className="scene live" aria-label={props.sceneLabel} role="group">{props.live}</div>
-      ) : (
-        <div className="scene" role="img" aria-label={props.sceneLabel}>
-          <div className="scene-back" aria-hidden="true">{props.back}</div>
-          <div className="scene-front" aria-hidden="true">{props.front}</div>
-        </div>
-      )}
+      <div className="scene live" aria-label={props.sceneLabel} role="group">{props.live}</div>
       <div className="feat-list">
         <span>Features</span>
         <ul>{props.features.slice(0, half).map((name) => <li key={name}>{name}</li>)}</ul>
@@ -108,38 +77,3 @@ export function FeatureSection(props: {
   );
 }
 
-// Chief of Staff: the morning brief over the Members table; the member it
-// wants to check in on is lit in the table behind.
-export function chiefScene() {
-  const rows: Array<[Person, string, boolean, string, string, boolean?]> = [
-    [MAYA, "Active", true, "Member", "Today"], [JOSH, "Quiet 25 days", false, "Member", "Oct 31", true], [DEV, "Active", true, "Free", "Today"],
-    [PRIYA, "Active", true, "Member", "Yesterday"], [TOM, "Quiet 12 days", false, "Free", "Nov 13"], [LENA, "Active", true, "Member", "Today"],
-    [AMIR, "Active", true, "Free", "Today"],
-  ];
-  return {
-    front: (
-      <div className="sc-panel">
-        <span className="sc-eyebrow">Your guide · 9:24 am</span>
-        <strong className="sc-hello">Good morning.</strong>
-        <span className="sc-text">Two people finished Start here. Dev's pricing question was answered overnight. Two things need you.</span>
-        <div className="sc-ask">
-          <div className="sc-ask-top"><Face person={JOSH} small /><b>Check in with Josh</b><span>Quiet 25 days</span></div>
-          <p>"Hey Josh, Friday's call covers the pricing piece you were stuck on. Want me to save you the notes?"</p>
-          <div className="sc-acts"><i>Approve</i><span>Edit</span><span>Skip</span></div>
-        </div>
-        <div className="sc-ask plain"><div className="sc-ask-top"><Face person={PRIYA} small /><b>Reply drafted for Priya</b><i>Review</i></div></div>
-      </div>
-    ),
-    back: (
-      <div className="sc-table">
-        <div className="sc-row head"><span /><span>Member</span><span>Status</span><span>Last here</span></div>
-        {rows.map(([person, status, active, , last, lit]) => (
-          <div key={person[1]} className={lit ? "sc-row lit" : "sc-row"}>
-            <span /><span><Face person={person} />{person[1]}</span>
-            <span><i className={active ? "sc-dot" : "sc-dot quiet"} />{status}</span><span>{last}</span>
-          </div>
-        ))}
-      </div>
-    ),
-  };
-}

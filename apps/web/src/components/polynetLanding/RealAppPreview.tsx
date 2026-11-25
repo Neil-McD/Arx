@@ -112,8 +112,9 @@ const JOIN_REQUESTS = [
   { id: "r2", userId: "x2", displayName: "Rosa Lind", avatarUrl: null, message: null, createdAtLabel: "Yesterday" },
 ];
 
-const REPLY_DRAFT: ReplyDraftView = {
-  id: "d1", author: "Priya", channel: "general", hours_waiting: 3,
+export const REPLY_DRAFT: ReplyDraftView = {
+  // A reply is only drafted once a question has gone a day unanswered.
+  id: "d1", author: "Priya", channel: "general", hours_waiting: 26,
   question: "Anyone tried a founding-member price?",
   text: "Yes. Three members did this in Start here's pricing lesson: 30 seats at half price, then the full price once they're gone. The note \"Founding-member pricing\" in Knowledge has their numbers.",
   source: "Pricing your first offer",
@@ -122,7 +123,7 @@ const REPLY_DRAFT: ReplyDraftView = {
 export const CHECK_IN_TEXT =
   "Hey Josh, we've missed you on the last two calls. Friday's call covers pricing, the thing you asked about in your first week. Hope to see you there.";
 
-const CHECK_IN: MemberCoachDraftView = {
+export const CHECK_IN: MemberCoachDraftView = {
   id: "c1", member_name: "Josh Reed", member_handle: "josh-reed", reason: "quiet_member" as MemberCoachDraftView["reason"],
   reason_label: "Quiet member", signal_summary: "Quiet for 25 days and missed the last two calls.",
   text: CHECK_IN_TEXT, created_at: new Date().toISOString(),
@@ -430,9 +431,9 @@ function eventTags(event: PreviewEvent): ReactNode {
 
 const NAMES = ["Alex Rivera", "Maya Chen", "Dev Patel", "Priya Shah", "Jon Park", "Lena Novak", "Josh Reed", "Rashid Khan", "Sara Lind", "Tom Alvarez",
   "Hana Sato", "Omar Haddad", "Ivy Nguyen", "Noah Kim", "Zoe Martin", "Elif Demir"];
-const JOSH = "u6";
+export const JOSH = "u6";
 
-function memberRows(now: number): MemberTableRow[] {
+export function memberRows(now: number): MemberTableRow[] {
   return NAMES.map((name, i) => ({
     membership_id: i === 0 ? null : `m${i}`, user_id: `u${i}`, name, handle: name.toLowerCase().replace(/\s+/g, "-"), avatar_url: null,
     role: i === 0 ? "owner" : i === 1 ? "admin" : "member",
@@ -446,7 +447,7 @@ function memberRows(now: number): MemberTableRow[] {
   })) as MemberTableRow[];
 }
 
-function timeFor(iso: string | null, now: number): string {
+export function timeFor(iso: string | null, now: number): string {
   if (!iso) return "—";
   const minutes = Math.round((now - Date.parse(iso)) / 60000);
   if (minutes < 5) return "Now";
@@ -457,15 +458,15 @@ function timeFor(iso: string | null, now: number): string {
   return days === 1 ? "Yesterday" : `${days} days ago`;
 }
 
-function dayFor(iso: string | null): string | null {
+export function dayFor(iso: string | null): string | null {
   return iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 }
 
 // Faces everywhere look like the channel's: the kit's six muted tones (a1 to
 // a6; the gradient is laid over in the page styles) and one initial.
 const TONES = ["#39414F", "#4A4038", "#2F4446", "#463A4D", "#3E4636", "#4B3B3E"];
-const colour = (id: string) => TONES[Number(id.replace(/\D/g, "") || 0) % TONES.length];
-const initials = (name: string) => name.trim().charAt(0).toUpperCase();
+export const colour = (id: string) => TONES[Number(id.replace(/\D/g, "") || 0) % TONES.length];
+export const initials = (name: string) => name.trim().charAt(0).toUpperCase();
 
 // ---------- pods ----------
 
