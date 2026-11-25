@@ -15,6 +15,7 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { runAgentWork } from "./agentWork";
 import { communityAgentIsOn } from "./communityApps";
+import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
 import { communityResourceIsLiveModulePage, communityResourceModuleIsLive, normalizeIdValue } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { communityTimeZone, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
@@ -141,6 +142,10 @@ export const readReplyDraftInputInternal = internalQuery({
     };
     const community: any = await ctx.db.get(args.communityId);
     if (!community) return none;
+    const allowance = await readActiveCommunityAllowanceState(ctx, args.communityId, args.nowMs);
+    if (allowance?.backgroundAiPaused) {
+      return { ...none, nextDueAt: args.nowMs + 6 * 60 * 60_000 };
+    }
 
     let channels: any[];
     let activePod: any = null;

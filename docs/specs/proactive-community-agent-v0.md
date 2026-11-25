@@ -73,6 +73,14 @@ One pipeline joins them:
   heartbeats, briefs) plus 30-day member win-back counts in Settings, and
   members/founders can jump straight to their SOUL & MEMORY cards from the Agent
   page header.
+- **Allowance guardrails & founder alerts (Nov 24):** once a community reaches
+  90% of its monthly AI allowance, non-urgent background AI (member heartbeats,
+  builder heartbeats, and unanswered-question reply drafts) pauses automatically
+  to reserve the final 10% for live human chats, @mentions, and the Daily
+  Founder Brief. At 80% and 100%, the founder receives one calm, idempotent
+  alert per billing cycle (in their private Guide thread and by email) with the
+  exact reset date and 30-day member win-back context, backed by a visual usage
+  bar and reset date in Settings → Guide.
 - **Cards are members only** (no task cards in v0).
 - **The agent drafts the journey and rhythm** from the community's description;
   the founder edits in plain words.

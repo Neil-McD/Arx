@@ -71,6 +71,8 @@ export type MemberCoachImpactSummary = {
   allowance_micros: number;
   percent_used: number;
   spend_truncated: boolean;
+  cycle_end_at?: number | null;
+  background_ai_paused?: boolean;
   reengaged_30d: number;
   contacted_30d: number;
   reengagement_truncated: boolean;
