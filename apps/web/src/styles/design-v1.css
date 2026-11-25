@@ -2168,11 +2168,6 @@
   max-width: 100%;
 }
 
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .members-page.is-kit.is-board-mode header {
-  padding-left: 28px;
-  padding-right: 28px;
-}
-
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .members-page-record {
   grid-column: 2;
   grid-row: 1;

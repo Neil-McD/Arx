@@ -47,7 +47,7 @@ import type {
 } from "../components/communityAdmissionTypes";
 import { matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
-import { Face, WhoCanJoinLine, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
+import { Face, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
 import { TableRowsSkeleton } from "../components/WebLoadingSkeleton";
 
 type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "know_little" | "past";
@@ -100,7 +100,10 @@ export function KitMembersPage(props: {
   const [summary, setSummary] = useState<CloudMemberSummary | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<MembersView>("everyone");
-  const [surfaceMode, setSurfaceMode] = useState<"table" | "board">("table");
+  const routeMembersView = useRouteDetail("membersView");
+  const surfaceMode: "table" | "board" = routeMembersView === "board" ? "board" : "table";
+  const setSurfaceMode = (next: "table" | "board") =>
+    writeRouteDetail("membersView", next === "board" ? "board" : null);
   const [board, setBoard] = useState<CloudMemberJourneyBoard | null>(null);
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
@@ -273,8 +276,7 @@ export function KitMembersPage(props: {
     ...(counts.know_little && (counts.know_little < counts.everyone || view === "know_little") ? [{ id: "know_little", label: "Know little", count: counts.know_little }] : []),
     ...(counts.past ? [{ id: "past", label: "Past", count: counts.past }] : []),
   ] : [{ id: "everyone", label: "Everyone", count: null }];
-  const lead = !data ? (failed ? "Members couldn't load." : " ")
-    : `Everyone in ${props.communityName}, what they pay and who needs you.`;
+  const loadError = !data && failed ? "Members couldn't load." : null;
   const chosen = loaded && loaded.view === view ? loaded.rows.filter((row) => selected.has(keyOf(row))) : [];
   const download = (csv: string, suffix: string) => {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -327,7 +329,7 @@ export function KitMembersPage(props: {
   );
 
   const page = (
-    <section className={`members-page is-kit${picked ? " has-picked" : ""}${surfaceMode === "board" ? " is-board-mode" : ""}`} aria-label="Community members">
+    <section className={`members-page is-kit${picked ? " has-picked" : ""}`} aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
           {/* One header style everywhere: the title plus the Table/Board switch. */}
@@ -341,14 +343,11 @@ export function KitMembersPage(props: {
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
-                    paddingLeft: 28,
-                    paddingRight: 28,
                   }
                 : { minWidth: 0, overflowY: "auto" }
             }
           >
-            <p className={cx("sub")} style={{ margin: 0 }}>{lead}</p>
-            <WhoCanJoinLine admission={props.admission} waiting={waiting} />
+            {loadError ? <p className={cx("sub")} style={{ margin: "0 0 8px" }}>{loadError}</p> : null}
             <JoinRequestsLine count={waiting} open={side === "requests"} onOpen={() => setSide(side === "requests" ? null : "requests")} />
             {surfaceMode === "board" ? (
               <Suspense fallback={<p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>}>
