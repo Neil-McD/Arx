@@ -282,9 +282,20 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, event: EVENT, ...EVENT_FIELDS }, ["community", "event"],
     (a) => call("community.event.update", a, { event: a.event, ...only(a, Object.keys(EVENT_FIELDS)) })),
   tool("polynet_cancel_event", "community.event.cancel", "Cancel an event",
-    "Cancel an event. It stays in the list, marked cancelled, and no more reminders go out; nobody is emailed about the cancellation. A person can put it back in the app.",
-    { community: COMMUNITY, event: EVENT }, ["community", "event"],
-    (a) => call("community.event.cancel", a, { event: a.event })),
+    "Cancel an upcoming community event, or just one date of a repeating event (pass scope \"occurrence\" and occurrence_starts_at from starts_at or next_starts_at). Members receive a cancellation email automatically, with your optional note. If you also post an announcement about it, set send_email to false on polynet_announce so members are not emailed twice. The person is asked first, every time.",
+    { community: COMMUNITY, event: EVENT,
+      scope: { type: "string", enum: ["occurrence", "series"], description: "Optional. \"occurrence\" cancels one date of a repeating event (requires occurrence_starts_at); \"series\" cancels the whole event (default)." },
+      occurrence_starts_at: { type: "string", maxLength: 40, description: "Required when scope is \"occurrence\". Exact ISO start time from starts_at or next_starts_at in the events listing." },
+      note: { type: "string", maxLength: 500, description: "Optional short note from the host, shown on the cancelled event and included in the cancellation email." } },
+    ["community", "event"],
+    (a) => call("community.event.cancel", a, { event: a.event, ...only(a, ["scope", "occurrence_starts_at", "note"]) })),
+  tool("polynet_announce", "community.announcement.post", "Post an announcement to everybody",
+    "Post a top-level @everybody announcement in a shared channel as the host. Notifies every member in the app and sends an email unless send_email is false or the 72-hour announcement email cooldown is active. When paired with polynet_cancel_event, set send_email to false so members are not emailed twice. The person is shown the announcement and asked first, every time.",
+    { community: COMMUNITY, channel: CHANNEL,
+      text: TEXT("The announcement words. @everybody is added automatically if not already present.", 8_000),
+      send_email: { type: "boolean", description: "Optional. true (default) emails members if outside the 72-hour cooldown; false notifies in the app only without sending an email." } },
+    ["community", "channel", "text"],
+    (a) => call("community.announcement.post", a, { channel: a.channel, text: a.text, ...only(a, ["send_email"]) })),
   tool("polynet_set_member_role", "community.members.set_role", "Change people's role",
     "Make people admins, moderators or plain members. This changes who runs the community. The person is shown who and the role and asked first, every time.",
     { community: COMMUNITY, members: MEMBERS, role: { type: "string", enum: ["member", "moderator", "admin"], description: "The role to give them." } }, ["community", "members", "role"],
@@ -456,20 +467,23 @@ export const OWN_AI_ASKED_IN_POLYNET = "Waits for the person's Yes in Polynet: t
 export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
   "polynet_edit_post", "polynet_reply_message", "polynet_update_community", "polynet_require_approval_to_join", "polynet_set_guide_instructions",
   "polynet_save_handbook_draft", "polynet_rename_channel", "polynet_describe_channel",
-  "polynet_create_event", "polynet_update_event", "polynet_cancel_event",
+  "polynet_create_event", "polynet_update_event", "polynet_cancel_event", "polynet_announce",
   "polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_unban_members", "polynet_change_courses",
   "polynet_add_lesson", "polynet_edit_lesson", "polynet_edit_course", "polynet_order_lessons", "polynet_order_courses",
 ]);
-// Tools whose effect leaves the chat: by email (event reminders, the "you're
-// in" email), or to the public (a community's name, address and whether it is
-// listed show to visitors and change links already shared). Labelled as
-// reaching the outside world.
-export const ACTION_TOOLS_THAT_EMAIL = new Set(["polynet_create_event", "polynet_update_event", "polynet_approve_join_requests", "polynet_update_community"]);
+// Tools whose effect leaves the chat: by email (event reminders, cancellations,
+// announcements, the "you're in" email), or to the public (a community's name,
+// address and whether it is listed show to visitors and change links already
+// shared). Labelled as reaching the outside world.
+export const ACTION_TOOLS_THAT_EMAIL = new Set([
+  "polynet_create_event", "polynet_update_event", "polynet_cancel_event", "polynet_announce",
+  "polynet_approve_join_requests", "polynet_update_community",
+]);
 
 // Tools that make something new each time they run: calling one twice makes
 // two (unless the AI names the action with idempotency_key).
 export const ACTION_TOOLS_THAT_ADD = new Set([
-  "polynet_post", "polynet_reply", "polynet_reply_message", "polynet_create_channel", "polynet_create_event",
+  "polynet_post", "polynet_reply", "polynet_reply_message", "polynet_create_channel", "polynet_create_event", "polynet_announce",
   "polynet_change_courses", "polynet_create_course", "polynet_add_lesson", "polynet_remember",
 ]);
 

@@ -10,6 +10,7 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   normalizeIdValue,
   requireCommunityChatAccess,
+  requireCommunityManager,
   requireCommunityModerator,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
@@ -23,7 +24,11 @@ import {
   intakeCommunityAgentTurn,
   type ConciergeMentionRow,
 } from "./communityAgentConciergeCore";
-import { textContainsEverybodyMentionToken } from "./communityMentionBroadcasts";
+import {
+  EVERYBODY_MENTION_ROLE_KEY,
+  formatCommunityAnnouncementText,
+  textContainsEverybodyMentionToken,
+} from "./communityMentionBroadcasts";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
   buildCommunityFounderWelcomeText,
@@ -130,6 +135,7 @@ async function createCommunityInteractionComposerMessageCore(
   args: any,
   trustedUserId?: any,
   viaAi = false,
+  everybodyEmailMode: "auto" | "in_app_only" = "auto",
 ) {
     const userId = trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
       ctx,
@@ -194,6 +200,7 @@ async function createCommunityInteractionComposerMessageCore(
       });
       let root = await getExistingRootByIdempotencyKey(ctx, args.communityId, idempotencyKey);
       let communityAgentMention: ConciergeMentionRow | null = null;
+      let everybodyBroadcastEmailMode: "in_app_only" | "in_app_and_email" | null = null;
       let deduped = true;
       if (
         root &&
@@ -258,8 +265,10 @@ async function createCommunityInteractionComposerMessageCore(
           mentionedUserIds,
           actorUserId: userId,
           nowMs,
+          everybodyEmailMode,
         });
         communityAgentMention = mentionRows.communityAgentMention;
+        everybodyBroadcastEmailMode = mentionRows.everybodyBroadcastEmailMode;
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
         await markCommunityMemoryReviewDue(ctx, { communityId: args.communityId, channelId: requestedChannel._id, actorType, nowMs });
@@ -309,6 +318,7 @@ async function createCommunityInteractionComposerMessageCore(
           reply_id: null,
           deduped,
           idempotency_key: idempotencyKey,
+          ...(everybodyBroadcastEmailMode ? { everybody_broadcast_email_mode: everybodyBroadcastEmailMode } : {}),
         },
       };
     }
@@ -472,6 +482,57 @@ export const createCommunityInteractionComposerMessageForTrustedUserInternal = i
   args: { ...communityInteractionComposerArgs, trustedUserId: v.id("users"), viaAi: v.optional(v.boolean()) },
   handler: (ctx, { trustedUserId, viaAi, ...args }) =>
     createCommunityInteractionComposerMessageCore(ctx, args, trustedUserId, viaAi === true),
+});
+
+// Top-level @everybody announcement from a builder (owner or admin) through
+// their own AI or the community guide after explicit confirmation.
+export const postCommunityAnnouncementForTrustedManagerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    channelSlug: v.string(),
+    text: v.string(),
+    sendEmail: v.optional(v.boolean()),
+    idempotencyKey: v.string(),
+    asCommunityAgent: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const slug = args.channelSlug.trim().toLowerCase();
+    if (!slug) throw new Error("community_channel_not_found");
+    const channel = (await ctx.db
+      .query("communityChannels" as any)
+      .withIndex("by_community_slug", (q: any) => q.eq("communityId", args.communityId).eq("slug", slug))
+      .first()) as { _id: any; slug: string; name: string; status: string; accessMode: string } | null;
+    if (!channel || channel.status !== "active") throw new Error("community_channel_not_found");
+    if (channel.accessMode !== "all_members") throw new Error("community_announcement_channel_restricted");
+    const formatted = formatCommunityAnnouncementText(args.text, MAX_INTERACTION_TEXT_CHARS);
+    if (!formatted.ok) throw new Error(formatted.code);
+    const finalText = formatted.text;
+    const asCommunityAgent = args.asCommunityAgent === true;
+    const created = (await createCommunityInteractionComposerMessageCore(
+      ctx,
+      {
+        communityId: args.communityId,
+        channelId: channel._id,
+        idempotencyKey: args.idempotencyKey,
+        text: finalText,
+        mentions: [{ roleKey: EVERYBODY_MENTION_ROLE_KEY }],
+        asCommunityAgent,
+      },
+      args.userId,
+      !asCommunityAgent,
+      args.sendEmail === false ? "in_app_only" : "auto",
+    )) as { interaction?: { root_id?: string; deduped?: boolean; everybody_broadcast_email_mode?: string } };
+    const rootId = String(created.interaction?.root_id ?? "");
+    return {
+      post_ref: rootId ? `interaction:root:${rootId}` : null,
+      channel: channel.slug,
+      text: finalText,
+      email_mode: created.interaction?.everybody_broadcast_email_mode ?? (args.sendEmail === false ? "in_app_only" : "in_app_and_email"),
+      deduped: created.interaction?.deduped === true,
+    };
+  },
 });
 
 export const createCommunityAgentCanonicalInteractionInternal = internalMutation({

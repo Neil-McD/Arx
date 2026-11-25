@@ -40,6 +40,15 @@ export const applyCommunityOperationInternal = internalMutation({
         ? await ctx.runMutation(refs.communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: input.text })
       : args.operation.startsWith("community.event.")
         ? await ctx.runMutation(refs.communityEvents.applyEventOperationForTrustedUserInternal, { ...scope, operation: args.operation, input })
+      : args.operation === "community.announcement.post"
+        ? await ctx.runMutation(refs.communityInteractions.postCommunityAnnouncementForTrustedManagerInternal, {
+          ...scope,
+          channelSlug: String(input.channel ?? ""),
+          text: String(input.text ?? ""),
+          sendEmail: input.send_email !== false,
+          idempotencyKey: args.idempotencyKey,
+          asCommunityAgent: args.principalKind === "community_agent_for_member",
+        })
       : args.operation.startsWith("community.course.")
         ? await ctx.runMutation(refs.communityResources.applyCourseCardForTrustedUserInternal, { ...scope, operation: args.operation, input })
       : args.operation.startsWith("community.channel.")

@@ -845,6 +845,91 @@ async function cancelCommunityEventCore(
   };
 }
 
+export const describeEventCancellationTargetInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    eventId: v.string(),
+    scope: v.optional(v.union(v.literal("occurrence"), v.literal("series"))),
+    occurrenceStartsAtIso: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const nowMs = args.nowMs ?? Date.now();
+    const normalizedId = ctx.db.normalizeId("communityEvents", String(args.eventId ?? "").trim());
+    const event = normalizedId ? ((await ctx.db.get(normalizedId)) as CommunityEventLike | null) : null;
+    if (!event || normalizeIdValue(event.communityId) !== normalizeIdValue(args.communityId)) {
+      return { ok: false as const, code: "community_event_not_found" as const };
+    }
+    if (event.podChannelId) {
+      return { ok: false as const, code: "community_event_pod_call" as const };
+    }
+    const frequency = normalizeCommunityEventRecurrenceFrequency(event.recurrenceFrequency);
+    const isRecurring = frequency !== "none";
+    const hasOccurrenceArg =
+      typeof args.occurrenceStartsAtIso === "string" && args.occurrenceStartsAtIso.trim().length > 0;
+    const requestedScope: "occurrence" | "series" =
+      args.scope ?? (hasOccurrenceArg && isRecurring ? "occurrence" : "series");
+    const effectiveScope: "occurrence" | "series" =
+      requestedScope === "occurrence" && isRecurring ? "occurrence" : "series";
+    const durationMs =
+      typeof event.endsAt === "number"
+        ? Math.max(0, event.endsAt - event.startsAt)
+        : DEFAULT_COMMUNITY_EVENT_DURATION_MS;
+    const timeZone = normalizeCommunityEventTimeZone(event.timezone);
+
+    if (effectiveScope === "occurrence") {
+      if (!hasOccurrenceArg) {
+        return { ok: false as const, code: "community_event_occurrence_invalid" as const };
+      }
+      let occurrenceStartsAt: number;
+      try {
+        occurrenceStartsAt = requireIsoMs(args.occurrenceStartsAtIso, "community_event_occurrence_invalid");
+      } catch {
+        return { ok: false as const, code: "community_event_occurrence_invalid" as const };
+      }
+      const matches = getCommunityEventOccurrenceStartsInRange({
+        startsAt: event.startsAt,
+        rangeStart: occurrenceStartsAt,
+        rangeEnd: occurrenceStartsAt,
+        frequency,
+        interval: normalizeCommunityEventRecurrenceInterval(event.recurrenceInterval),
+        recurrenceUntil: typeof event.recurrenceUntil === "number" ? event.recurrenceUntil : null,
+        timeZone,
+        limit: 1,
+      });
+      if (!matches.includes(occurrenceStartsAt)) {
+        return { ok: false as const, code: "community_event_occurrence_not_found" as const };
+      }
+      const alreadyCancelled = event.status === "cancelled" || Boolean(findCancelledOccurrence(event, occurrenceStartsAt));
+      return {
+        ok: true as const,
+        title: event.title,
+        isRecurring,
+        effectiveScope,
+        whenLabel: formatCommunityEventZonedDateTime(occurrenceStartsAt, timeZone),
+        willEmail: occurrenceStartsAt + durationMs > nowMs,
+        alreadyCancelled,
+      };
+    }
+
+    const alreadyCancelled = event.status === "cancelled";
+    const nextStartsAt = alreadyCancelled
+      ? null
+      : findNextLiveOccurrenceStartsAt(event, nowMs, { includeOngoing: true });
+    return {
+      ok: true as const,
+      title: event.title,
+      isRecurring,
+      effectiveScope,
+      whenLabel: nextStartsAt !== null ? formatCommunityEventZonedDateTime(nextStartsAt, timeZone) : null,
+      willEmail: nextStartsAt !== null && nextStartsAt + durationMs > nowMs,
+      alreadyCancelled,
+    };
+  },
+});
+
 // Events through an AI acting for a builder (their own AI, or the guide in
 // their private talk): make one, change one, cancel one. The same rules as
 // the app's form. A pod's call is changed in its pod, not here.

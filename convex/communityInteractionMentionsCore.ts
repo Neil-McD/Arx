@@ -341,8 +341,13 @@ export async function insertCommunityInteractionMentionRows(args: {
   mentionedUserIds: InteractionMentionSpec[];
   actorUserId: any;
   nowMs: number;
-}): Promise<{ communityAgentMention: ConciergeMentionRow | null }> {
+  everybodyEmailMode?: "auto" | "in_app_only";
+}): Promise<{
+  communityAgentMention: ConciergeMentionRow | null;
+  everybodyBroadcastEmailMode: "in_app_only" | "in_app_and_email" | null;
+}> {
   let communityAgentMention: ConciergeMentionRow | null = null;
+  let everybodyBroadcastEmailMode: "in_app_only" | "in_app_and_email" | null = null;
   const orderedMentionSpecs = args.mentionedUserIds
     .slice()
     .sort((left, right) => (left.kind === "role" ? -1 : 0) - (right.kind === "role" ? -1 : 0));
@@ -374,7 +379,7 @@ export async function insertCommunityInteractionMentionRows(args: {
       updatedAt: args.nowMs,
     });
     if (spec.kind === "role" && spec.roleKey === EVERYBODY_MENTION_ROLE_KEY) {
-      await scheduleEverybodyMentionBroadcast({
+      const scheduled = await scheduleEverybodyMentionBroadcast({
         ctx: args.ctx,
         communityId: args.communityId,
         channelId: args.channelId,
@@ -382,7 +387,9 @@ export async function insertCommunityInteractionMentionRows(args: {
         actorUserId: args.actorUserId,
         sourceMentionId: mentionId,
         nowMs: args.nowMs,
+        forceInAppOnly: args.everybodyEmailMode === "in_app_only",
       });
+      everybodyBroadcastEmailMode = scheduled.emailMode;
     }
     if (spec.kind === "community_agent") {
       communityAgentMention = {
@@ -396,5 +403,5 @@ export async function insertCommunityInteractionMentionRows(args: {
       };
     }
   }
-  return { communityAgentMention };
+  return { communityAgentMention, everybodyBroadcastEmailMode };
 }

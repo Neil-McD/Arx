@@ -20,11 +20,15 @@ export function aiEventList(events: EventRow[], limit: number): { events: EventR
     const seen = series ? bySeries.get(series) : undefined;
     if (seen) {
       const times = seen.next_times as unknown[];
-      if (times.length < AI_EVENT_NEXT_TIMES) times.push(event.starts_at_zoned ?? event.starts_at);
+      const isoTimes = seen.next_starts_at as unknown[];
+      if (times.length < AI_EVENT_NEXT_TIMES) {
+        times.push(event.starts_at_zoned ?? event.starts_at);
+        if (typeof event.starts_at === "string") isoTimes.push(event.starts_at);
+      }
       continue;
     }
     if (kept.length >= limit) { more = true; continue; }
-    const shown: EventRow = series ? { ...event, next_times: [] } : event;
+    const shown: EventRow = series ? { ...event, next_times: [], next_starts_at: [] } : event;
     kept.push(shown);
     if (series) bySeries.set(series, shown);
   }

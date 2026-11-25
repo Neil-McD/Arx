@@ -125,6 +125,43 @@ export function openCommunityQuestion(): string {
   return "Open the community to everyone? Anyone can join without asking, and everyone waiting is let in now. This can't be undone.";
 }
 
+export function eventCancelQuestion(args: {
+  title: string;
+  scope: "occurrence" | "series";
+  isRecurring: boolean;
+  whenLabel: string | null;
+  willEmail: boolean;
+}): string {
+  const emailNote = args.willEmail ? " Members will receive a cancellation email." : "";
+  if (args.scope === "occurrence") {
+    const when = args.whenLabel ? `${args.whenLabel} session of ` : "one date of ";
+    return `Cancel just the ${when}"${args.title}"? Future dates stay on the calendar.${emailNote}`;
+  }
+  if (args.isRecurring) {
+    return `Cancel every upcoming date of "${args.title}"?${emailNote}`;
+  }
+  return `Cancel "${args.title}"?${emailNote}`;
+}
+
+export function announcementQuestion(args: {
+  channelName: string;
+  willEmail: boolean;
+  inAppRequested: boolean;
+  cooldownUntilLabel: string | null;
+}): string {
+  const channel = `#${args.channelName}`;
+  if (args.inAppRequested) {
+    return `Post this @everybody announcement in ${channel} (in-app only, no email)?`;
+  }
+  if (args.willEmail) {
+    return `Post this @everybody announcement in ${channel}? Every member will be notified in the app and by email.`;
+  }
+  if (args.cooldownUntilLabel) {
+    return `Post this @everybody announcement in ${channel}? The 72-hour email cooldown is active until ${args.cooldownUntilLabel}, so this will notify members in the app only.`;
+  }
+  return `Post this @everybody announcement in ${channel}? Every member will be notified in the app.`;
+}
+
 export function changeResultLine(args: { operation: string; succeeded: number; asked: number }): string {
   const gone = args.operation === "community.members.ban" ? "banned" : args.operation === "community.members.remove" ? "removed" : null;
   if (gone) {
@@ -135,6 +172,8 @@ export function changeResultLine(args: { operation: string; succeeded: number; a
   if (args.operation === "community.join_mode.set") return "The community is open to everyone now.";
   if (args.operation === "community.course.publish") return "Done: the course is changed for members now.";
   if (args.operation === "community.course.delete") return "It was deleted.";
+  if (args.operation === "community.event.cancel") return "The event was cancelled.";
+  if (args.operation === "community.announcement.post") return "The announcement was posted.";
   if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
   if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
   return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;

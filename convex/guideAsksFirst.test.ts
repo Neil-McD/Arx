@@ -457,11 +457,12 @@ test("a builder makes, changes and cancels an event through the guide and throug
   for (const door of [w.guide("member"), w.door("member", "external_mcp")]) {
     expect(await door("polynet_call", call("community.event.cancel", { event: eventId }, "ev-6"))).toMatchObject({ ok: false, code: "operation_not_found" });
   }
-  // Cancelled through the guide: it stays, marked cancelled.
+  // Cancelled through the guide: asks first because members are emailed, then marks cancelled after Yes.
   expect(await w.guide("owner")("polynet_call", call("community.event.cancel", { event: eventId }, "ev-7")))
-    .toMatchObject({ ok: true, value: { result: { event: { status: "cancelled" } } } });
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person", question: expect.stringContaining("Hill repeats") } });
+  const [cancelQ] = await w.questions("owner");
+  expect(await w.answer("owner", cancelQ.id, "yes")).toMatchObject({ status: "done", line: "The event was cancelled." });
   expect((await events()).find((row) => row.id === eventId)).toMatchObject({ title: "Hill repeats", status: "cancelled", location: "Boathouse" });
-  expect((await w.rows()).questions).toEqual([]);
 });
 
 test("what a real AI tripped on: a missing folder says so, a cut-off list says there is more, a delete says what it did, canManage means what this AI may change", async () => {
@@ -518,14 +519,15 @@ test("the named tools a person's own AI is shown do the real thing, end to end, 
   expect(event).toMatchObject({ ok: true, value: { result: { event: { title: "Track night", status: "live" } } } });
   const eventId = event.value.result.event.parent_event_id;
   expect(await owner("polynet_update_event", { community: C, event: eventId, location_label: "High school track" })).toMatchObject({ ok: true, value: { result: { event: { location_label: "High school track" } } } });
-  expect(await owner("polynet_cancel_event", { community: C, event: eventId })).toMatchObject({ ok: true, value: { result: { event: { status: "cancelled" } } } });
+  expect(await owner("polynet_cancel_event", { community: C, event: eventId })).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   // What the guide is told changes how it answers every member: it waits for the Yes.
   expect(await owner("polynet_set_guide_instructions", { community: C, text: "Keep answers short." })).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   expect(await owner("polynet_save_handbook_draft", { community: C, text: "# Start here" })).toMatchObject({ ok: true });
   expect(await owner("polynet_require_approval_to_join", { community: C })).toMatchObject({ ok: true });
   expect(await owner("polynet_set_member_role", { community: C, members: [`user:${String(w.ids.member)}`], role: "moderator" })).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
-  // Only what asks every time was held for a yes: the guide's instructions and the role change. The rest ran.
+  // Only what asks every time was held for a yes: cancelling an event, the guide's instructions and the role change. The rest ran.
   expect((await w.rows()).questions.map((row: any) => [row.kind, row.question, row.status])).toEqual([
+    ["change", expect.stringContaining("Track night"), "waiting"],
     ["change", "Replace the guide's instructions with this? It changes how the guide answers every member.", "waiting"],
     ["change", expect.stringContaining("moderator"), "waiting"]]);
 });

@@ -136,6 +136,7 @@ export const askInternal = internalMutation({
     toolName: v.string(), inputJson: v.string(), question: v.string(), place: v.optional(v.string()), text: v.optional(v.string()),
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))), runId: v.optional(v.string()),
     pictures: v.optional(v.array(v.object({ id: v.id("cloudThreadAttachments"), name: v.string() }))),
+    approvedInAppOnly: v.optional(v.boolean()),
     ownAiApp: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -156,6 +157,7 @@ export const askInternal = internalMutation({
       ...(args.text ? { text: args.text } : {}),
       ...(args.items ? { items: args.items } : {}),
       ...(args.pictures?.length ? { pictures: args.pictures } : {}),
+      ...(args.approvedInAppOnly ? { approvedInAppOnly: true } : {}),
       status: "waiting", ...(args.runId ? { runId: args.runId } : {}), createdAt: nowMs,
     });
     return { ok: true as const, questionId: String(questionId) };
@@ -210,6 +212,7 @@ async function askForOwnAi(ctx: any, args: any, nowMs: number) {
     ...(args.place ? { place: args.place.slice(0, 120) } : {}),
     ...(args.text ? { text: args.text } : {}),
     ...(args.items ? { items: args.items } : {}),
+    ...(args.approvedInAppOnly ? { approvedInAppOnly: true } : {}),
     status: "waiting", ownAiApp: String(args.ownAiApp).slice(0, 60), createdAt: nowMs,
   });
   return { ok: true as const, questionId: String(questionId), settled: null };
@@ -264,7 +267,8 @@ export const claimInternal = internalMutation({
     const community: any = await ctx.db.get(row.communityId);
     return { run: true as const, userId: String(userId), authSubject: String(user?.authSubject ?? ""), communitySlug: String(community?.slug ?? ""),
       toolName: row.toolName, inputJson: row.inputJson, kind: row.kind, place: row.place ?? null, ownAiApp: row.ownAiApp ?? null,
-      pictures: (row.pictures ?? []).map((picture: any) => String(picture.id)) };
+      pictures: (row.pictures ?? []).map((picture: any) => String(picture.id)),
+      approvedInAppOnly: row.approvedInAppOnly === true };
   },
 });
 
@@ -307,6 +311,7 @@ export const answerGuideQuestion = action({
         personSaidYes: true,
         // The pictures the person was shown, never chosen again.
         ...(claimed.pictures.length ? { approvedPictures: claimed.pictures } : {}),
+        ...(claimed.approvedInAppOnly ? { approvedInAppOnly: true } : {}),
       });
       // Changing, removing or banning members: done for each person on its own.
       const members = String(input.operation ?? "").startsWith("community.members.");

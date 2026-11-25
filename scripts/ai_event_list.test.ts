@@ -8,8 +8,13 @@ const once = (id: string, day: number) => ({ id, parent_event_id: id, title: id,
 test("a weekly call is listed once, at its next time, with the next few after it; one-off events stay as they are", () => {
   const listed = aiEventList([weekly(0), once("Race day", 6), weekly(1), weekly(2), weekly(3), weekly(4)], 20);
   expect(listed.events.map((event) => event.title)).toEqual(["Group Call", "Race day"]);
-  expect(listed.events[0]).toMatchObject({ id: "call:0", next_times: ["2026-12-11T10:00 New York", "2026-12-18T10:00 New York", "2026-12-25T10:00 New York"] });
+  expect(listed.events[0]).toMatchObject({
+    id: "call:0",
+    next_times: ["2026-12-11T10:00 New York", "2026-12-18T10:00 New York", "2026-12-25T10:00 New York"],
+    next_starts_at: ["2026-12-11T15:00:00.000Z", "2026-12-18T15:00:00.000Z", "2026-12-25T15:00:00.000Z"],
+  });
   expect(listed.events[1]).not.toHaveProperty("next_times");
+  expect(listed.events[1]).not.toHaveProperty("next_starts_at");
   expect(listed.more).toBe(false);
 });
 
