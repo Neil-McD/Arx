@@ -1,6 +1,7 @@
 import {
   PLATFORM_LEGAL_DOCUMENTS,
   PREVIOUS_PRIVACY_AI_DATA_POLICY_DOCUMENT,
+  ALSO_STILL_ACCEPTED_TERMS_OF_SERVICE_DOCUMENT,
   STILL_ACCEPTED_TERMS_OF_SERVICE_DOCUMENT,
   PRIVACY_AI_DATA_POLICY_DOCUMENT,
   TERMS_OF_SERVICE_DOCUMENT,
@@ -23,10 +24,15 @@ function throwPlatformLegalAcceptanceError(code: PlatformLegalAcceptanceErrorCod
 // Earlier versions that still count, so members aren't asked to accept again.
 // Privacy v2 (Nov 19) only adds outside AI apps a person connects themselves;
 // members who accepted v1 are told, not re-asked. New acceptances record v2.
-// Terms v5 (Nov 19) only names the operator, adds the adult-content rule and
-// the support address: a v4 acceptance still counts; v1-v3 do not.
+// Terms v6 (Nov 25) only changes the paid AI plans (Guide, Chief of Staff,
+// boosts; $79 subscriptions keep their price); v5 (Nov 19) only named the
+// operator, added the adult-content rule and the support address. So v5 and
+// v4 acceptances still count; v1-v3 do not.
 const STILL_ACCEPTED_VERSIONS: Record<string, readonly string[]> = {
-  [TERMS_OF_SERVICE_DOCUMENT.key]: [STILL_ACCEPTED_TERMS_OF_SERVICE_DOCUMENT.version],
+  [TERMS_OF_SERVICE_DOCUMENT.key]: [
+    STILL_ACCEPTED_TERMS_OF_SERVICE_DOCUMENT.version,
+    ALSO_STILL_ACCEPTED_TERMS_OF_SERVICE_DOCUMENT.version,
+  ],
   [PRIVACY_AI_DATA_POLICY_DOCUMENT.key]: [PREVIOUS_PRIVACY_AI_DATA_POLICY_DOCUMENT.version],
 };
 

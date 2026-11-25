@@ -57,9 +57,16 @@ describe("platform legal acceptance versioning", () => {
     ])).toBe(false);
   });
 
-  test("current Terms v5 acceptance is sufficient", () => {
+  test("Terms v5 acceptance still counts under v6: members are not asked again", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_v5" },
+      privacyAcceptance,
+    ])).toBe(true);
+  });
+
+  test("current Terms v6 acceptance is sufficient", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v6" },
       privacyAcceptance,
     ])).toBe(true);
   });
