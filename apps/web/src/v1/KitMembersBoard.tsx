@@ -59,11 +59,12 @@ export function KitMembersBoard(props: {
   timeFor: (iso: string | null, now: number) => string;
   onOpenCard: (membershipId: string) => void;
   onMoveCard: (membershipId: string, stageKey: string) => Promise<void>;
-  onSaveStages: (stages: StageSaveInput[]) => Promise<void>;
+  onSaveStages: (stages: StageSaveInput[]) => Promise<JourneyStageDefinition[] | null | void>;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
 }) {
   const [statusFilter, setStatusFilter] = useState<JourneyCardStatus | "all">("all");
+  const [localStages, setLocalStages] = useState<JourneyStageDefinition[] | null>(null);
   const [editingField, setEditingField] = useState<{ stageKey: string; field: "name" | "goal" } | null>(null);
   const [editValue, setEditValue] = useState("");
   const [openMenuStageKey, setOpenMenuStageKey] = useState<string | null>(null);
@@ -76,7 +77,13 @@ export function KitMembersBoard(props: {
   const [movingId, setMovingId] = useState<string | null>(null);
 
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const stages = props.board?.stages ?? [];
+  const stagesRef = useRef<JourneyStageDefinition[]>([]);
+  const propStages = props.board?.stages ?? [];
+  useEffect(() => {
+    setLocalStages(null);
+  }, [props.board?.stages]);
+  const stages = localStages ?? propStages;
+  stagesRef.current = stages;
   const allCards = props.board?.cards ?? [];
 
   useEffect(() => {
@@ -106,7 +113,11 @@ export function KitMembersBoard(props: {
     setSavingStage(true);
     setStageError(null);
     try {
-      await props.onSaveStages(nextStages);
+      const saved = await props.onSaveStages(nextStages);
+      if (Array.isArray(saved)) {
+        stagesRef.current = saved;
+        setLocalStages(saved);
+      }
       return true;
     } catch {
       setStageError("Couldn't save that change. Try again.");
@@ -128,7 +139,8 @@ export function KitMembersBoard(props: {
   const commitInlineEdit = async () => {
     if (!editingField || savingStage) return;
     const { stageKey, field } = editingField;
-    const stage = stages.find((entry) => entry.key === stageKey);
+    const currentStages = stagesRef.current;
+    const stage = currentStages.find((entry) => entry.key === stageKey);
     const trimmed = editValue.replace(/\s+/g, " ").trim();
     if (!stage) {
       setEditingField(null);
@@ -143,7 +155,7 @@ export function KitMembersBoard(props: {
       setEditingField(null);
       return;
     }
-    const nextList = toSaveList(stages).map((entry) =>
+    const nextList = toSaveList(currentStages).map((entry) =>
       entry.key === stageKey
         ? {
             ...entry,
@@ -160,7 +172,7 @@ export function KitMembersBoard(props: {
     stageKey: string,
     builtin: (typeof BUILTIN_JOURNEY_CHECKPOINTS)[number],
   ) => {
-    const nextList = toSaveList(stages).map((entry) => {
+    const nextList = toSaveList(stagesRef.current).map((entry) => {
       if (entry.key !== stageKey) return entry;
       const exists = entry.checkpoints.some((cp) => cp.key === builtin.key);
       if (exists) {
@@ -182,7 +194,8 @@ export function KitMembersBoard(props: {
     const label = customCpDraft.replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS);
     if (!label) return;
     const cpKey = slugifyJourneyStageKey(label, stageIndex);
-    const currentStage = stages.find((entry) => entry.key === stageKey);
+    const currentStages = stagesRef.current;
+    const currentStage = currentStages.find((entry) => entry.key === stageKey);
     if (!currentStage) return;
     if (
       currentStage.checkpoints.length >= MAX_STAGE_CHECKPOINTS ||
@@ -191,7 +204,7 @@ export function KitMembersBoard(props: {
       setCustomCpDraft("");
       return;
     }
-    const nextList = toSaveList(stages).map((entry) =>
+    const nextList = toSaveList(currentStages).map((entry) =>
       entry.key === stageKey
         ? { ...entry, checkpoints: [...entry.checkpoints, { key: cpKey, label, kind: "custom" as const }] }
         : entry,
@@ -201,7 +214,7 @@ export function KitMembersBoard(props: {
   };
 
   const removeStageCheckpoint = async (stageKey: string, cpKey: string) => {
-    const nextList = toSaveList(stages).map((entry) =>
+    const nextList = toSaveList(stagesRef.current).map((entry) =>
       entry.key === stageKey
         ? { ...entry, checkpoints: entry.checkpoints.filter((cp) => cp.key !== cpKey) }
         : entry,
@@ -210,33 +223,36 @@ export function KitMembersBoard(props: {
   };
 
   const moveStage = async (index: number, delta: -1 | 1) => {
+    const currentStages = stagesRef.current;
     const target = index + delta;
-    if (target < 0 || target >= stages.length) return;
-    const nextList = toSaveList(stages);
+    if (target < 0 || target >= currentStages.length) return;
+    const nextList = toSaveList(currentStages);
     [nextList[index], nextList[target]] = [nextList[target]!, nextList[index]!];
     setOpenMenuStageKey(null);
     await persistStages(nextList);
   };
 
   const deleteStage = async (stageKey: string) => {
-    if (stages.length <= MIN_JOURNEY_STAGES) return;
-    const nextList = toSaveList(stages).filter((entry) => entry.key !== stageKey);
+    const currentStages = stagesRef.current;
+    if (currentStages.length <= MIN_JOURNEY_STAGES) return;
+    const nextList = toSaveList(currentStages).filter((entry) => entry.key !== stageKey);
     setOpenMenuStageKey(null);
     await persistStages(nextList);
   };
 
   const addStageInline = async () => {
-    if (stages.length >= MAX_JOURNEY_STAGES || savingStage) return;
-    const existingKeys = new Set(stages.map((entry) => entry.key));
-    let suffix = stages.length + 1;
+    const currentStages = stagesRef.current;
+    if (currentStages.length >= MAX_JOURNEY_STAGES || savingStage) return;
+    const existingKeys = new Set(currentStages.map((entry) => entry.key));
+    let suffix = currentStages.length + 1;
     let newKey = `stage_${suffix}`;
     while (existingKeys.has(newKey)) {
       suffix += 1;
       newKey = `stage_${suffix}`;
     }
-    const newName = `Stage ${stages.length + 1}`;
+    const newName = `Stage ${currentStages.length + 1}`;
     const nextList = [
-      ...toSaveList(stages),
+      ...toSaveList(currentStages),
       { key: newKey, name: newName, goal: "", checkpoints: [] },
     ];
     const ok = await persistStages(nextList);
