@@ -297,7 +297,12 @@ export const createFounderUsageBoostCheckout = action({
       if (existingUrl && existing?.status === "open") {
         return { ok: true, receipt_key: receiptKey, checkout_url: existingUrl };
       }
-      // Session already expired/completed on Stripe; expire our stale pending row cleanly.
+      // Keep completed/paid checkouts reserved until the Stripe webhook grants them
+      // so a rapid retry cannot open a second checkout past the monthly safety cap.
+      if (existing?.status === "complete" || existing?.payment_status === "paid") {
+        throw new Error("founder_usage_boost_payment_settling");
+      }
+      // Truly expired/abandoned on Stripe; expire our stale pending row cleanly.
       await ctx.runMutation(
         internalRefs.founderUsageBoosts.expireFounderUsageBoostCheckoutInternal,
         { receiptKey, nowMs: Date.now() },
@@ -442,7 +447,7 @@ export const grantFounderUsageBoostFromStripeInternal = internalMutation({
     }
     if (!targetCycle || String(targetCycle.communityId) !== String(receipt.communityId)) {
       await recordCriticalAuditEvent(ctx, {
-        eventKey: `founder_usage_boost_cycle_missing:${receipt.receiptKey}`,
+        eventKey: `founder_usage_boost_cycle_missing:${receipt.receiptKey}:${args.providerEventCreatedAt}`,
         eventType: "founder_usage_boost_cycle_missing",
         severity: "error",
         status: "failed",
@@ -455,7 +460,14 @@ export const grantFounderUsageBoostFromStripeInternal = internalMutation({
         },
         createdAt: args.nowMs,
       });
-      return { ok: true, ignored: true, reason: "boost_target_cycle_unavailable" };
+      // Signal retryable failure so httpBilling returns 500 and Stripe retries
+      // once the subscription renewal webhook opens the next billing cycle.
+      return {
+        ok: false,
+        ignored: false,
+        retryable: true,
+        reason: "boost_target_cycle_unavailable",
+      };
     }
 
     const nextPaidBoostCostMicros =
@@ -567,34 +579,43 @@ export const revokeFounderUsageBoostFromStripeInternal = internalMutation({
     if (!receipt) {
       return { ok: true, ignored: true, reason: "boost_receipt_not_found" };
     }
-    if (receipt.status !== "granted") {
-      return { ok: true, ignored: true, reason: "boost_receipt_not_granted" };
+    if (receipt.status === "refunded" || receipt.status === "disputed") {
+      return { ok: true, ignored: true, reason: "boost_receipt_already_revoked" };
     }
 
-    const cycle: any = await ctx.db.get(receipt.usageCycleId);
-    if (cycle) {
-      const currentBoost = Math.max(0, Math.floor(Number(cycle.paidBoostCostMicros ?? 0)));
-      const currentCount = Math.max(0, Math.floor(Number(cycle.paidBoostCount ?? 0)));
-      const minRequiredTotal = Math.max(
-        0,
-        Math.floor(Number(cycle.reservedCostMicros ?? 0)) +
-          Math.floor(Number(cycle.settledCostMicros ?? 0)),
-      );
-      const minRequiredBoost = Math.max(0, minRequiredTotal - Number(cycle.includedCostMicros ?? 0));
-      const targetBoost = Math.max(0, currentBoost - receipt.grantedAllowanceMicros);
-      const nextBoost = Math.max(targetBoost, minRequiredBoost);
-      // Preserve the (paidBoostCostMicros === 0) === (paidBoostCount === 0) ledger invariant.
-      const nextCount = nextBoost === 0 ? 0 : Math.max(1, currentCount - 1);
+    const wasGranted = receipt.status === "granted";
+    if (wasGranted) {
+      const cycle: any = await ctx.db.get(receipt.usageCycleId);
+      if (cycle) {
+        const currentBoost = Math.max(0, Math.floor(Number(cycle.paidBoostCostMicros ?? 0)));
+        const currentCount = Math.max(0, Math.floor(Number(cycle.paidBoostCount ?? 0)));
+        const minRequiredTotal = Math.max(
+          0,
+          Math.floor(Number(cycle.reservedCostMicros ?? 0)) +
+            Math.floor(Number(cycle.settledCostMicros ?? 0)),
+        );
+        const minRequiredBoost = Math.max(
+          0,
+          minRequiredTotal - Number(cycle.includedCostMicros ?? 0),
+        );
+        const targetBoost = Math.max(0, currentBoost - receipt.grantedAllowanceMicros);
+        const nextBoost = Math.max(targetBoost, minRequiredBoost);
+        // Preserve the (paidBoostCostMicros === 0) === (paidBoostCount === 0) ledger invariant.
+        const nextCount = nextBoost === 0 ? 0 : Math.max(1, currentCount - 1);
 
-      await ctx.db.patch(cycle._id, {
-        paidBoostCostMicros: nextBoost,
-        paidBoostCount: nextCount,
-        updatedAt: args.nowMs,
-      });
+        await ctx.db.patch(cycle._id, {
+          paidBoostCostMicros: nextBoost,
+          paidBoostCount: nextCount,
+          updatedAt: args.nowMs,
+        });
+      }
     }
 
+    // Persist terminal revocation even on pending/expired receipts so an out-of-order
+    // checkout.session.completed webhook can never grant refunded or disputed funds.
     await ctx.db.patch(receipt._id, {
       status: args.outcome,
+      providerPaymentIntentId: pi ?? receipt.providerPaymentIntentId,
       revokedReason: String(args.revokedReason).slice(0, 160),
       providerEventCreatedAt: Math.max(
         Number(receipt.providerEventCreatedAt ?? 0),
@@ -604,17 +625,27 @@ export const revokeFounderUsageBoostFromStripeInternal = internalMutation({
       updatedAt: args.nowMs,
     });
 
-    // On a chargeback dispute, place a risk hold on the parent founder subscription
-    // so a disputed account cannot purchase further boosts or continue burning AI.
+    // On a chargeback dispute, apply the canonical risk-revocation transition
+    // (status: "ended" + riskAccessState: "revoked") so both inference admission
+    // and boost purchases fail closed immediately.
     if (args.outcome === "disputed") {
       const subscription: any = await ctx.db.get(receipt.founderSubscriptionId);
       if (subscription) {
-        await ctx.db.patch(subscription._id, {
-          riskAccessState: "revoked",
-          riskStateChangedAt: args.providerEventCreatedAt,
-          revokedReason: "subscription_dispute_opened",
-          updatedAt: args.nowMs,
-        });
+        const priorRiskChangedAt = Number(subscription.riskStateChangedAt ?? 0);
+        if (args.providerEventCreatedAt >= priorRiskChangedAt) {
+          await ctx.db.patch(subscription._id, {
+            status: "ended",
+            endedAt: args.providerEventCreatedAt,
+            riskAccessState: "revoked",
+            riskStateChangedAt: args.providerEventCreatedAt,
+            revokedReason: "subscription_dispute_opened",
+            lastProviderEventCreatedAt: Math.max(
+              Number(subscription.lastProviderEventCreatedAt ?? 0),
+              args.providerEventCreatedAt,
+            ),
+            updatedAt: args.nowMs,
+          });
+        }
       }
     }
 
@@ -626,7 +657,7 @@ export const revokeFounderUsageBoostFromStripeInternal = internalMutation({
       actorUserId: receipt.ownerUserId,
       communityId: receipt.communityId,
       provider: "stripe",
-      providerObjectId: receipt.providerPaymentIntentId ?? receipt.providerCheckoutSessionId ?? null,
+      providerObjectId: pi ?? receipt.providerPaymentIntentId ?? receipt.providerCheckoutSessionId ?? null,
       metadata: {
         receiptKey: receipt.receiptKey,
         outcome: args.outcome,
@@ -636,5 +667,161 @@ export const revokeFounderUsageBoostFromStripeInternal = internalMutation({
     });
 
     return { ok: true, ignored: false, receiptKey: receipt.receiptKey, outcome: args.outcome };
+  },
+});
+
+// Webhook-authoritative dispute closure (won / lost / funds_reinstated) for one-time boost charges.
+export const resolveFounderUsageBoostDisputeFromStripeInternal = internalMutation({
+  args: {
+    providerPaymentIntentId: v.optional(v.union(v.string(), v.null())),
+    receiptKey: v.optional(v.union(v.string(), v.null())),
+    outcome: v.union(
+      v.literal("won"),
+      v.literal("lost"),
+      v.literal("funds_reinstated"),
+      v.literal("unknown"),
+    ),
+    providerEventCreatedAt: v.number(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    let receipt: any = null;
+    const pi = normalizeOptionalString(args.providerPaymentIntentId);
+    const key = normalizeOptionalString(args.receiptKey);
+    if (pi) {
+      receipt = await ctx.db
+        .query("founderUsageBoostReceipts")
+        .withIndex("by_provider_payment_intent", (q) => q.eq("providerPaymentIntentId", pi))
+        .first();
+    }
+    if (!receipt && key) {
+      receipt = await ctx.db
+        .query("founderUsageBoostReceipts")
+        .withIndex("by_receipt_key", (q) => q.eq("receiptKey", key))
+        .first();
+    }
+    if (!receipt) {
+      return { ok: true, ignored: true, reason: "boost_receipt_not_found" };
+    }
+    if (args.outcome === "unknown") {
+      return { ok: true, ignored: true, reason: "boost_dispute_outcome_unknown" };
+    }
+    const priorEventAt = Number(receipt.providerEventCreatedAt ?? 0);
+    if (args.providerEventCreatedAt < priorEventAt) {
+      return { ok: true, ignored: true, reason: "boost_dispute_event_stale" };
+    }
+
+    if (args.outcome === "lost") {
+      await ctx.db.patch(receipt._id, {
+        status: "disputed",
+        revokedReason: "boost_dispute_lost",
+        providerEventCreatedAt: args.providerEventCreatedAt,
+        updatedAt: args.nowMs,
+      });
+      const subscription: any = await ctx.db.get(receipt.founderSubscriptionId);
+      if (subscription && args.providerEventCreatedAt >= Number(subscription.riskStateChangedAt ?? 0)) {
+        await ctx.db.patch(subscription._id, {
+          status: "ended",
+          endedAt: args.providerEventCreatedAt,
+          riskAccessState: "revoked",
+          riskStateChangedAt: args.providerEventCreatedAt,
+          revokedReason: "subscription_dispute_lost",
+          lastProviderEventCreatedAt: Math.max(
+            Number(subscription.lastProviderEventCreatedAt ?? 0),
+            args.providerEventCreatedAt,
+          ),
+          updatedAt: args.nowMs,
+        });
+      }
+      return { ok: true, ignored: false, receiptKey: receipt.receiptKey, outcome: "lost" };
+    }
+
+    // Won or funds_reinstated: clear this receipt's dispute and restore the parent
+    // subscription hold if no other disputed boost receipts remain on it.
+    if (receipt.status !== "disputed") {
+      return { ok: true, ignored: true, reason: "boost_receipt_not_disputed" };
+    }
+
+    const restoredStatus = receipt.grantedAt ? "granted" : "expired";
+    await ctx.db.patch(receipt._id, {
+      status: restoredStatus,
+      revokedReason: undefined,
+      revokedAt: undefined,
+      providerEventCreatedAt: args.providerEventCreatedAt,
+      updatedAt: args.nowMs,
+    });
+
+    // If this boost had been granted into a cycle that is still open, restore its allowance.
+    if (restoredStatus === "granted") {
+      const cycle: any = await ctx.db.get(receipt.usageCycleId);
+      if (cycle && cycle.status === "open" && cycle.cycleEndAt > args.nowMs) {
+        const grantedReceiptsInCycle = await ctx.db
+          .query("founderUsageBoostReceipts")
+          .withIndex("by_cycle_status", (q) =>
+            q.eq("usageCycleId", cycle._id).eq("status", "granted"),
+          )
+          .collect();
+        const totalGrantedMicros = grantedReceiptsInCycle.reduce(
+          (sum, row) => sum + Number(row.grantedAllowanceMicros ?? 0),
+          0,
+        );
+        const totalGrantedCount = grantedReceiptsInCycle.length;
+        const nextBoost = Math.max(
+          Math.max(0, Math.floor(Number(cycle.paidBoostCostMicros ?? 0))),
+          totalGrantedMicros,
+        );
+        const nextCount = nextBoost === 0 ? 0 : Math.max(1, totalGrantedCount);
+        await ctx.db.patch(cycle._id, {
+          paidBoostCostMicros: nextBoost,
+          paidBoostCount: nextCount,
+          updatedAt: args.nowMs,
+        });
+      }
+    }
+
+    const remainingDisputed = await ctx.db
+      .query("founderUsageBoostReceipts")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", receipt.founderSubscriptionId).eq("status", "disputed"),
+      )
+      .take(1);
+
+    const subscription: any = await ctx.db.get(receipt.founderSubscriptionId);
+    const shouldRestoreSubscription = Boolean(
+      subscription &&
+        remainingDisputed.length === 0 &&
+        subscription.riskAccessState === "revoked" &&
+        subscription.revokedReason === "subscription_dispute_opened" &&
+        args.providerEventCreatedAt > Number(subscription.riskStateChangedAt ?? 0),
+    );
+    const restoreProviderSubscriptionId =
+      shouldRestoreSubscription && typeof subscription.providerSubscriptionId === "string"
+        ? subscription.providerSubscriptionId
+        : null;
+
+    await recordCriticalAuditEvent(ctx, {
+      eventKey: `founder_usage_boost_revoked:${receipt.receiptKey}:${args.outcome}`,
+      eventType: "founder_usage_boost_revoked",
+      severity: "info",
+      status: "succeeded",
+      actorUserId: receipt.ownerUserId,
+      communityId: receipt.communityId,
+      provider: "stripe",
+      providerObjectId: pi ?? receipt.providerPaymentIntentId ?? receipt.providerCheckoutSessionId ?? null,
+      metadata: {
+        receiptKey: receipt.receiptKey,
+        outcome: args.outcome,
+        revokedReason: "boost_dispute_cleared",
+      },
+      createdAt: args.nowMs,
+    });
+
+    return {
+      ok: true,
+      ignored: false,
+      receiptKey: receipt.receiptKey,
+      outcome: args.outcome,
+      restoreProviderSubscriptionId,
+    };
   },
 });

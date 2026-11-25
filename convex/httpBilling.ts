@@ -1016,6 +1016,9 @@ export function registerRuntimeBillingRoutes(
                 nowMs: Date.now(),
               },
             );
+            if (boostResult?.retryable) {
+              throw new Error(String(boostResult.reason || "founder_usage_boost_retryable"));
+            }
             return processedResponse({
               ok: true,
               received: !boostResult?.ignored,
@@ -1525,6 +1528,41 @@ export function registerRuntimeBillingRoutes(
                 : disputeStatus === "lost"
                   ? "lost"
                   : "unknown";
+          if (!providerAccountId && charge) {
+            const boostResolution = await (ctx as any).runMutation(
+              (internal as any).founderUsageBoosts.resolveFounderUsageBoostDisputeFromStripeInternal,
+              {
+                providerPaymentIntentId:
+                  typeof charge.payment_intent === "string" ? charge.payment_intent : null,
+                receiptKey: readStripeMetadataString((charge as any)?.metadata, "boost_receipt_key"),
+                outcome,
+                providerEventCreatedAt: eventCreatedAt,
+                nowMs: Date.now(),
+              },
+            );
+            if (!boostResolution?.ignored) {
+              let founderSubscriptionResult: Record<string, unknown> | null = null;
+              if (boostResolution?.restoreProviderSubscriptionId) {
+                const stripeSubscription = await retrieveStripeSubscriptionForEvidence(
+                  String(boostResolution.restoreProviderSubscriptionId),
+                  null,
+                );
+                founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
+                  ctx,
+                  event,
+                  stripeSubscription,
+                  { allowRiskRestoration: true },
+                );
+              }
+              return processedResponse({
+                ok: true,
+                received: true,
+                event: event.type,
+                boostResolution,
+                ...(founderSubscriptionResult ? { founderSubscriptionResult } : {}),
+              });
+            }
+          }
           const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
             charge,
             outcome,

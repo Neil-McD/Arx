@@ -275,6 +275,7 @@ export default defineSchema({
     .index("by_provider_checkout_session", ["providerCheckoutSessionId"])
     .index("by_provider_payment_intent", ["providerPaymentIntentId"])
     .index("by_cycle_status", ["usageCycleId", "status"])
+    .index("by_subscription_status", ["founderSubscriptionId", "status"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   // Monthly (UTC) spend ledger for operator-funded communities. The operator
