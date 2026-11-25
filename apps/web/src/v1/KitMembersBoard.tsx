@@ -1,8 +1,18 @@
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Award, CheckCircle2, Plus, Search, SlidersHorizontal, Sparkles, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Award,
+  CheckCircle2,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   BUILTIN_JOURNEY_CHECKPOINTS,
-  DEFAULT_JOURNEY_STAGES,
   JOURNEY_CARD_STATUSES,
   JOURNEY_CARD_STATUS_LABELS,
   JOURNEY_CARD_STATUS_SORT_RANK,
@@ -15,20 +25,28 @@ import {
   slugifyJourneyStageKey,
   type JourneyCardStatus,
   type JourneyStageCheckpoint,
+  type JourneyStageDefinition,
 } from "../../../../shared/communityMemberJourney";
-import type {
-  CloudMemberJourneyBoard,
-} from "../../../../shared/cloudCommunityMemberJourneyGateway";
-import { Btn, cx } from "./kit";
+import type { CloudMemberJourneyBoard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import { cx } from "./kit";
 import { Face } from "./KitMembersTable";
 import "./KitMembersBoard.css";
 
-type StageDraft = {
+type StageSaveInput = {
   key?: string;
   name: string;
   goal: string;
   checkpoints: JourneyStageCheckpoint[];
 };
+
+function toSaveList(stages: readonly JourneyStageDefinition[]): StageSaveInput[] {
+  return stages.map((stage) => ({
+    key: stage.key,
+    name: stage.name,
+    goal: stage.goal,
+    checkpoints: (stage.checkpoints ?? []).map((cp) => ({ ...cp })),
+  }));
+}
 
 export function KitMembersBoard(props: {
   board: CloudMemberJourneyBoard | null;
@@ -41,22 +59,192 @@ export function KitMembersBoard(props: {
   timeFor: (iso: string | null, now: number) => string;
   onOpenCard: (membershipId: string) => void;
   onMoveCard: (membershipId: string, stageKey: string) => Promise<void>;
-  onSaveStages: (stages: StageDraft[]) => Promise<void>;
+  onSaveStages: (stages: StageSaveInput[]) => Promise<void>;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
 }) {
   const [statusFilter, setStatusFilter] = useState<JourneyCardStatus | "all">("all");
-  const [editingStages, setEditingStages] = useState(false);
-  const [stageDrafts, setStageDrafts] = useState<StageDraft[]>([]);
-  const [customMilestoneInputs, setCustomMilestoneInputs] = useState<Record<number, string>>({});
-  const [savingStages, setSavingStages] = useState(false);
+  const [editingField, setEditingField] = useState<{ stageKey: string; field: "name" | "goal" } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [openMenuStageKey, setOpenMenuStageKey] = useState<string | null>(null);
+  const [openCpStageKey, setOpenCpStageKey] = useState<string | null>(null);
+  const [customCpDraft, setCustomCpDraft] = useState("");
+  const [savingStage, setSavingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropStageKey, setDropStageKey] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
 
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const stages = props.board?.stages ?? [];
   const allCards = props.board?.cards ?? [];
+
+  useEffect(() => {
+    if (!openMenuStageKey && !openCpStageKey) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (!popoverRef.current?.contains(event.target as Node)) {
+        setOpenMenuStageKey(null);
+        setOpenCpStageKey(null);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMenuStageKey(null);
+        setOpenCpStageKey(null);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openMenuStageKey, openCpStageKey]);
+
+  const persistStages = async (nextStages: StageSaveInput[]) => {
+    if (savingStage) return false;
+    setSavingStage(true);
+    setStageError(null);
+    try {
+      await props.onSaveStages(nextStages);
+      return true;
+    } catch {
+      setStageError("Couldn't save that change. Try again.");
+      return false;
+    } finally {
+      setSavingStage(false);
+    }
+  };
+
+  const startInlineEdit = (stage: JourneyStageDefinition, field: "name" | "goal") => {
+    if (savingStage) return;
+    setOpenMenuStageKey(null);
+    setOpenCpStageKey(null);
+    setStageError(null);
+    setEditingField({ stageKey: stage.key, field });
+    setEditValue(field === "name" ? stage.name : stage.goal);
+  };
+
+  const commitInlineEdit = async () => {
+    if (!editingField || savingStage) return;
+    const { stageKey, field } = editingField;
+    const stage = stages.find((entry) => entry.key === stageKey);
+    const trimmed = editValue.replace(/\s+/g, " ").trim();
+    if (!stage) {
+      setEditingField(null);
+      return;
+    }
+    if (field === "name" && !trimmed) {
+      setEditingField(null);
+      return;
+    }
+    const unchanged = field === "name" ? trimmed === stage.name : trimmed === stage.goal;
+    if (unchanged) {
+      setEditingField(null);
+      return;
+    }
+    const nextList = toSaveList(stages).map((entry) =>
+      entry.key === stageKey
+        ? {
+            ...entry,
+            name: field === "name" ? trimmed.slice(0, MAX_STAGE_NAME_CHARS) : entry.name,
+            goal: field === "goal" ? trimmed.slice(0, MAX_STAGE_GOAL_CHARS) : entry.goal,
+          }
+        : entry,
+    );
+    setEditingField(null);
+    await persistStages(nextList);
+  };
+
+  const toggleStageBuiltinCheckpoint = async (
+    stageKey: string,
+    builtin: (typeof BUILTIN_JOURNEY_CHECKPOINTS)[number],
+  ) => {
+    const nextList = toSaveList(stages).map((entry) => {
+      if (entry.key !== stageKey) return entry;
+      const exists = entry.checkpoints.some((cp) => cp.key === builtin.key);
+      if (exists) {
+        return { ...entry, checkpoints: entry.checkpoints.filter((cp) => cp.key !== builtin.key) };
+      }
+      if (entry.checkpoints.length >= MAX_STAGE_CHECKPOINTS) return entry;
+      return {
+        ...entry,
+        checkpoints: [
+          ...entry.checkpoints,
+          { key: builtin.key, label: builtin.label, kind: builtin.kind },
+        ],
+      };
+    });
+    await persistStages(nextList);
+  };
+
+  const addStageCustomCheckpoint = async (stageIndex: number, stageKey: string) => {
+    const label = customCpDraft.replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS);
+    if (!label) return;
+    const cpKey = slugifyJourneyStageKey(label, stageIndex);
+    const currentStage = stages.find((entry) => entry.key === stageKey);
+    if (!currentStage) return;
+    if (
+      currentStage.checkpoints.length >= MAX_STAGE_CHECKPOINTS ||
+      currentStage.checkpoints.some((cp) => cp.key === cpKey)
+    ) {
+      setCustomCpDraft("");
+      return;
+    }
+    const nextList = toSaveList(stages).map((entry) =>
+      entry.key === stageKey
+        ? { ...entry, checkpoints: [...entry.checkpoints, { key: cpKey, label, kind: "custom" as const }] }
+        : entry,
+    );
+    setCustomCpDraft("");
+    await persistStages(nextList);
+  };
+
+  const removeStageCheckpoint = async (stageKey: string, cpKey: string) => {
+    const nextList = toSaveList(stages).map((entry) =>
+      entry.key === stageKey
+        ? { ...entry, checkpoints: entry.checkpoints.filter((cp) => cp.key !== cpKey) }
+        : entry,
+    );
+    await persistStages(nextList);
+  };
+
+  const moveStage = async (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= stages.length) return;
+    const nextList = toSaveList(stages);
+    [nextList[index], nextList[target]] = [nextList[target]!, nextList[index]!];
+    setOpenMenuStageKey(null);
+    await persistStages(nextList);
+  };
+
+  const deleteStage = async (stageKey: string) => {
+    if (stages.length <= MIN_JOURNEY_STAGES) return;
+    const nextList = toSaveList(stages).filter((entry) => entry.key !== stageKey);
+    setOpenMenuStageKey(null);
+    await persistStages(nextList);
+  };
+
+  const addStageInline = async () => {
+    if (stages.length >= MAX_JOURNEY_STAGES || savingStage) return;
+    const existingKeys = new Set(stages.map((entry) => entry.key));
+    let suffix = stages.length + 1;
+    let newKey = `stage_${suffix}`;
+    while (existingKeys.has(newKey)) {
+      suffix += 1;
+      newKey = `stage_${suffix}`;
+    }
+    const newName = `Stage ${stages.length + 1}`;
+    const nextList = [
+      ...toSaveList(stages),
+      { key: newKey, name: newName, goal: "", checkpoints: [] },
+    ];
+    const ok = await persistStages(nextList);
+    if (ok) {
+      setEditingField({ stageKey: newKey, field: "name" });
+      setEditValue(newName);
+    }
+  };
 
   const searchLower = props.search.trim().toLowerCase();
   const searchedCards = useMemo(() => {
@@ -111,109 +299,6 @@ export function KitMembersBoard(props: {
     () => allCards.reduce((sum, card) => sum + (card.outcomes?.length ?? 0), 0),
     [allCards],
   );
-
-  const openStageEditor = () => {
-    setStageDrafts(
-      (stages.length ? stages : DEFAULT_JOURNEY_STAGES).map((stage) => ({
-        key: stage.key,
-        name: stage.name,
-        goal: stage.goal,
-        checkpoints: (stage.checkpoints ?? []).map((cp) => ({ ...cp })),
-      })),
-    );
-    setCustomMilestoneInputs({});
-    setStageError(null);
-    setEditingStages(true);
-  };
-
-  const toggleBuiltinCheckpoint = (
-    stageIndex: number,
-    builtin: (typeof BUILTIN_JOURNEY_CHECKPOINTS)[number],
-  ) => {
-    setStageDrafts((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== stageIndex) return item;
-        const exists = item.checkpoints.some((cp) => cp.key === builtin.key);
-        if (exists) {
-          return {
-            ...item,
-            checkpoints: item.checkpoints.filter((cp) => cp.key !== builtin.key),
-          };
-        }
-        if (item.checkpoints.length >= MAX_STAGE_CHECKPOINTS) return item;
-        return {
-          ...item,
-          checkpoints: [
-            ...item.checkpoints,
-            { key: builtin.key, label: builtin.label, kind: builtin.kind },
-          ],
-        };
-      }),
-    );
-  };
-
-  const addCustomCheckpoint = (stageIndex: number) => {
-    const raw = (customMilestoneInputs[stageIndex] ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS);
-    if (!raw) return;
-    const key = slugifyJourneyStageKey(raw, stageIndex);
-    setStageDrafts((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== stageIndex) return item;
-        if (item.checkpoints.length >= MAX_STAGE_CHECKPOINTS) return item;
-        if (item.checkpoints.some((cp) => cp.key === key)) return item;
-        return {
-          ...item,
-          checkpoints: [...item.checkpoints, { key, label: raw, kind: "custom" }],
-        };
-      }),
-    );
-    setCustomMilestoneInputs((prev) => ({ ...prev, [stageIndex]: "" }));
-  };
-
-  const removeCheckpoint = (stageIndex: number, checkpointKey: string) => {
-    setStageDrafts((prev) =>
-      prev.map((item, idx) =>
-        idx === stageIndex
-          ? { ...item, checkpoints: item.checkpoints.filter((cp) => cp.key !== checkpointKey) }
-          : item,
-      ),
-    );
-  };
-
-  const handleSaveStages = async () => {
-    if (savingStages) return;
-    if (stageDrafts.some((entry) => !entry.name.trim())) {
-      setStageError("Every stage needs a name.");
-      return;
-    }
-    setSavingStages(true);
-    setStageError(null);
-    try {
-      await props.onSaveStages(
-        stageDrafts.map((entry) => ({
-          ...(entry.key ? { key: entry.key } : {}),
-          name: entry.name.trim(),
-          goal: entry.goal.trim(),
-          checkpoints: entry.checkpoints,
-        })),
-      );
-      setEditingStages(false);
-    } catch {
-      setStageError("Stages couldn't be saved. Try again.");
-    } finally {
-      setSavingStages(false);
-    }
-  };
-
-  const moveDraft = (index: number, delta: -1 | 1) => {
-    const nextIndex = index + delta;
-    if (nextIndex < 0 || nextIndex >= stageDrafts.length) return;
-    setStageDrafts((prev) => {
-      const next = prev.slice();
-      [next[index], next[nextIndex]] = [next[nextIndex]!, next[index]!];
-      return next;
-    });
-  };
 
   const handleDropOnStage = async (stageKey: string) => {
     const membershipId = draggingId;
@@ -280,195 +365,17 @@ export function KitMembersBoard(props: {
             <strong>{activatedPercent}%</strong> activated
             {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
           </span>
-          <button
-            type="button"
-            className={cx("btn sm")}
-            onClick={() => (editingStages ? setEditingStages(false) : openStageEditor())}
-          >
-            <SlidersHorizontal size={13} strokeWidth={1.8} aria-hidden="true" />
-            {editingStages ? "Close stages" : "Edit stages"}
-          </button>
         </div>
       </div>
 
-      {editingStages ? (
-        <div className="members-board-stage-editor" aria-label="Edit journey stages">
-          <div className="members-board-stage-editor-head">
-            <div>
-              <strong style={{ fontSize: 13.5 }}>Journey stages & activation checkpoints</strong>
-              <p className={cx("sub")} style={{ margin: "2px 0 0", fontSize: 12 }}>
-                Set each stage's goal and optional checkpoints. Built-in signals check off automatically; custom milestones can be checked off on any member card.
-              </p>
-            </div>
-            <button
-              type="button"
-              className={cx("btn sm")}
-              onClick={() =>
-                setStageDrafts(
-                  DEFAULT_JOURNEY_STAGES.map((stage) => ({
-                    key: stage.key,
-                    name: stage.name,
-                    goal: stage.goal,
-                    checkpoints: stage.checkpoints.map((cp) => ({ ...cp })),
-                  })),
-                )
-              }
-            >
-              Reset defaults
-            </button>
-          </div>
-
-          {stageDrafts.map((stage, index) => {
-            const customCheckpoints = stage.checkpoints.filter((cp) => cp.kind === "custom");
-            return (
-              <div key={stage.key ?? `new-${index}`} className="members-board-stage-editor-block">
-                <div className="members-board-stage-editor-row">
-                  <input
-                    value={stage.name}
-                    maxLength={MAX_STAGE_NAME_CHARS}
-                    placeholder="Stage name"
-                    aria-label={`Stage ${index + 1} name`}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setStageDrafts((prev) =>
-                        prev.map((item, idx) => (idx === index ? { ...item, name: value } : item)),
-                      );
-                    }}
-                  />
-                  <input
-                    value={stage.goal}
-                    maxLength={MAX_STAGE_GOAL_CHARS}
-                    placeholder="Goal for this stage (optional)"
-                    aria-label={`Stage ${index + 1} goal`}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setStageDrafts((prev) =>
-                        prev.map((item, idx) => (idx === index ? { ...item, goal: value } : item)),
-                      );
-                    }}
-                  />
-                  <div className="members-board-stage-editor-actions">
-                    <button
-                      type="button"
-                      className={cx("btn sm")}
-                      disabled={index === 0}
-                      aria-label={`Move ${stage.name || `stage ${index + 1}`} earlier`}
-                      onClick={() => moveDraft(index, -1)}
-                    >
-                      <ArrowUp size={13} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={cx("btn sm")}
-                      disabled={index === stageDrafts.length - 1}
-                      aria-label={`Move ${stage.name || `stage ${index + 1}`} later`}
-                      onClick={() => moveDraft(index, 1)}
-                    >
-                      <ArrowDown size={13} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={cx("btn sm")}
-                      disabled={stageDrafts.length <= MIN_JOURNEY_STAGES}
-                      aria-label={`Remove ${stage.name || `stage ${index + 1}`}`}
-                      onClick={() =>
-                        setStageDrafts((prev) => prev.filter((_, idx) => idx !== index))
-                      }
-                    >
-                      <Trash2 size={13} aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="members-board-stage-checkpoints">
-                  <span className="members-board-stage-cp-label">Checkpoints:</span>
-                  {BUILTIN_JOURNEY_CHECKPOINTS.map((builtin) => {
-                    const active = stage.checkpoints.some((cp) => cp.key === builtin.key);
-                    return (
-                      <button
-                        key={builtin.key}
-                        type="button"
-                        className={`members-board-cp-pill${active ? " is-on" : ""}`}
-                        aria-pressed={active}
-                        onClick={() => toggleBuiltinCheckpoint(index, builtin)}
-                      >
-                        {active ? "✓ " : "+ "}
-                        {builtin.label}
-                      </button>
-                    );
-                  })}
-                  {customCheckpoints.map((cp) => (
-                    <span key={cp.key} className="members-board-cp-pill is-on is-custom">
-                      {cp.label}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${cp.label}`}
-                        onClick={() => removeCheckpoint(index, cp.key)}
-                      >
-                        <X size={11} aria-hidden="true" />
-                      </button>
-                    </span>
-                  ))}
-                  {stage.checkpoints.length < MAX_STAGE_CHECKPOINTS ? (
-                    <span className="members-board-cp-add">
-                      <input
-                        value={customMilestoneInputs[index] ?? ""}
-                        maxLength={MAX_CHECKPOINT_LABEL_CHARS}
-                        placeholder="Add custom milestone…"
-                        aria-label={`Add custom milestone for ${stage.name || `stage ${index + 1}`}`}
-                        onChange={(event) =>
-                          setCustomMilestoneInputs((prev) => ({ ...prev, [index]: event.target.value }))
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            addCustomCheckpoint(index);
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="members-board-cp-pill"
-                        onClick={() => addCustomCheckpoint(index)}
-                      >
-                        Add
-                      </button>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-
-          {stageError ? (
-            <p className={cx("bad")} role="alert" style={{ margin: 0, fontSize: 12.5 }}>
-              {stageError}
-            </p>
-          ) : null}
-
-          <div className="members-board-stage-editor-foot">
-            <button
-              type="button"
-              className={cx("btn sm")}
-              disabled={stageDrafts.length >= MAX_JOURNEY_STAGES}
-              onClick={() =>
-                setStageDrafts((prev) => [...prev, { name: "", goal: "", checkpoints: [] }])
-              }
-            >
-              <Plus size={13} aria-hidden="true" />Add stage
-            </button>
-            <div style={{ display: "flex", gap: 8 }}>
-              <Btn small onClick={() => setEditingStages(false)}>Cancel</Btn>
-              <Btn small go onClick={() => void handleSaveStages()}>
-                {savingStages ? "Saving…" : "Save stages"}
-              </Btn>
-            </div>
-          </div>
-        </div>
+      {stageError ? (
+        <p className={cx("bad")} role="alert" style={{ margin: "6px 0 0", fontSize: 12.5 }}>
+          {stageError}
+        </p>
       ) : null}
 
       <div className="members-board-columns" role="region" aria-label="Member journey board">
-        {stages.map((stage) => {
+        {stages.map((stage, stageIndex) => {
           const stageCards = visibleCards
             .filter((card) => card.stage_key === stage.key)
             .sort((a, b) => {
@@ -479,6 +386,11 @@ export function KitMembersBoard(props: {
               );
             });
           const isDropTarget = dropStageKey === stage.key;
+          const isEditingName = editingField?.stageKey === stage.key && editingField.field === "name";
+          const isEditingGoal = editingField?.stageKey === stage.key && editingField.field === "goal";
+          const menuOpen = openMenuStageKey === stage.key;
+          const cpOpen = openCpStageKey === stage.key;
+
           return (
             <div
               key={stage.key}
@@ -498,10 +410,190 @@ export function KitMembersBoard(props: {
             >
               <div className="members-board-col-head">
                 <div className="members-board-col-title">
-                  <span>{stage.name}</span>
-                  <span className="members-board-col-count">{stageCards.length}</span>
+                  {isEditingName ? (
+                    <input
+                      className="members-board-inline-input is-title"
+                      value={editValue}
+                      maxLength={MAX_STAGE_NAME_CHARS}
+                      autoFocus
+                      disabled={savingStage}
+                      aria-label={`Stage ${stageIndex + 1} name`}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onChange={(event) => setEditValue(event.target.value)}
+                      onBlur={() => void commitInlineEdit()}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void commitInlineEdit();
+                        } else if (event.key === "Escape") {
+                          event.stopPropagation();
+                          setEditingField(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="members-board-inline-name"
+                      title="Click to rename stage"
+                      onClick={() => startInlineEdit(stage, "name")}
+                    >
+                      {stage.name}
+                    </button>
+                  )}
+
+                  <div className="members-board-col-head-right">
+                    <span className="members-board-col-count">{stageCards.length}</span>
+                    <div className="members-board-col-menu-wrap" ref={menuOpen ? popoverRef : undefined}>
+                      <button
+                        type="button"
+                        className="members-board-col-menu-btn"
+                        aria-label={`Stage options for ${stage.name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpen}
+                        onClick={() => {
+                          setOpenCpStageKey(null);
+                          setOpenMenuStageKey(menuOpen ? null : stage.key);
+                        }}
+                      >
+                        <MoreHorizontal size={14} aria-hidden="true" />
+                      </button>
+                      {menuOpen ? (
+                        <div className="members-board-popover" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={stageIndex === 0 || savingStage}
+                            onClick={() => void moveStage(stageIndex, -1)}
+                          >
+                            <ArrowLeft size={12} aria-hidden="true" />Move left
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={stageIndex === stages.length - 1 || savingStage}
+                            onClick={() => void moveStage(stageIndex, 1)}
+                          >
+                            <ArrowRight size={12} aria-hidden="true" />Move right
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="is-danger"
+                            disabled={stages.length <= MIN_JOURNEY_STAGES || savingStage}
+                            onClick={() => void deleteStage(stage.key)}
+                          >
+                            <Trash2 size={12} aria-hidden="true" />Delete stage
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-                {stage.goal ? <p className="members-board-col-goal">{stage.goal}</p> : null}
+
+                {isEditingGoal ? (
+                  <input
+                    className="members-board-inline-input is-goal"
+                    value={editValue}
+                    maxLength={MAX_STAGE_GOAL_CHARS}
+                    placeholder="Add a goal for this stage…"
+                    autoFocus
+                    disabled={savingStage}
+                    aria-label={`${stage.name} goal`}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => setEditValue(event.target.value)}
+                    onBlur={() => void commitInlineEdit()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void commitInlineEdit();
+                      } else if (event.key === "Escape") {
+                        event.stopPropagation();
+                        setEditingField(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className={`members-board-inline-goal${stage.goal ? "" : " is-empty"}`}
+                    title="Click to edit stage goal"
+                    onClick={() => startInlineEdit(stage, "goal")}
+                  >
+                    {stage.goal || "Add a goal…"}
+                  </button>
+                )}
+
+                <div className="members-board-col-cps">
+                  {(stage.checkpoints ?? []).map((cp) => (
+                    <span key={cp.key} className="members-board-col-cp-pill">
+                      <span>{cp.label}</span>
+                      <button
+                        type="button"
+                        aria-label={`Remove checkpoint ${cp.label}`}
+                        disabled={savingStage}
+                        onClick={() => void removeStageCheckpoint(stage.key, cp.key)}
+                      >
+                        <X size={10} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
+                  {(stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS ? (
+                    <div className="members-board-col-menu-wrap" ref={cpOpen ? popoverRef : undefined}>
+                      <button
+                        type="button"
+                        className="members-board-col-cp-add"
+                        aria-haspopup="menu"
+                        aria-expanded={cpOpen}
+                        onClick={() => {
+                          setOpenMenuStageKey(null);
+                          setCustomCpDraft("");
+                          setOpenCpStageKey(cpOpen ? null : stage.key);
+                        }}
+                      >
+                        <Plus size={10} aria-hidden="true" />Checkpoint
+                      </button>
+                      {cpOpen ? (
+                        <div className="members-board-popover is-cp" role="menu">
+                          <span className="members-board-popover-label">Automatic proof</span>
+                          {BUILTIN_JOURNEY_CHECKPOINTS.map((builtin) => {
+                            const active = (stage.checkpoints ?? []).some((cp) => cp.key === builtin.key);
+                            return (
+                              <button
+                                key={builtin.key}
+                                type="button"
+                                role="menuitemcheckbox"
+                                aria-checked={active}
+                                disabled={savingStage}
+                                onClick={() => void toggleStageBuiltinCheckpoint(stage.key, builtin)}
+                              >
+                                <span>{active ? "✓ " : ""}{builtin.label}</span>
+                              </button>
+                            );
+                          })}
+                          <form
+                            className="members-board-popover-custom"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void addStageCustomCheckpoint(stageIndex, stage.key);
+                            }}
+                          >
+                            <input
+                              value={customCpDraft}
+                              maxLength={MAX_CHECKPOINT_LABEL_CHARS}
+                              placeholder="Custom milestone…"
+                              aria-label={`Custom milestone for ${stage.name}`}
+                              onChange={(event) => setCustomCpDraft(event.target.value)}
+                            />
+                            <button type="submit" disabled={savingStage || !customCpDraft.trim()}>
+                              Add
+                            </button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div className="members-board-col-list">
@@ -603,6 +695,18 @@ export function KitMembersBoard(props: {
             </div>
           );
         })}
+
+        {stages.length < MAX_JOURNEY_STAGES ? (
+          <button
+            type="button"
+            className="members-board-add-stage-col"
+            disabled={savingStage}
+            onClick={() => void addStageInline()}
+          >
+            <Plus size={14} aria-hidden="true" />
+            <span>Add stage</span>
+          </button>
+        ) : null}
       </div>
 
       {props.board?.capped ? (
