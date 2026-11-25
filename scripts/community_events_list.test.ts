@@ -17,7 +17,29 @@ test("the soonest event that is not over is featured; the rest are coming up; pa
   ], now);
   expect(parts.featured?.id).toBe("soon");
   expect(parts.comingUp.map((event) => event.id)).toEqual(["next", "later"]);
+  expect(parts.cancelled.map((event) => event.id)).toEqual(["cancelled"]);
   expect(parts.past.map((event) => event.id)).toEqual(["old", "older"]);
+});
+
+test("upcoming cancelled dates stay visible without hijacking featured; cancelled series collapses to one; past cancelled events are omitted", () => {
+  const weekly = (
+    id: string,
+    starts: string,
+    extra: Partial<{ ends_at: string | null; status: string; cancellation_scope: "occurrence" | "series" | null }> = {},
+  ) => ({ ...ev(id, starts, extra), parent_event_id: "call", cancellation_scope: extra.cancellation_scope ?? null });
+  const parts = splitCommunityEvents([
+    weekly("call:6", at(6, 10), { ends_at: at(6, 11), status: "cancelled", cancellation_scope: "occurrence" }),
+    weekly("call:13", at(13, 10), { status: "cancelled", cancellation_scope: "occurrence" }),
+    weekly("call:20", at(20, 10), { status: "cancelled", cancellation_scope: "occurrence" }),
+    weekly("call:27", at(27, 10)),
+    { ...ev("series:14", at(14, 15), { status: "cancelled" }), parent_event_id: "series", cancellation_scope: "series" as const },
+    { ...ev("series:21", at(21, 15), { status: "cancelled" }), parent_event_id: "series", cancellation_scope: "series" as const },
+    ev("live-next", at(15, 12)),
+  ], now);
+  expect(parts.featured?.id).toBe("live-next");
+  expect(parts.comingUp.map((event) => event.id)).toEqual(["call:27"]);
+  expect(parts.cancelled.map((event) => event.id)).toEqual(["call:13", "series:14", "call:20"]);
+  expect(parts.past).toEqual([]);
 });
 
 test("a repeating event shows once: its next date coming up, its latest date in past", () => {

@@ -28,7 +28,11 @@ export function emailPriorityRankForTemplate(templateKey: EmailTemplateKey): num
   if (templateKey === "event_reminder" || templateKey === "weekly_member_digest") {
     return EMAIL_PRIORITY_BULK;
   }
-  if (templateKey === "mention_notification" || templateKey === "member_coach_nudge") {
+  if (
+    templateKey === "mention_notification" ||
+    templateKey === "member_coach_nudge" ||
+    templateKey === "event_cancelled"
+  ) {
     return EMAIL_PRIORITY_MENTION;
   }
   return EMAIL_PRIORITY_URGENT;
@@ -109,6 +113,7 @@ function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean 
   return (
     templateKey === "weekly_member_digest" ||
     templateKey === "event_reminder" ||
+    templateKey === "event_cancelled" ||
     templateKey === "mention_notification" ||
     templateKey === "member_coach_nudge"
   );
@@ -121,7 +126,7 @@ function preferenceAllowsTemplate(preferences: Record<string, unknown>, template
   if (templateKey === "mention_notification" || templateKey === "member_coach_nudge") {
     return preferences.mentionEmailsEnabled !== false;
   }
-  if (templateKey === "event_reminder") {
+  if (templateKey === "event_reminder" || templateKey === "event_cancelled") {
     return preferences.eventReminderEnabled !== false;
   }
   return true;

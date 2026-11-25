@@ -349,6 +349,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           <KitEventsList
             featured={listParts.featured}
             comingUp={listParts.comingUp}
+            cancelled={listParts.cancelled}
             past={listParts.past}
             now={listNow}
             canManage={capabilities.hasActiveCommunity && capabilities.canManageEvents}
@@ -360,11 +361,24 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
             editingId={editingEventId}
             onNew={() => openNewEvent(null)}
             onEdit={openEditEvent}
-            onCancel={async (event) => {
-              if (await actions.cancelEvent(event.parent_event_id, currentRange)) {
+            onCancel={async (event, options) => {
+              if (await actions.cancelEvent(event.parent_event_id, currentRange, options)) {
                 announceCommunityEventsChanged();
               }
             }}
+            onRestore={
+              actions.restoreEvent
+                ? async (event) => {
+                    const restoreOptions =
+                      event.cancellation_scope === "occurrence"
+                        ? { occurrenceStartsAtIso: event.starts_at }
+                        : undefined;
+                    if (await actions.restoreEvent!(event.parent_event_id, currentRange, restoreOptions)) {
+                      announceCommunityEventsChanged();
+                    }
+                  }
+                : undefined
+            }
             onSetPublic={(event, isPublic) =>
               saveEventDraft(
                 { ...makeDraftFromEvent(event), visibility: isPublic ? "public" : "members" },

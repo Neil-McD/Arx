@@ -8,6 +8,7 @@ type CloudCommunityEventsGatewayParams<SessionT> = {
 export type CloudCommunityEventLocationType = "online" | "physical" | "tbd";
 export type CloudCommunityEventVisibility = "members" | "public";
 export type CloudCommunityEventStatus = "live" | "cancelled";
+export type CloudCommunityEventCancellationScope = "occurrence" | "series";
 export type CloudCommunityEventRecurrenceFrequency = "none" | "daily" | "weekly" | "monthly";
 
 export type CloudCommunityEvent = {
@@ -27,6 +28,8 @@ export type CloudCommunityEvent = {
   url: string | null;
   visibility: CloudCommunityEventVisibility;
   status: CloudCommunityEventStatus;
+  cancellation_scope?: CloudCommunityEventCancellationScope | null;
+  cancellation_note?: string | null;
   recurrence_frequency: CloudCommunityEventRecurrenceFrequency;
   recurrence_interval: number;
   recurrence_until: string | null;
@@ -99,14 +102,40 @@ export async function saveCloudCommunityEvent<SessionT>(
   });
 }
 
+export type CloudCommunityEventCancelOptions = {
+  scope?: CloudCommunityEventCancellationScope;
+  occurrenceStartsAtIso?: string;
+  note?: string | null;
+};
+
 export async function cancelCloudCommunityEvent<SessionT>(
   params: CloudCommunityEventsGatewayParams<SessionT> & {
     eventId: string;
+    scope?: CloudCommunityEventCancellationScope;
+    occurrenceStartsAtIso?: string;
+    note?: string | null;
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   await client.mutation("communityEvents:cancelCommunityEvent" as any, {
     authSubject,
     eventId: params.eventId,
+    ...(params.scope ? { scope: params.scope } : {}),
+    ...(params.occurrenceStartsAtIso ? { occurrenceStartsAtIso: params.occurrenceStartsAtIso } : {}),
+    ...(typeof params.note === "string" && params.note.trim() ? { note: params.note.trim() } : {}),
+  });
+}
+
+export async function restoreCloudCommunityEvent<SessionT>(
+  params: CloudCommunityEventsGatewayParams<SessionT> & {
+    eventId: string;
+    occurrenceStartsAtIso?: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("communityEvents:restoreCommunityEvent" as any, {
+    authSubject,
+    eventId: params.eventId,
+    ...(params.occurrenceStartsAtIso ? { occurrenceStartsAtIso: params.occurrenceStartsAtIso } : {}),
   });
 }

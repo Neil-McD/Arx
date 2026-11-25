@@ -10,11 +10,13 @@ type ListedEvent = {
   starts_at: string;
   ends_at: string | null;
   status: string;
+  cancellation_scope?: "occurrence" | "series" | null;
 };
 
 export type CommunityEventsListParts<T extends ListedEvent> = {
   featured: T | null;
   comingUp: T[];
+  cancelled: T[];
   past: T[];
 };
 
@@ -32,7 +34,21 @@ export function splitCommunityEvents<T extends ListedEvent>(events: T[], now: nu
   };
   const notOver = nextOnly(live.filter((event) => phase(event) !== "past" && phase(event) !== "invalid").sort(byStart));
   const past = nextOnly(live.filter((event) => phase(event) === "past").sort((a, b) => byStart(b, a)));
-  return { featured: notOver[0] ?? null, comingUp: notOver.slice(1), past };
+  // Upcoming cancelled dates stay visible so members immediately see when a
+  // session was called off. Single cancelled dates each show on their own date,
+  // while a fully cancelled recurring series shows once on its next date.
+  const seenCancelledSeries = new Set<string>();
+  const cancelled = events
+    .filter((event) => event.status === "cancelled" && phase(event) !== "past" && phase(event) !== "invalid")
+    .sort(byStart)
+    .filter((event) => {
+      if (event.cancellation_scope === "occurrence") return true;
+      const key = series(event);
+      if (seenCancelledSeries.has(key)) return false;
+      seenCancelledSeries.add(key);
+      return true;
+    });
+  return { featured: notOver[0] ?? null, comingUp: notOver.slice(1), cancelled, past };
 }
 
 function startOfDay(ms: number): number {

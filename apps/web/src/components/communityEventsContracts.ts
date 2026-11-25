@@ -1,5 +1,6 @@
 import type {
   CloudCommunityEvent,
+  CloudCommunityEventCancelOptions,
   CloudCommunityEventSavePayload,
 } from "../../../../shared/cloudCommunityEventsGateway";
 import type { CommunityEventsRange } from "../../../../shared/useCommunityEventsController";
@@ -29,5 +30,14 @@ export type CommunityEventsActions = {
     payload: CloudCommunityEventSavePayload,
     range: CommunityEventsRange,
   ) => Promise<boolean>;
-  cancelEvent: (eventId: string, range: CommunityEventsRange) => Promise<boolean>;
+  cancelEvent: (
+    eventId: string,
+    range: CommunityEventsRange,
+    options?: CloudCommunityEventCancelOptions,
+  ) => Promise<boolean>;
+  restoreEvent?: (
+    eventId: string,
+    range: CommunityEventsRange,
+    options?: { occurrenceStartsAtIso?: string },
+  ) => Promise<boolean>;
 };

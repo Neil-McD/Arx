@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { eventViewer, requirePodEventManager, visibleEvents } from "./communityEventAudience";
 import { v } from "convex/values";
@@ -22,6 +23,13 @@ import {
   normalizeCommunityEventTimeZone,
 } from "../shared/communityEventTime";
 
+type CancelledOccurrenceEntry = {
+  startsAt: number;
+  cancelledAt: number;
+  cancelledByUserId?: any;
+  note?: string;
+};
+
 type CommunityEventLike = {
   _id: any;
   communityId: any;
@@ -36,6 +44,9 @@ type CommunityEventLike = {
   url?: string;
   visibility: "members" | "public";
   status: "live" | "cancelled";
+  cancellationNote?: string;
+  cancelledAt?: number;
+  cancelledOccurrences?: CancelledOccurrenceEntry[];
   recurrenceFrequency?: "none" | "daily" | "weekly" | "monthly";
   recurrenceInterval?: number;
   recurrenceUntil?: number;
@@ -99,6 +110,57 @@ function requireCommunityEventTimeZone(raw: unknown): string {
   return value;
 }
 
+const MAX_CANCELLED_OCCURRENCES = 200;
+const CANCELLED_OCCURRENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const UPCOMING_SERIES_LOOKAHEAD_MS = 366 * 24 * 60 * 60 * 1000;
+
+function findCancelledOccurrence(
+  row: CommunityEventLike,
+  occurrenceStartsAt: number,
+): CancelledOccurrenceEntry | null {
+  for (const entry of row.cancelledOccurrences ?? []) {
+    if (entry && entry.startsAt === occurrenceStartsAt) return entry;
+  }
+  return null;
+}
+
+function pruneCancelledOccurrences(
+  entries: CancelledOccurrenceEntry[],
+  nowMs: number,
+): CancelledOccurrenceEntry[] {
+  const cutoff = nowMs - CANCELLED_OCCURRENCE_RETENTION_MS;
+  const byStartsAt = new Map<number, CancelledOccurrenceEntry>();
+  for (const entry of entries) {
+    if (!entry || typeof entry.startsAt !== "number" || !Number.isFinite(entry.startsAt)) continue;
+    if (entry.startsAt < cutoff) continue;
+    byStartsAt.set(entry.startsAt, entry);
+  }
+  return [...byStartsAt.values()]
+    .sort((a, b) => a.startsAt - b.startsAt)
+    .slice(-MAX_CANCELLED_OCCURRENCES);
+}
+
+function findNextLiveOccurrenceStartsAt(row: CommunityEventLike, nowMs: number): number | null {
+  const frequency = normalizeCommunityEventRecurrenceFrequency(row.recurrenceFrequency);
+  if (frequency === "none") {
+    return row.startsAt > nowMs ? row.startsAt : null;
+  }
+  const occurrences = getCommunityEventOccurrenceStartsInRange({
+    startsAt: row.startsAt,
+    rangeStart: nowMs + 1,
+    rangeEnd: nowMs + UPCOMING_SERIES_LOOKAHEAD_MS,
+    frequency,
+    interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
+    recurrenceUntil: typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null,
+    timeZone: row.timezone,
+    limit: 64,
+  });
+  for (const startsAt of occurrences) {
+    if (!findCancelledOccurrence(row, startsAt)) return startsAt;
+  }
+  return null;
+}
+
 function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: number) {
   const startsAt = occurrenceStartsAt ?? row.startsAt;
   const durationMs = typeof row.endsAt === "number" ? Math.max(0, row.endsAt - row.startsAt) : null;
@@ -106,6 +168,18 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
   const timeZone = normalizeCommunityEventTimeZone(row.timezone);
   const recurrenceFrequency = normalizeCommunityEventRecurrenceFrequency(row.recurrenceFrequency);
   const parentId = normalizeIdValue(row._id);
+  const cancelledOccurrence =
+    row.status === "live" && typeof occurrenceStartsAt === "number"
+      ? findCancelledOccurrence(row, occurrenceStartsAt)
+      : null;
+  const effectiveStatus: "live" | "cancelled" =
+    row.status === "cancelled" || Boolean(cancelledOccurrence) ? "cancelled" : "live";
+  const cancellationScope: "series" | "occurrence" | null =
+    row.status === "cancelled" ? "series" : cancelledOccurrence ? "occurrence" : null;
+  const cancellationNote =
+    row.status === "cancelled"
+      ? (row.cancellationNote ?? null)
+      : (cancelledOccurrence?.note ?? null);
   return {
     id: occurrenceStartsAt && occurrenceStartsAt !== row.startsAt ? `${parentId}:${occurrenceStartsAt}` : parentId,
     parent_event_id: parentId,
@@ -130,7 +204,9 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
     pod_channel_id: row.podChannelId ? normalizeIdValue(row.podChannelId) : null,
     pod_name: row.podName ?? null,
     pod_slug: row.podSlug ?? null,
-    status: row.status,
+    status: effectiveStatus,
+    cancellation_scope: cancellationScope,
+    cancellation_note: cancellationNote,
     recurrence_frequency: recurrenceFrequency,
     recurrence_interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
     recurrence_until: typeof row.recurrenceUntil === "number" ? toIsoString(row.recurrenceUntil) : null,
@@ -167,6 +243,7 @@ export function expandCommunityEventRows(params: {
       limit: Math.max(1, params.limit - expanded.length + (params.overlap ? 1 : 0)),
     });
     for (const occurrenceStartsAt of occurrenceStarts) {
+      if (!params.includeCancelled && findCancelledOccurrence(row, occurrenceStartsAt)) continue;
       expanded.push(mapCommunityEventRow(row, occurrenceStartsAt));
       if (params.overlap && expanded.length > params.limit) {
         throw new Error("Too many events in this range. Select a narrower range.");
@@ -576,6 +653,135 @@ async function saveCommunityEventCore(ctx: any, userId: any, args: { eventId?: s
 export const EVENT_OPERATION_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezone", "location_type", "location_label", "url",
   "recurrence_frequency", "recurrence_interval", "recurrence_until"] as const;
 
+async function cancelCommunityEventCore(
+  ctx: any,
+  args: {
+    event: CommunityEventLike;
+    userId: any;
+    scope?: "occurrence" | "series";
+    occurrenceStartsAtIso?: string | null;
+    note?: string | null;
+    nowMs?: number;
+  },
+) {
+  const nowMs = args.nowMs ?? Date.now();
+  const event = args.event;
+  const frequency = normalizeCommunityEventRecurrenceFrequency(event.recurrenceFrequency);
+  const isRecurring = frequency !== "none";
+  const normalizedNote = normalizeOptionalText(args.note, 500);
+  const hasOccurrenceArg =
+    typeof args.occurrenceStartsAtIso === "string" && args.occurrenceStartsAtIso.trim().length > 0;
+  const requestedScope: "occurrence" | "series" =
+    args.scope ?? (hasOccurrenceArg && isRecurring ? "occurrence" : "series");
+  const effectiveScope: "occurrence" | "series" =
+    requestedScope === "occurrence" && isRecurring && !event.podChannelId
+      ? "occurrence"
+      : "series";
+
+  if (effectiveScope === "occurrence") {
+    const occurrenceStartsAt = requireIsoMs(
+      args.occurrenceStartsAtIso,
+      "community_event_occurrence_invalid",
+    );
+    const matches = getCommunityEventOccurrenceStartsInRange({
+      startsAt: event.startsAt,
+      rangeStart: occurrenceStartsAt,
+      rangeEnd: occurrenceStartsAt,
+      frequency,
+      interval: normalizeCommunityEventRecurrenceInterval(event.recurrenceInterval),
+      recurrenceUntil: typeof event.recurrenceUntil === "number" ? event.recurrenceUntil : null,
+      timeZone: event.timezone,
+      limit: 1,
+    });
+    if (!matches.includes(occurrenceStartsAt)) {
+      throw new Error("community_event_occurrence_not_found");
+    }
+    if (event.status === "cancelled" || findCancelledOccurrence(event, occurrenceStartsAt)) {
+      return {
+        ok: true,
+        alreadyCancelled: true,
+        event: mapCommunityEventRow(event, occurrenceStartsAt),
+      };
+    }
+    const nextEntry: CancelledOccurrenceEntry = {
+      startsAt: occurrenceStartsAt,
+      cancelledAt: nowMs,
+      cancelledByUserId: args.userId,
+      ...(normalizedNote ? { note: normalizedNote } : {}),
+    };
+    const nextOccurrences = pruneCancelledOccurrences(
+      [...(event.cancelledOccurrences ?? []), nextEntry],
+      nowMs,
+    );
+    await ctx.db.patch(event._id as any, {
+      cancelledOccurrences: nextOccurrences,
+      updatedAt: nowMs,
+    });
+    if (!event.podChannelId && occurrenceStartsAt > nowMs) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).eventReminders.enqueueEventCancellationEmailsInternal,
+        {
+          eventId: event._id,
+          scope: "occurrence",
+          occurrenceStartsAt,
+          cancelledAt: nowMs,
+          ...(normalizedNote ? { note: normalizedNote } : {}),
+          nowMs,
+        },
+      );
+    }
+    return {
+      ok: true,
+      alreadyCancelled: false,
+      event: mapCommunityEventRow(
+        { ...event, cancelledOccurrences: nextOccurrences, updatedAt: nowMs },
+        occurrenceStartsAt,
+      ),
+    };
+  }
+
+  if (event.status === "cancelled") {
+    return {
+      ok: true,
+      alreadyCancelled: true,
+      event: mapCommunityEventRow(event),
+    };
+  }
+  const emailStartsAt = !event.podChannelId ? findNextLiveOccurrenceStartsAt(event, nowMs) : null;
+  await ctx.db.patch(event._id as any, {
+    status: "cancelled",
+    cancellationNote: normalizedNote,
+    cancelledAt: nowMs,
+    updatedAt: nowMs,
+  });
+  if (!event.podChannelId && typeof emailStartsAt === "number" && emailStartsAt > nowMs) {
+    await ctx.scheduler.runAfter(
+      0,
+      (internal as any).eventReminders.enqueueEventCancellationEmailsInternal,
+      {
+        eventId: event._id,
+        scope: "series",
+        occurrenceStartsAt: emailStartsAt,
+        cancelledAt: nowMs,
+        ...(normalizedNote ? { note: normalizedNote } : {}),
+        nowMs,
+      },
+    );
+  }
+  return {
+    ok: true,
+    alreadyCancelled: false,
+    event: mapCommunityEventRow({
+      ...event,
+      status: "cancelled",
+      cancellationNote: normalizedNote,
+      cancelledAt: nowMs,
+      updatedAt: nowMs,
+    }),
+  };
+}
+
 // Events through an AI acting for a builder (their own AI, or the guide in
 // their private talk): make one, change one, cancel one. The same rules as
 // the app's form. A pod's call is changed in its pod, not here.
@@ -596,8 +802,18 @@ export const applyEventOperationForTrustedUserInternal = internalMutation({
       return { event: await saveCommunityEventCore(ctx, args.userId, { eventId: String(existing._id), payload: fields }) };
     }
     if (args.operation === "community.event.cancel") {
-      await ctx.db.patch(existing._id as any, { status: "cancelled", updatedAt: Date.now() });
-      return { event: mapCommunityEventRow({ ...existing, status: "cancelled" }) };
+      const result = await cancelCommunityEventCore(ctx, {
+        event: existing,
+        userId: args.userId,
+        scope:
+          input.scope === "occurrence" || input.scope === "series"
+            ? input.scope
+            : undefined,
+        occurrenceStartsAtIso:
+          typeof input.occurrence_starts_at === "string" ? input.occurrence_starts_at : undefined,
+        note: typeof input.note === "string" ? input.note : undefined,
+      });
+      return { event: result.event };
     }
     throw new Error("operation_not_found");
   },
@@ -608,6 +824,9 @@ export const cancelCommunityEvent = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     eventId: v.string(),
+    scope: v.optional(v.union(v.literal("occurrence"), v.literal("series"))),
+    occurrenceStartsAtIso: v.optional(v.string()),
+    note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -621,9 +840,58 @@ export const cancelCommunityEvent = mutation({
       : null;
     if (!event) return { ok: true };
     await requireEventManager(ctx, event, userId);
+    const result = await cancelCommunityEventCore(ctx, {
+      event,
+      userId,
+      scope: args.scope,
+      occurrenceStartsAtIso: args.occurrenceStartsAtIso,
+      note: args.note,
+    });
+    return { ok: true, alreadyCancelled: result.alreadyCancelled };
+  },
+});
+
+export const restoreCommunityEvent = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    eventId: v.string(),
+    occurrenceStartsAtIso: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const normalizedEventId = ctx.db.normalizeId("communityEvents", String(args.eventId ?? "").trim());
+    const event = normalizedEventId
+      ? ((await ctx.db.get(normalizedEventId)) as CommunityEventLike | null)
+      : null;
+    if (!event) throw new Error("community_event_not_found");
+    await requireEventManager(ctx, event, userId);
+    const nowMs = Date.now();
+    const hasOccurrenceArg =
+      typeof args.occurrenceStartsAtIso === "string" && args.occurrenceStartsAtIso.trim().length > 0;
+    if (hasOccurrenceArg && event.status === "live") {
+      const occurrenceStartsAt = requireIsoMs(
+        args.occurrenceStartsAtIso,
+        "community_event_occurrence_invalid",
+      );
+      const nextOccurrences = (event.cancelledOccurrences ?? []).filter(
+        (entry) => entry.startsAt !== occurrenceStartsAt,
+      );
+      await ctx.db.patch(event._id as any, {
+        cancelledOccurrences: nextOccurrences,
+        updatedAt: nowMs,
+      });
+      return { ok: true };
+    }
     await ctx.db.patch(event._id as any, {
-      status: "cancelled",
-      updatedAt: Date.now(),
+      status: "live",
+      cancellationNote: undefined,
+      cancelledAt: undefined,
+      updatedAt: nowMs,
     });
     return { ok: true };
   },

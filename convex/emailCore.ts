@@ -5,6 +5,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "billing_issue",
   "weekly_member_digest",
   "event_reminder",
+  "event_cancelled",
   "mention_notification",
   "dm_message_notification",
   "founder_daily_brief",
@@ -383,6 +384,14 @@ export function renderEmailTemplate(params: {
         `${eventTitle} is happening tomorrow`,
         `This is your reminder that ${eventTitle} starts soon.`,
         "View event",
+      );
+    case "event_cancelled":
+      return renderTransactionalTemplate(
+        `Cancelled: ${eventTitle}`,
+        payload,
+        `Cancelled: ${eventTitle}`,
+        `${eventTitle} has been cancelled.`,
+        "View events",
       );
   }
 }

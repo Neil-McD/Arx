@@ -74,6 +74,7 @@ export function buildWebCommunityContentProjectionBindings(params: {
       reloadEvents: communityContent.reloadActiveEvents,
       saveEvent: communityContent.handleSaveCommunityEvent,
       cancelEvent: communityContent.handleCancelCommunityEvent,
+      restoreEvent: communityContent.handleRestoreCommunityEvent,
     },
     podsProps: {
       session: params.session,

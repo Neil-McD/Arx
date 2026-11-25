@@ -3234,6 +3234,18 @@ export default defineSchema({
     // (convex/communityEventAudience.ts is the one rule).
     podChannelId: v.optional(v.id("communityChannels")),
     status: v.union(v.literal("live"), v.literal("cancelled")),
+    cancellationNote: v.optional(v.string()),
+    cancelledAt: v.optional(v.number()),
+    cancelledOccurrences: v.optional(
+      v.array(
+        v.object({
+          startsAt: v.number(),
+          cancelledAt: v.number(),
+          cancelledByUserId: v.optional(v.id("users")),
+          note: v.optional(v.string()),
+        }),
+      ),
+    ),
     recurrenceFrequency: v.optional(v.union(v.literal("none"), v.literal("daily"), v.literal("weekly"), v.literal("monthly"))),
     recurrenceInterval: v.optional(v.number()),
     recurrenceUntil: v.optional(v.number()),
