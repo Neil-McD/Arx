@@ -56,3 +56,28 @@ test("the account menu offers View as a member, and Host view to come back", () 
   // Closed, the card says whose eyes you are looking through.
   expect(source).toContain("Viewing as a member");
 });
+
+test("turning member view on or off tells everything listening, for one community", async () => {
+  const { readMemberPreviewCommunityId, subscribeMemberPreview, writeMemberPreview } = await import("../shared/communityMemberPreview");
+  const store = new Map<string, string>();
+  const target = new EventTarget();
+  const previous = (globalThis as any).window;
+  (globalThis as any).window = {
+    sessionStorage: { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value), removeItem: (key: string) => store.delete(key) },
+    addEventListener: target.addEventListener.bind(target),
+    removeEventListener: target.removeEventListener.bind(target),
+    dispatchEvent: target.dispatchEvent.bind(target),
+  };
+  try {
+    const seen: Array<string | null> = [];
+    const stop = subscribeMemberPreview(() => seen.push(readMemberPreviewCommunityId()));
+    writeMemberPreview("polynet", true);
+    writeMemberPreview(null, false);
+    stop();
+    writeMemberPreview("polynet", true);
+    expect(seen).toEqual(["polynet", null]);
+    expect(readMemberPreviewCommunityId()).toBe("polynet");
+  } finally {
+    (globalThis as any).window = previous;
+  }
+});

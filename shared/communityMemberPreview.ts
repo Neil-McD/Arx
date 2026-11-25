@@ -51,6 +51,8 @@ export function readMemberPreviewCommunityId(): string | null {
   }
 }
 
+const CHANGED = "polynet:member-preview";
+
 export function writeMemberPreview(communityId: string | null, on: boolean): void {
   try {
     if (on && communityId) window.sessionStorage.setItem(STORAGE_KEY, communityId);
@@ -58,4 +60,17 @@ export function writeMemberPreview(communityId: string | null, on: boolean): voi
   } catch {
     // Storage blocked: the preview still works until the page reloads.
   }
+  try {
+    window.dispatchEvent(new Event(CHANGED));
+  } catch {
+    // No window (tests): nothing is listening.
+  }
+}
+
+// Something read outside the community's own page (a profile opened from
+// Inbox) follows the same switch: it is on for exactly one community.
+export function subscribeMemberPreview(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(CHANGED, onChange);
+  return () => window.removeEventListener(CHANGED, onChange);
 }

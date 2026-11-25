@@ -4,7 +4,8 @@
 // from the person's record. The server decides what each reader gets
 // (convex/communityMemberProfiles.ts, convex/communityMemberRecords.ts).
 import { ExternalLink, Lock, MessageCircle } from "lucide-react";
-import { Fragment, useContext, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { readMemberPreviewCommunityId, subscribeMemberPreview } from "../../../../shared/communityMemberPreview";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { memberRoleTag } from "../../../../shared/communityMemberWords";
 import { goToMembersPage } from "../../../../shared/routeDetails";
@@ -227,8 +228,12 @@ export function KitProfileFor(props: Avatars & {
   const [profile, setProfile] = useState<CloudMemberProfile | null | undefined>(undefined);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
   const [turn, setTurn] = useState(0);
-  // Seeing the community as a member sees it shows no host block.
-  const hostView = Boolean(profile?.viewer_can_manage) && !scope?.memberPreview;
+  // Seeing the community as a member sees it shows no host block, wherever
+  // the profile is opened (the page's own switch, or the one kept for this
+  // community when it is opened from Inbox).
+  const previewing = useSyncExternalStore(subscribeMemberPreview, readMemberPreviewCommunityId, () => null);
+  const asMember = Boolean(scope?.memberPreview) || (Boolean(communityId) && previewing === communityId);
+  const hostView = Boolean(profile?.viewer_can_manage) && !asMember;
   const { onLoaded } = props;
 
   useEffect(() => {
