@@ -140,23 +140,71 @@ function pruneCancelledOccurrences(
     .slice(-MAX_CANCELLED_OCCURRENCES);
 }
 
-function findNextLiveOccurrenceStartsAt(row: CommunityEventLike, nowMs: number): number | null {
+export function isEventCancellationActive(
+  event: CommunityEventLike | null | undefined,
+  params: {
+    scope: "occurrence" | "series";
+    occurrenceStartsAt: number;
+    cancelledAt: number;
+  },
+): boolean {
+  if (!event || event.podChannelId) return false;
+  if (params.scope === "series") {
+    return event.status === "cancelled" && event.cancelledAt === params.cancelledAt;
+  }
+  if (event.status !== "live") return false;
+  const match = findCancelledOccurrence(event, params.occurrenceStartsAt);
+  return Boolean(match && match.cancelledAt === params.cancelledAt);
+}
+
+export async function isEventCancellationStillActive(
+  ctx: any,
+  params: {
+    eventId: string;
+    scope: "occurrence" | "series";
+    occurrenceStartsAt: number;
+    cancelledAt: number;
+  },
+): Promise<boolean> {
+  const normalizedId = ctx.db.normalizeId("communityEvents", params.eventId);
+  const event = normalizedId ? ((await ctx.db.get(normalizedId)) as CommunityEventLike | null) : null;
+  return isEventCancellationActive(event, params);
+}
+
+export function findNextLiveOccurrenceStartsAt(
+  row: CommunityEventLike,
+  nowMs: number,
+  options?: { includeOngoing?: boolean },
+): number | null {
+  if (row.status === "cancelled") return null;
+  const includeOngoing = Boolean(options?.includeOngoing);
+  const durationMs =
+    typeof row.endsAt === "number"
+      ? Math.max(0, row.endsAt - row.startsAt)
+      : DEFAULT_COMMUNITY_EVENT_DURATION_MS;
   const frequency = normalizeCommunityEventRecurrenceFrequency(row.recurrenceFrequency);
   if (frequency === "none") {
-    return row.startsAt > nowMs ? row.startsAt : null;
+    if (includeOngoing) {
+      return row.startsAt + durationMs > nowMs ? row.startsAt : null;
+    }
+    return row.startsAt >= nowMs ? row.startsAt : null;
   }
+  const cancelledCount = row.cancelledOccurrences?.length ?? 0;
+  const rangeStart = includeOngoing ? nowMs - durationMs + 1 : nowMs;
   const occurrences = getCommunityEventOccurrenceStartsInRange({
     startsAt: row.startsAt,
-    rangeStart: nowMs + 1,
+    rangeStart,
     rangeEnd: nowMs + UPCOMING_SERIES_LOOKAHEAD_MS,
     frequency,
     interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
     recurrenceUntil: typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null,
     timeZone: row.timezone,
-    limit: 64,
+    limit: 64 + cancelledCount,
   });
   for (const startsAt of occurrences) {
-    if (!findCancelledOccurrence(row, startsAt)) return startsAt;
+    if (findCancelledOccurrence(row, startsAt)) continue;
+    if (includeOngoing && startsAt + durationMs <= nowMs) continue;
+    return startsAt;
   }
   return null;
 }
@@ -230,6 +278,7 @@ export function expandCommunityEventRows(params: {
     const frequency = normalizeCommunityEventRecurrenceFrequency(row.recurrenceFrequency);
     const interval = normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval);
     const recurrenceUntil = typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null;
+    const cancelledCount = !params.includeCancelled ? (row.cancelledOccurrences?.length ?? 0) : 0;
     const occurrenceStarts = getCommunityEventOccurrenceStartsInRange({
       startsAt: row.startsAt,
       rangeStart: params.overlap
@@ -240,7 +289,7 @@ export function expandCommunityEventRows(params: {
       interval,
       recurrenceUntil,
       timeZone: row.timezone,
-      limit: Math.max(1, params.limit - expanded.length + (params.overlap ? 1 : 0)),
+      limit: Math.max(1, params.limit - expanded.length + (params.overlap ? 1 : 0)) + cancelledCount,
     });
     for (const occurrenceStartsAt of occurrenceStarts) {
       if (!params.includeCancelled && findCancelledOccurrence(row, occurrenceStartsAt)) continue;
@@ -717,7 +766,12 @@ async function cancelCommunityEventCore(
       cancelledOccurrences: nextOccurrences,
       updatedAt: nowMs,
     });
-    if (!event.podChannelId && occurrenceStartsAt > nowMs) {
+    const durationMs =
+      typeof event.endsAt === "number"
+        ? Math.max(0, event.endsAt - event.startsAt)
+        : DEFAULT_COMMUNITY_EVENT_DURATION_MS;
+    const occurrenceEndsAt = occurrenceStartsAt + durationMs;
+    if (!event.podChannelId && occurrenceEndsAt > nowMs) {
       await ctx.scheduler.runAfter(
         0,
         (internal as any).eventReminders.enqueueEventCancellationEmailsInternal,
@@ -725,6 +779,7 @@ async function cancelCommunityEventCore(
           eventId: event._id,
           scope: "occurrence",
           occurrenceStartsAt,
+          occurrenceEndsAt,
           cancelledAt: nowMs,
           ...(normalizedNote ? { note: normalizedNote } : {}),
           nowMs,
@@ -748,14 +803,21 @@ async function cancelCommunityEventCore(
       event: mapCommunityEventRow(event),
     };
   }
-  const emailStartsAt = !event.podChannelId ? findNextLiveOccurrenceStartsAt(event, nowMs) : null;
+  const durationMs =
+    typeof event.endsAt === "number"
+      ? Math.max(0, event.endsAt - event.startsAt)
+      : DEFAULT_COMMUNITY_EVENT_DURATION_MS;
+  const emailStartsAt = !event.podChannelId
+    ? findNextLiveOccurrenceStartsAt(event, nowMs, { includeOngoing: true })
+    : null;
+  const emailEndsAt = emailStartsAt !== null ? emailStartsAt + durationMs : null;
   await ctx.db.patch(event._id as any, {
     status: "cancelled",
     cancellationNote: normalizedNote,
     cancelledAt: nowMs,
     updatedAt: nowMs,
   });
-  if (!event.podChannelId && typeof emailStartsAt === "number" && emailStartsAt > nowMs) {
+  if (!event.podChannelId && typeof emailStartsAt === "number" && typeof emailEndsAt === "number" && emailEndsAt > nowMs) {
     await ctx.scheduler.runAfter(
       0,
       (internal as any).eventReminders.enqueueEventCancellationEmailsInternal,
@@ -763,6 +825,7 @@ async function cancelCommunityEventCore(
         eventId: event._id,
         scope: "series",
         occurrenceStartsAt: emailStartsAt,
+        occurrenceEndsAt: emailEndsAt,
         cancelledAt: nowMs,
         ...(normalizedNote ? { note: normalizedNote } : {}),
         nowMs,

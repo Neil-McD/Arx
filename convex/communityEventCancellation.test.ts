@@ -301,6 +301,7 @@ test("automatic event cancellation email enqueues for opted-in active members, r
       locationType: "online",
       visibility: "members",
       status: "live",
+      cancelledOccurrences: [{ startsAt: futureStart, cancelledAt: now, note: "Out sick today — see you next week." }],
       recurrenceFrequency: "weekly",
       recurrenceInterval: 1,
       createdAt: now,
@@ -311,10 +312,12 @@ test("automatic event cancellation email enqueues for opted-in active members, r
       createdByUserId: ownerId,
       title: "Old Call",
       startsAt: pastStart,
+      endsAt: pastStart + 60 * 60 * 1000,
       timezone: "UTC",
       locationType: "online",
       visibility: "members",
       status: "cancelled",
+      cancelledAt: now,
       createdAt: now,
       updatedAt: now,
     });
@@ -406,4 +409,163 @@ test("automatic event cancellation email enqueues for opted-in active members, r
     nowMs: now,
   });
   expect(podRun).toMatchObject({ enqueued: 0, skipped: "no_target" });
+});
+
+test("restoring a cancelled date blocks both pre-enqueue and pending-outbox cancellation emails", async () => {
+  const t = convexTest(schema, modules);
+  const { ownerId, communityId, now } = await seedCommunityWithMembers(t);
+  const futureStart = now + 2 * DAY_MS;
+
+  const eventId = await t.run(async (ctx) =>
+    ctx.db.insert("communityEvents", {
+      communityId,
+      createdByUserId: ownerId,
+      title: "Weekly Standup",
+      startsAt: futureStart,
+      endsAt: futureStart + 60 * 60 * 1000,
+      timezone: "UTC",
+      locationType: "online",
+      visibility: "members",
+      status: "live",
+      cancelledOccurrences: [{ startsAt: futureStart, cancelledAt: now }],
+      recurrenceFrequency: "weekly",
+      recurrenceInterval: 1,
+      createdAt: now,
+      updatedAt: now,
+    }),
+  );
+
+  // Enqueue while cancelled -> 2 pending jobs.
+  const enqueued = await t.action(internal.eventReminders.enqueueEventCancellationEmailsInternal, {
+    eventId,
+    scope: "occurrence",
+    occurrenceStartsAt: futureStart,
+    occurrenceEndsAt: futureStart + 60 * 60 * 1000,
+    cancelledAt: now,
+    nowMs: now,
+  });
+  expect(enqueued).toMatchObject({ enqueued: 2 });
+
+  // Host restores the date before the outbox claims/sends the jobs.
+  const owner = t.withIdentity({ subject: "owner_subj" });
+  await owner.mutation(api.communityEvents.restoreCommunityEvent, {
+    authSubject: "owner_subj",
+    eventId: String(eventId),
+    occurrenceStartsAtIso: new Date(futureStart).toISOString(),
+  });
+
+  // Pre-enqueue check now rejects because the cancellation is no longer active.
+  const postRestoreEnqueue = await t.action(internal.eventReminders.enqueueEventCancellationEmailsInternal, {
+    eventId,
+    scope: "occurrence",
+    occurrenceStartsAt: futureStart,
+    occurrenceEndsAt: futureStart + 60 * 60 * 1000,
+    cancelledAt: now,
+    nowMs: now,
+  });
+  expect(postRestoreEnqueue).toMatchObject({ enqueued: 0, skipped: "no_target" });
+
+  // Pending outbox jobs are suppressed at claim time instead of being sent.
+  const claimed = await t.mutation(internal.email.claimDueEmailOutboxBatchInternal, {
+    limit: 10,
+    nowMs: now + 1000,
+  });
+  expect(claimed).toHaveLength(0);
+  const outboxRows = await t.run(async (ctx) => ctx.db.query("emailOutbox").collect());
+  expect(outboxRows.filter((row) => row.failureReason === "event_restored")).toHaveLength(2);
+});
+
+test("limit=1 advances past cancelled leading occurrences, and landing/home skip cancelled single dates", async () => {
+  const t = convexTest(schema, modules);
+  const { ownerId, communityId, now } = await seedCommunityWithMembers(t);
+  const week1 = now + DAY_MS;
+  const week2 = week1 + WEEK_MS;
+  const week3 = week2 + WEEK_MS;
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityEvents", {
+      communityId,
+      createdByUserId: ownerId,
+      title: "Public Weekly AMA",
+      startsAt: week1,
+      endsAt: week1 + 60 * 60 * 1000,
+      timezone: "UTC",
+      locationType: "online",
+      visibility: "public",
+      status: "live",
+      cancelledOccurrences: [
+        { startsAt: week1, cancelledAt: now },
+        { startsAt: week2, cancelledAt: now },
+      ],
+      recurrenceFrequency: "weekly",
+      recurrenceInterval: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  const owner = t.withIdentity({ subject: "owner_subj" });
+
+  // Requesting limit: 1 with includeCancelled: false skips the 2 cancelled dates and returns week 3.
+  const nextOne = await owner.query(api.communityEvents.listCommunityEvents, {
+    authSubject: "owner_subj",
+    communityId,
+    startIso: new Date(now).toISOString(),
+    endIso: new Date(week3 + DAY_MS).toISOString(),
+    includeCancelled: false,
+    limit: 1,
+  });
+  expect(nextOne).toHaveLength(1);
+  expect(nextOne[0].starts_at).toBe(new Date(week3).toISOString());
+
+  // Public community landing page skips cancelled weeks 1 & 2 and shows week 3.
+  const landing = (await t.query(api.communityLanding.getCommunityLandingPage, {
+    communitySlug: "builders-club",
+  })) as any;
+  expect(landing.ok).toBe(true);
+  expect(landing.events).toHaveLength(1);
+  expect(landing.events[0].starts_at).toBe(new Date(week3).toISOString());
+
+  // Home "For you" steps skips tomorrow's cancelled week 1 (next live date is >3 days away).
+  const member = t.withIdentity({ subject: "member_a_subj" });
+  const homeSteps = (await member.query(api.communityHomeMoments.getMemberHomeSteps, {
+    authSubject: "member_a_subj",
+    communityId,
+  })) as Array<{ kind?: string; title?: string }>;
+  expect(homeSteps.some((step) => String(step.title ?? "").includes("Public Weekly AMA"))).toBe(false);
+});
+
+test("cancelling an ongoing event still enqueues cancellation emails while ended events stay silent", async () => {
+  const t = convexTest(schema, modules);
+  const { ownerId, communityId, now } = await seedCommunityWithMembers(t);
+  const ongoingStart = now - 10 * 60 * 1000;
+  const ongoingEnd = now + 50 * 60 * 1000;
+
+  const ongoingId = await t.run(async (ctx) =>
+    ctx.db.insert("communityEvents", {
+      communityId,
+      createdByUserId: ownerId,
+      title: "Live Town Hall",
+      startsAt: ongoingStart,
+      endsAt: ongoingEnd,
+      timezone: "UTC",
+      locationType: "online",
+      visibility: "members",
+      status: "cancelled",
+      cancelledAt: now,
+      createdAt: now - DAY_MS,
+      updatedAt: now,
+    }),
+  );
+
+  const result = await t.action(internal.eventReminders.enqueueEventCancellationEmailsInternal, {
+    eventId: ongoingId,
+    scope: "series",
+    occurrenceStartsAt: ongoingStart,
+    occurrenceEndsAt: ongoingEnd,
+    cancelledAt: now,
+    note: "Internet dropped — rescheduling!",
+    nowMs: now,
+  });
+  expect(result).toMatchObject({ enqueued: 2, suppressed: 1 });
 });

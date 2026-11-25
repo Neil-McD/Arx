@@ -1,4 +1,5 @@
 import { eventViewer, visibleEvents } from "./communityEventAudience";
+import { expandCommunityEventRows, listCommunityEventExpansionCandidates } from "./communityEvents";
 // Home's "For you" member steps (docs/specs/community-agent-gateway-v0.md):
 // everything read here is what this viewer may already see. No model.
 import { v } from "convex/values";
@@ -22,13 +23,25 @@ async function viewer(ctx: any, authSubject: string | undefined, communityId: an
   return { userId, community };
 }
 
-// The next event this person may see in the coming three days (their own
-// pod's call counts).
+// The next live event this person may see in the coming three days (their own
+// pod's call counts; individually cancelled dates are skipped).
 async function nextEventFor(ctx: any, communityId: any, userId: any, nowMs: number) {
-  const event = (await visibleEvents(await ctx.db.query("communityEvents")
-    .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", communityId).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + 3 * DAY_MS))
-    .take(10), eventViewer(ctx, communityId, userId)))[0] as any;
-  return event ? { title: String(event.title ?? "").slice(0, 120), startsAt: new Date(Number(event.startsAt)).toISOString() } : null;
+  const candidates = await listCommunityEventExpansionCandidates({
+    ctx,
+    communityId,
+    startMs: nowMs,
+    endMs: nowMs + 3 * DAY_MS,
+    includeCancelled: false,
+  });
+  const visible = await visibleEvents(candidates, eventViewer(ctx, communityId, userId));
+  const event = expandCommunityEventRows({
+    rows: visible,
+    startMs: nowMs,
+    endMs: nowMs + 3 * DAY_MS,
+    includeCancelled: false,
+    limit: 1,
+  })[0];
+  return event ? { title: String(event.title ?? "").slice(0, 120), startsAt: event.starts_at } : null;
 }
 
 // Home's "For you" (a member's list): everything that is for them now, most

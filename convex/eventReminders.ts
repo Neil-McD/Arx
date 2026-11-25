@@ -1,4 +1,5 @@
 import { isPodEvent, podEventRecipientIds } from "./communityEventAudience";
+import { isEventCancellationActive } from "./communityEvents";
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
@@ -283,12 +284,25 @@ type EventCancellationTarget = {
 export const buildEventCancellationTargetInternal = internalQuery({
   args: {
     eventId: v.id("communityEvents"),
+    scope: v.union(v.literal("occurrence"), v.literal("series")),
+    occurrenceStartsAt: v.number(),
+    cancelledAt: v.number(),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<EventCancellationTarget | null> => {
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
-    const event = (await ctx.db.get(args.eventId)) as CommunityEventRow | null;
-    if (!event || isPodEvent(event)) return null;
+    const event = (await ctx.db.get(args.eventId)) as (CommunityEventRow & { cancelledAt?: number }) | null;
+    if (
+      !event ||
+      isPodEvent(event) ||
+      !isEventCancellationActive(event as any, {
+        scope: args.scope,
+        occurrenceStartsAt: args.occurrenceStartsAt,
+        cancelledAt: args.cancelledAt,
+      })
+    ) {
+      return null;
+    }
     const community = (await ctx.db.get(event.communityId)) as (CommunityRow & {
       archivedAt?: number;
       lifecycleGeneration?: number;
@@ -325,18 +339,28 @@ export const enqueueEventCancellationEmailsInternal = internalAction({
     eventId: v.id("communityEvents"),
     scope: v.union(v.literal("occurrence"), v.literal("series")),
     occurrenceStartsAt: v.number(),
+    occurrenceEndsAt: v.optional(v.number()),
     cancelledAt: v.number(),
     note: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<unknown> => {
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
-    if (args.occurrenceStartsAt <= nowMs) {
+    const effectiveEndMs = Number.isFinite(args.occurrenceEndsAt)
+      ? Math.floor(args.occurrenceEndsAt as number)
+      : args.occurrenceStartsAt;
+    if (effectiveEndMs <= nowMs) {
       return { ok: true, skipped: "past_event", enqueued: 0, deduped: 0, suppressed: 0 };
     }
     const target = (await ctx.runQuery(
       (internal as any).eventReminders.buildEventCancellationTargetInternal,
-      { eventId: args.eventId, nowMs },
+      {
+        eventId: args.eventId,
+        scope: args.scope,
+        occurrenceStartsAt: args.occurrenceStartsAt,
+        cancelledAt: args.cancelledAt,
+        nowMs,
+      },
     )) as EventCancellationTarget | null;
     if (!target) {
       return { ok: true, skipped: "no_target", enqueued: 0, deduped: 0, suppressed: 0 };
@@ -353,6 +377,10 @@ export const enqueueEventCancellationEmailsInternal = internalAction({
           : `${target.eventTitle} scheduled for ${startLabel} has been cancelled.${noteSuffix}`;
 
     const payload = {
+      eventId: String(args.eventId),
+      cancellationScope: args.scope,
+      occurrenceStartsAt: args.occurrenceStartsAt,
+      cancelledAt: args.cancelledAt,
       communityName: target.communityName,
       eventTitle: target.eventTitle,
       title:
