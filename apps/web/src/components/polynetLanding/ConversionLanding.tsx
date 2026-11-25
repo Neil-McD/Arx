@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
 import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
@@ -11,7 +11,8 @@ import {
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
 import { brainScene, chiefScene, FeatureSection, guideScene, StatementFigures } from "./LandingScenes";
-import { ProductPreview } from "./ProductPreview";
+// The real app's kit is heavy, so the preview loads after the hero paints.
+const RealAppPreview = lazy(() => import("./RealAppPreview").then((module) => ({ default: module.RealAppPreview })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -588,8 +589,10 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         </section>
 
         <section className="product" id="how" aria-label="The product" data-rv>
-          <ProductPreview />
-          <p className="caption">Try it: review the morning brief, ask the guide in #general, open a member.</p>
+          <Suspense fallback={<div className="rp rp-wait" aria-hidden="true" />}>
+            <RealAppPreview />
+          </Suspense>
+          <p className="caption">Try it: review the check-in, ask the guide in #general, open Knowledge or a member.</p>
         </section>
 
         <StatementFigures />
