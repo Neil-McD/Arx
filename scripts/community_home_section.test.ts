@@ -245,7 +245,43 @@ test("what the guide suggests is its own group: a row per draft, opened by the h
   // Closed, the words it would post are not shown, and nothing can be posted from the row.
   expect(html).not.toContain("price on the hours");
   expect(html).not.toContain("Post reply");
+  // Single suggestion renders no stacked drawer toggle.
+  expect(html).not.toContain("View more");
   expect(renderToStaticMarkup(React.createElement(GuideSuggests, { drafts: [], onPost: async () => null, onSkip: () => {} }))).toBe("");
+
+  // Multiple suggestions stack into a tidy drawer showing the top card + "View more (N)".
+  const stackedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    drafts: [draft],
+    coachDrafts: [{
+      id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_newcomer",
+      reason_label: "Quiet newcomer", signal_summary: "Quiet for 25 days", text: "Hey Josh!", created_at: "2026-11-25T10:00:00.000Z",
+    }],
+    stageProposals: [{
+      membership_id: "m1", user_id: "u1", member_name: "Rashid", member_handle: "rashid",
+      from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated",
+      to_stage_goal: "Mentor others", completed_labels: ["3+ posts or replies"],
+    }],
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  expect(stackedHtml).toContain("A reply to Maya&#x27;s question is ready");
+  expect(stackedHtml).not.toContain("Check in with Josh Universe");
+  expect(stackedHtml).not.toContain("Move Rashid to Graduated");
+  expect(stackedHtml).toContain("View more (2)");
+
+  // Opening a non-first row from outside (e.g. landing preview) automatically expands the drawer.
+  const openedStackedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    drafts: [draft],
+    coachDrafts: [{
+      id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_newcomer",
+      reason_label: "Quiet newcomer", signal_summary: "Quiet for 25 days", text: "Hey Josh!", created_at: "2026-11-25T10:00:00.000Z",
+    }],
+    openRow: "coach:c1",
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  expect(openedStackedHtml).toContain("Check in with Josh Universe");
+  expect(openedStackedHtml).toContain("Show less");
 });
 
 test("a question the guide drafted a reply for shows once, under what the guide suggests", async () => {
