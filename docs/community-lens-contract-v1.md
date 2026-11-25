@@ -112,9 +112,8 @@ of the slices that follow.
 - Admin: W channels (create, rename, order, private, delete). A: pin, give
   people access to a private channel, post to @everybody.
 - DMs: each member's own, never another's.
-- MCP now: member reads and writes; moderator removal on a selection.
-  Planned: channel setup; DMs (own only) by decision.
-- Pods (proposed): see `specs/pods-v0.md` (a paid, higher-touch group that replaces private channels).
+- MCP now: member reads and writes; moderator removal on a selection; builders create, rename, describe, reorder channels and pin/unpin top-level posts (`community.channel.set_pinned_post`).
+- Pods: members read accessible/listed pods (`pods/`) and request to join listed non-paid pods (`community.pod.request_join`). Owners and admins read `builder/pods.json` (hosts, members, pending join requests, Guide seating) and manage pods through `community.pod.update_details`, `community.pod.set_host`, `community.pod.add_members`, `community.pod.remove_members` (confirmed every time; plan-bound and paid pod seats stay Studio-only), `community.pod.decide_request`, and `community.pod.set_guide_seat` (confirmed every time). Pod privacy walls remain strict: nobody outside a pod reads its room or pod notes.
 
 ### 4. Learning
 - Member: R courses and lessons, plus their own live progress (in `members/me/context.md` and their own `members/<handle>.json`). A: mark a lesson done (private to them and hosts; never visible to other members, moderators, or the public community agent).
@@ -128,10 +127,8 @@ of the slices that follow.
 - MCP now: read. Planned: writes.
 
 ### 6. Knowledge
-- Member: R community notes and files. Nobody but owners and admins changes
-  notes; the community agent reads them and never writes them.
-- Admin: W notes (edit, delete), files and sources.
-- MCP now: read. Planned: note edits.
+- Member: R community notes (through answers from the Guide) and files. Members and moderators never write or delete community notes.
+- Admin & Owner (Builder lens): R/W community notes (`memory/`, `community.note.save`, and confirmed `community.note.delete` identically through Studio, Official Polynet MCP, and Studio Guide chat). Files and sources stay Studio-managed.
 
 ### 7. The community agent
 - Member: talks to it; it acts only as them and drafts what it can't send.

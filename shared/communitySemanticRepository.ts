@@ -65,6 +65,8 @@ export const POLYNET_BUILDER_SUGGESTIONS_PATH = "/builder/suggestions.json";
 // Its Member Board (stages, checkpoints, cards, wins, Guide notes), for owners and admins.
 export const POLYNET_BUILDER_JOURNEY_PATH = "/builder/journey.json";
 export const POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH = "/builder/journey/";
+// Its Pods (details, hosts, members, pending join requests, Guide seating), for owners and admins.
+export const POLYNET_BUILDER_PODS_PATH = "/builder/pods.json";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
 export const BUILDER_JOURNEY_STATUS_SLICES = [
@@ -481,6 +483,7 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_JOURNEY_PATH ||
     value === POLYNET_BUILDER_BRIEF_PATH ||
     value === POLYNET_BUILDER_SUGGESTIONS_PATH ||
+    value === POLYNET_BUILDER_PODS_PATH ||
     Boolean(builderJourneySlice) ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
@@ -625,6 +628,7 @@ export function validateCommunitySemanticOperationInput(args: {
     parsed.path === POLYNET_BUILDER_JOURNEY_PATH ||
     parsed.path === POLYNET_BUILDER_BRIEF_PATH ||
     parsed.path === POLYNET_BUILDER_SUGGESTIONS_PATH ||
+    parsed.path === POLYNET_BUILDER_PODS_PATH ||
     builderJourneySlice?.kind === "stage" ||
     builderJourneySlice?.kind === "status" ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||

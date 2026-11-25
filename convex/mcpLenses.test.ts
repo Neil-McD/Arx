@@ -477,7 +477,7 @@ test("a builder's AI makes, renames, describes and orders channels; a member's c
   const shown = async (who: string) => (await f.call(who, "polynet_list", { path: "/communities/run-club/capabilities/" })).structuredContent.entries
     .map((entry: any) => String(entry.path)).filter((path: string) => path.includes("community.channel.") && !path.includes("mark_read"));
   expect((await shown("owner")).map((path: string) => path.split("capabilities/")[1]).sort()).toEqual([
-    "community.channel.create.json", "community.channel.describe.json", "community.channel.move.json", "community.channel.rename.json"]);
+    "community.channel.create.json", "community.channel.describe.json", "community.channel.move.json", "community.channel.rename.json", "community.channel.set_pinned_post.json"]);
   expect(await shown("member")).toEqual([]);
 
   const made = await op("owner", "community.channel.create", { name: "Race reports" }, "c1");

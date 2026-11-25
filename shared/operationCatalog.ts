@@ -89,6 +89,7 @@ export const CALL_OPERATIONS = {
   "community.interaction.react": entry("member", "write", "light"),
   "community.lesson.set_done": entry("member", "write", "light"),
   "community.channel.mark_read": entry("member", "write", "none"),
+  "community.pod.request_join": entry("member", "write", "light"),
   "community.presence.heartbeat": entry("member", "write", "none"),
   "community.typing.set": entry("member", "write", "none"),
   // What the guide remembers about a member, and its personal Soul with them, in their private talk.
@@ -112,6 +113,17 @@ export const CALL_OPERATIONS = {
   "community.channel.rename": entry("builder", "write", "builder_change"),
   "community.channel.describe": entry("builder", "write", "builder_change"),
   "community.channel.move": entry("builder", "write", "builder_change"),
+  "community.channel.set_pinned_post": entry("builder", "write", "builder_change"),
+  // Community notes (owners and admins only; deleting always asks Yes/No first).
+  "community.note.save": entry("builder", "write", "builder_change"),
+  "community.note.delete": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
+  // Pods (owners and admins; removing non-paying members and seating/unseating the AI ask Yes/No first).
+  "community.pod.update_details": entry("builder", "write", "builder_change"),
+  "community.pod.set_host": entry("builder", "write", "builder_change"),
+  "community.pod.add_members": entry("builder", "write", "builder_change"),
+  "community.pod.remove_members": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
+  "community.pod.decide_request": entry("builder", "write", "builder_change"),
+  "community.pod.set_guide_seat": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
   // Who runs the community.
   // Events members see (not a pod's calls: those are changed in the pod).
   // Cancelling emails members automatically, so it waits for the person's yes.

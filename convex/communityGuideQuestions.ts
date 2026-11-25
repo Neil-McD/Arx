@@ -314,15 +314,27 @@ export const answerGuideQuestion = action({
         ...(claimed.approvedInAppOnly ? { approvedInAppOnly: true } : {}),
       });
       // Changing, removing or banning members: done for each person on its own.
-      const members = String(input.operation ?? "").startsWith("community.members.");
+      const opName = String(input.operation ?? "");
+      const members = opName.startsWith("community.members.");
       if (!execution.ok) result = { status: "failed", line: execution.message, path: null };
-      else if (claimed.kind === "change" || (claimed.kind === "remove" && (members || String(input.operation ?? "") === "community.course.delete" || String(input.operation ?? "") === "community.journey.remove_stage"))) {
+      else if (
+        claimed.kind === "change" ||
+        (claimed.kind === "remove" &&
+          (members ||
+            opName === "community.course.delete" ||
+            opName === "community.journey.remove_stage" ||
+            opName === "community.note.delete" ||
+            opName === "community.pod.remove_members"))
+      ) {
         const outcome = (execution.value as any)?.result ?? {};
-        const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
+        const asked =
+          opName === "community.pod.remove_members" && Array.isArray(outcome.removed)
+            ? outcome.removed.length
+            : Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const failedAll = members && Number(outcome.succeeded ?? 0) === 0;
         result = { status: failedAll ? "failed" : "done", path: null,
           line: failedAll && outcome.results?.[0]?.message ? String(outcome.results[0].message)
-            : changeResultLine({ operation: String(input.operation), succeeded: Number(outcome.succeeded ?? 0), asked }) };
+            : changeResultLine({ operation: opName, succeeded: Number(outcome.succeeded ?? 0), asked }) };
       } else if (claimed.kind === "remove" && claimed.toolName === "polynet_call" && String(input.operation ?? "") === "community.interaction.remove") {
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);

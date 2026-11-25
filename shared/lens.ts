@@ -131,6 +131,7 @@ export type LensAction =
   | "react"                 // community.interaction.react
   | "lesson_done"           // community.lesson.set_done
   | "mark_read"             // community.channel.mark_read
+  | "request_join_pod"      // community.pod.request_join
   | "presence"              // community.presence.heartbeat, community.typing.set
   | "personal_memory"       // member.memory.remember
   | "review_joins"          // admission approve / deny
@@ -143,6 +144,7 @@ export const LENS_CALLS: Record<LensAction, LensName[]> = {
   react: [...PERSON_LENSES, "member_site"],
   lesson_done: [...PERSON_LENSES, "member_site"],
   mark_read: MEMBERS_AND_BUILDERS,
+  request_join_pod: PERSON_LENSES,
   // That a person is here right now: only their own open site.
   presence: ["member_site"],
   // The guide remembers a member only in their own private talk.

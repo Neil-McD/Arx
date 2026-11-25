@@ -881,7 +881,7 @@ export const readLatestFounderBriefForTrustedManagerInternal = internalQuery({
     ]);
     if (!latest || !latest.delivery?.markdown) {
       const note = !proactiveTier
-        ? "Daily Founder Briefs run on the Chief of Staff plan ($100/mo). Upgrade in Settings to enable automatic morning briefs."
+        ? "Daily Founder Briefs run on the Chief of Staff plan. Enable it in Settings to receive automatic morning briefs."
         : !agentOn
           ? "The community Guide is currently turned off. Turn it on in Settings to receive Daily Founder Briefs."
           : "No Daily Founder Brief has been sent yet. The first morning brief will arrive on the next scheduled morning run.";
@@ -890,14 +890,21 @@ export const readLatestFounderBriefForTrustedManagerInternal = internalQuery({
         markdown: `# Daily Founder Brief — ${String(community.name ?? "Community")}\n\n${note}`,
       };
     }
+    const pausedNotice = !proactiveTier
+      ? "> Note: Daily Founder Briefs are currently paused because this community is not on the Chief of Staff plan. Showing the most recent brief sent."
+      : !agentOn
+        ? "> Note: Daily Founder Briefs are currently paused because the community Guide is turned off. Showing the most recent brief sent."
+        : null;
     const header = [
       `# Daily Founder Brief — ${String(community.name ?? "Community")}`,
       `Date: ${latest.briefDate} · Sent: ${new Date(latest.sentAt ?? latest.updatedAt).toISOString()}`,
+      ...(pausedNotice ? ["", pausedNotice] : []),
       "",
       latest.delivery.markdown,
     ].join("\n");
     return {
       has_brief: true as const,
+      paused: Boolean(pausedNotice),
       brief_date: latest.briefDate,
       sent_at: new Date(latest.sentAt ?? latest.updatedAt).toISOString(),
       markdown: header,

@@ -184,6 +184,21 @@ export function guideDraftSendQuestion(args: {
   return `Post this Guide reply in #${args.targetLabel}?`;
 }
 
+export function communityNoteDeleteQuestion(args: { title: string }): string {
+  return `Delete the community note "${args.title}"? It can't be brought back.`;
+}
+
+export function podRemoveMembersQuestion(args: { podName: string; names: string[] }): string {
+  const who = args.names.length === 1 ? args.names[0] : `these ${args.names.length} people`;
+  return `Remove ${who} from the "${args.podName}" pod? They will lose access to its room and notes.`;
+}
+
+export function podGuideSeatQuestion(args: { podName: string; seated: boolean }): string {
+  return args.seated
+    ? `Seat the community AI in the "${args.podName}" pod? It will be able to read that pod's messages and help its members.`
+    : `Remove the community AI from the "${args.podName}" pod? It will stop reading that pod's messages.`;
+}
+
 export function changeResultLine(args: { operation: string; succeeded: number; asked: number }): string {
   const gone = args.operation === "community.members.ban" ? "banned" : args.operation === "community.members.remove" ? "removed" : null;
   if (gone) {
@@ -198,6 +213,11 @@ export function changeResultLine(args: { operation: string; succeeded: number; a
   if (args.operation === "community.announcement.post") return "The announcement was posted.";
   if (args.operation === "community.journey.remove_stage") return "The stage was removed from the Member Board.";
   if (args.operation === "community.guide_draft.send") return "The guide draft was sent.";
+  if (args.operation === "community.note.delete") return "The community note was deleted.";
+  if (args.operation === "community.pod.remove_members") {
+    return args.asked === 1 ? "They were removed from the pod." : `${args.asked} people were removed from the pod.`;
+  }
+  if (args.operation === "community.pod.set_guide_seat") return "The pod's AI seat was updated.";
   if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
   if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
   return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;
