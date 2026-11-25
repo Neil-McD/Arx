@@ -420,29 +420,52 @@
 /* The community brain's scene (BrainScene.tsx): a simple network straight on
    the page (the community, its branches named, a few dots on each), with the
    card beside it. */
-.pn-landing .scene.live:has(.bsc) { height: 540px; }
+.pn-landing .scene.live:has(.bsc) { height: 600px; }
 .pn-landing .bsc { position: relative; height: 100%; }
-.pn-landing .bsc-net { position: absolute; top: -20px; right: -4%; width: min(720px, 62%); height: auto; overflow: visible; }
+.pn-landing .bsc-net { position: absolute; top: -30px; right: -3%; width: min(760px, 64%); height: auto; overflow: visible; }
 .pn-landing .bsc-net g[role="button"] { cursor: pointer; outline: none; }
 .pn-landing .bsc-hit { fill: transparent; }
-.pn-landing .bsc-branch { transition: opacity .3s; }
-.pn-landing .bsc-branch.dim { opacity: .4; }
-.pn-landing .bsc-trunk { fill: none; stroke: rgba(238, 240, 244, .16); stroke-width: 1.2; transition: stroke .3s; }
-.pn-landing .bsc-twig { stroke: rgba(238, 240, 244, .13); stroke-width: 1; transition: stroke .3s; }
-.pn-landing .bsc-branch.on .bsc-trunk, .pn-landing .bsc-branch.on .bsc-twig { stroke: rgba(196, 181, 253, .55); }
-.pn-landing .bsc-leaf { fill: #5a5f69; transition: fill .2s; }
-.pn-landing .bsc-leaf.new { fill: #a78bfa; filter: drop-shadow(0 0 4px rgba(167, 139, 250, .8)); }
-.pn-landing .bsc-dot:hover .bsc-leaf, .pn-landing .bsc-dot:focus-visible .bsc-leaf { fill: #c9ccd2; }
-.pn-landing .bsc-dot.on .bsc-leaf { fill: #eef0f4; }
-.pn-landing .bsc-hubdot { fill: #d9dbe0; transition: fill .2s; }
-.pn-landing .bsc-hub:hover .bsc-hubdot, .pn-landing .bsc-hub:focus-visible .bsc-hubdot, .pn-landing .bsc-hub.on .bsc-hubdot { fill: #fff; }
+/* Each kind of memory has the app's own look (kit.module.css, .brain-*). */
+.pn-landing .bsc-trunk { fill: none; stroke: rgba(238, 240, 244, .15); stroke-width: 1.1; transition: opacity .3s, stroke .3s; }
+.pn-landing .bsc-trunk.pod { stroke-dasharray: 2 5; }
+.pn-landing .bsc-trunk.on { stroke: rgba(196, 181, 253, .5); }
+.pn-landing .bsc-twig { stroke: rgba(238, 240, 244, .14); stroke-width: .9; transition: opacity .3s; }
+.pn-landing .bsc-thread { fill: none; stroke: rgba(196, 181, 253, .3); stroke-width: .9; stroke-dasharray: 1 3; stroke-linecap: round; transition: opacity .3s; }
+.pn-landing .bsc-signal { fill: none; stroke: #c4b5fd; stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: .05 .95; stroke-dashoffset: 1; opacity: 0; animation: pn-signal 7s linear infinite; pointer-events: none; }
+@keyframes pn-signal { 0% { stroke-dashoffset: 1; opacity: 0; } 4% { opacity: .9; } 34% { stroke-dashoffset: 0; opacity: .9; } 38%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+.pn-landing .bsc-membrane { fill: rgba(167, 139, 250, .04); stroke: rgba(238, 240, 244, .3); stroke-width: 1; stroke-dasharray: 3 4; transition: opacity .3s; }
+.pn-landing .bsc-dot, .pn-landing .bsc-hub { transition: opacity .3s; }
+.pn-landing .bsc-dot.dim, .pn-landing .bsc-hub.dim, .pn-landing .bsc-twig.dim, .pn-landing .bsc-trunk.dim, .pn-landing .bsc-thread.dim, .pn-landing .bsc-membrane.dim { opacity: .2; }
+.pn-landing .bsc-leaf, .pn-landing .bsc-swatch { transition: fill .2s; }
+.pn-landing .k-course { fill: #eceef1; background: #eceef1; }
+.pn-landing .k-learned { fill: #8b8f98; background: #8b8f98; }
+.pn-landing .k-fresh { fill: #c4b2fc; background: #c4b2fc; filter: drop-shadow(0 0 5px rgba(167, 139, 250, .85)); }
+.pn-landing .k-taught { fill: #0b0c0f; stroke: #aeb2ba; stroke-width: 1.5; background: transparent; box-shadow: inset 0 0 0 1.5px #aeb2ba; }
+.pn-landing .k-pod { fill: #8b8f98; background: transparent; box-shadow: inset 0 0 0 1px rgba(238, 240, 244, .5); }
+.pn-landing .bsc-dot:hover .bsc-leaf, .pn-landing .bsc-dot:focus-visible .bsc-leaf { stroke: #fff; stroke-width: 1.2; }
+.pn-landing .bsc-hubdot { fill: #f2f3f5; transition: fill .2s; }
+.pn-landing .h-subject .bsc-hubdot { fill: #9aa0aa; }
+.pn-landing .bsc-hub:hover .bsc-hubdot, .pn-landing .bsc-hub.on .bsc-hubdot { fill: #fff; }
 .pn-landing .bsc-ring { fill: none; stroke: #c4b5fd; stroke-width: 1.4; }
 .pn-landing .bsc-name { fill: #c9ccd2; font-family: "Geist Variable", "Geist", system-ui, sans-serif; font-size: 14px; font-weight: 500; pointer-events: none; }
+.pn-landing .h-pod .bsc-name, .pn-landing .h-subject .bsc-name { fill: #9ea0a3; }
 .pn-landing .bsc-hub:hover .bsc-name, .pn-landing .bsc-hub.on .bsc-name { fill: #fff; }
 .pn-landing .bsc-name.core { fill: #eef0f4; font-size: 13px; }
 .pn-landing .bsc-corering { fill: #0f1011; stroke: #c4b5fd; stroke-width: 1.2; }
 .pn-landing .bsc-coredot { fill: #c4b5fd; }
 .pn-landing .bsc-glow { transform-box: fill-box; transform-origin: center; animation: pn-core 5s ease-in-out infinite; pointer-events: none; }
+/* The key of kinds in the card. */
+.pn-landing .bsc-kinds { display: flex; flex-direction: column; margin-top: 4px; border-top: 1px solid var(--line); }
+.pn-landing .bsc-kind { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 9px 8px; margin: 0 -8px; width: calc(100% + 16px); border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pn-landing .bsc-kind:hover { background: rgba(238, 240, 244, .04); }
+.pn-landing .bsc-kind.on { background: rgba(167, 139, 250, .1); }
+.pn-landing .bsc-kind span { display: flex; flex-direction: column; gap: 1px; }
+.pn-landing .bsc-kind b { font-size: 14px; font-weight: 500; }
+.pn-landing .bsc-kind small { color: var(--quiet); font-size: 12.5px; }
+.pn-landing .bsc-kind em { color: var(--quiet); font-size: 12.5px; font-style: normal; }
+.pn-landing .bsc-swatch { display: block; width: 10px; height: 10px; border-radius: 50%; }
+.pn-landing .bsc-swatch.k-pod { border-radius: 50%; outline: 1px dashed rgba(238, 240, 244, .45); outline-offset: 1px; box-shadow: none; background: #8b8f98; width: 7px; height: 7px; margin: 1.5px; }
+@media (prefers-reduced-motion: reduce) { .pn-landing .bsc-signal { animation: none; } }
 .pn-landing .bsc-next { fill: none; stroke: #a78bfa; stroke-width: 1.4; transform-box: fill-box; transform-origin: center; animation: pn-nextdot 1.8s ease-out infinite; pointer-events: none; }
 @keyframes pn-nextdot { 0% { opacity: .9; transform: scale(.8); } 100% { opacity: 0; transform: scale(2.4); } }
 @media (prefers-reduced-motion: reduce) { .pn-landing .bsc-next, .pn-landing .bsc-glow { animation: none; } }
