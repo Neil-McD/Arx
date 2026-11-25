@@ -645,8 +645,7 @@
 }
 
 .md-table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   border-collapse: collapse;
   color: var(--text-secondary);
   font-size: 0.95em;
@@ -657,12 +656,19 @@
   padding: 0.48em 0.76em;
   text-align: left;
   vertical-align: top;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.md-table-cell .md-inline-code {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .md-table-header-cell {
   color: var(--text-primary);
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .md-table-body .md-table-row + .md-table-row .md-table-cell {

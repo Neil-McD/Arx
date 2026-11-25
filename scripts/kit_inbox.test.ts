@@ -6,8 +6,15 @@ const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
 (globalThis as any).document ??= { documentElement: { dataset: { design: "v1" } } };
 const { renderToStaticMarkup } = await import("react-dom/server");
-const { WebDirectMessageInboxPanel, inboxLeadFor, inboxTimeFor } = await import("../apps/web/src/components/WebDirectMessageInboxPanel");
+const {
+  WebDirectMessageInboxPanel,
+  inboxLeadFor,
+  inboxTimeFor,
+  initialInboxFilterFor,
+  isInboxConversationUnread,
+} = await import("../apps/web/src/components/WebDirectMessageInboxPanel");
 const { WebDirectMessagePanel } = await import("../apps/web/src/components/WebDirectMessagePanel");
+const { resolveActivelyReadingConversationId } = await import("../apps/web/src/controllers/directMessages/directMessageHostHelpers");
 
 const has = (html: string, ...names: string[]) =>
   new RegExp(`class="${names.map((name) => `_${name}_[^ "]*`).join(" ")}"`).test(html);
@@ -146,4 +153,67 @@ test("the person's face and name in a conversation open their profile, when ther
     expect(html).not.toContain("community-dm-kit-peer");
     expect(html).toContain("Jon");
   }
+});
+
+test("actively reading an open conversation suppresses unread flicker while other unread chats still count", () => {
+  const rashid = conversation("rashid", "Rashid", true, { id: "polynet", name: "Polynet" });
+  const ray = conversation("ray", "Ray", true, { id: "polynet", name: "Polynet" });
+
+  // While actively chatting with Rashid, incoming messages from Rashid don't flash as unread.
+  expect(isInboxConversationUnread(rashid as any, "rashid")).toBe(false);
+  // Another person's unread message still counts as needing a reply.
+  expect(isInboxConversationUnread(ray as any, "rashid")).toBe(true);
+  // Before touching an auto-opened conversation (deferRead), it still counts as unread.
+  expect(isInboxConversationUnread(rashid as any, null)).toBe(true);
+
+  const html = renderToStaticMarkup(React.createElement(WebDirectMessageInboxPanel, {
+    conversations: [rashid, conversation("ray", "Ray", false, { id: "polynet", name: "Polynet" })],
+    isLoading: false, error: null, searchValue: "", people: [], isLoadingPeople: false, peopleError: null,
+    sourceCommunityCount: 1, canBrowsePeople: true, sessionUserId: "me",
+    getInitials: (value: string) => value.slice(0, 1), getAvatarColor: () => "#555",
+    onSearchValueChange: () => {}, onSelectConversation: () => {}, onSelectPerson: () => {},
+    activeConversationId: "rashid",
+    activelyReadingConversationId: "rashid",
+    kitPage: { activeCommunityId: "polynet" },
+  } as any));
+  expect(html).toContain("Nothing here needs a reply.");
+  expect(html).toContain("<b>Rashid</b>");
+  expect(html).toContain("<b>Ray</b>");
+  expect(html).not.toContain("Needs a reply · 1");
+});
+
+test("initialInboxFilterFor waits for inbox data, then latches once so live replies never flip tabs", () => {
+  expect(initialInboxFilterFor({ conversationsCount: 0, isLoading: true, needsReply: 0 })).toBeNull();
+  expect(initialInboxFilterFor({ conversationsCount: 0, isLoading: false, needsReply: 0 })).toBeNull();
+  expect(initialInboxFilterFor({ conversationsCount: 5, isLoading: false, needsReply: 0 })).toBe("all");
+  expect(initialInboxFilterFor({ conversationsCount: 5, isLoading: false, needsReply: 2 })).toBe("reply");
+});
+
+test("resolveActivelyReadingConversationId suppresses unread indicators only while engaged and following live messages", () => {
+  expect(resolveActivelyReadingConversationId({
+    isOpen: true,
+    activeConversationId: "rashid",
+    deferRead: false,
+    isFollowingLive: true,
+  })).toBe("rashid");
+  // Scrolled up reading older history: keep unread indicators visible until scrolled back down.
+  expect(resolveActivelyReadingConversationId({
+    isOpen: true,
+    activeConversationId: "rashid",
+    deferRead: false,
+    isFollowingLive: false,
+  })).toBeNull();
+  // Auto-opened untouched conversation (deferRead): keep unread until engaged.
+  expect(resolveActivelyReadingConversationId({
+    isOpen: true,
+    activeConversationId: "rashid",
+    deferRead: true,
+    isFollowingLive: true,
+  })).toBeNull();
+  expect(resolveActivelyReadingConversationId({
+    isOpen: false,
+    activeConversationId: "rashid",
+    deferRead: false,
+    isFollowingLive: true,
+  })).toBeNull();
 });

@@ -33,6 +33,7 @@ import {
   hasUnreadyDirectAttachments,
   isVirtualDirectConversationId,
   mergeDirectPanelMessages,
+  resolveActivelyReadingConversationId,
   resolveDirectMessageSession,
   toErrorMessage,
   virtualPeerUserIdFromConversationId,
@@ -184,6 +185,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [isLoadingInbox, setIsLoadingInbox] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [directMessagePanel, setDirectMessagePanel] = useState<DirectMessagePanelState | null>(null);
+  const [isFollowingActiveConversation, setIsFollowingActiveConversation] = useState(true);
   const [searchValue, setSearchValue] = useState("");
   const [networkPeople, setNetworkPeople] = useState<DirectMessageNetworkPerson[]>([]);
   const [isLoadingPeople, setIsLoadingPeople] = useState(false);
@@ -541,9 +543,23 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     };
   }, [activeConversationId, isOpen, listStaysVisible, loadNetworkPeople, searchValue]);
 
+  const activeEngagedConversationId = resolveActivelyReadingConversationId({
+    isOpen,
+    activeConversationId,
+    deferRead: directMessagePanel?.deferRead,
+    isFollowingLive: isFollowingActiveConversation,
+  });
+
   useEffect(() => {
-    onUnreadCountChange?.(countDirectInboxUnread(conversations, true));
-  }, [conversations, onUnreadCountChange]);
+    const visibleForBadge = activeEngagedConversationId
+      ? conversations.map((conversation) =>
+          conversation.id === activeEngagedConversationId
+            ? { ...conversation, has_unread: false, unread_count: 0 }
+            : conversation,
+        )
+      : conversations;
+    onUnreadCountChange?.(countDirectInboxUnread(visibleForBadge, true));
+  }, [activeEngagedConversationId, conversations, onUnreadCountChange]);
 
   const markConversationRead = useCallback(
     async (conversationId: string, throughSeq: number) => {
@@ -630,6 +646,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const openPanelForConversation = useCallback(
     (conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => {
       const panelState = buildPanelStateForConversation(conversation);
+      setIsFollowingActiveConversation(true);
       setDirectMessagePanel(options?.deferRead ? { ...panelState, deferRead: true } : panelState);
       if (!options?.deferRead) void markConversationRead(conversation.id, conversation.last_seq);
     },
@@ -1341,6 +1358,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             if (directMessagePanel.deferRead) return;
             void markConversationRead(directMessagePanel.conversation.id, seq);
           }}
+          onFollowingLiveChange={setIsFollowingActiveConversation}
           onEngage={directMessagePanel.deferRead ? () => {
             const conversation = directMessagePanel.conversation;
             setDirectMessagePanel((previous) =>
@@ -1379,6 +1397,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           getAvatarColor={getAvatarColor}
           onSearchValueChange={setSearchValue}
           activeConversationId={activeConversationId}
+          activelyReadingConversationId={activeEngagedConversationId}
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
           kitPage={{ activeCommunityId: props.activeCommunityId ?? null }}
