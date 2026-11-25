@@ -401,6 +401,10 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     recurrence_frequency: { type: "string", enum: ["none", "daily", "weekly", "monthly"] },
     recurrence_interval: { type: "integer", minimum: 1, maximum: 52 },
     recurrence_until: { type: ["string", "null"], maxLength: 40 },
+    scope: { type: "string", enum: ["occurrence", "series"] },
+    occurrence_starts_at: { type: "string", maxLength: 40 },
+    note: { type: "string", maxLength: 500 },
+    send_email: { type: "boolean" },
     done: { type: "boolean" },
     // The community itself (owners and admins).
     name: { type: "string", minLength: 1, maxLength: 120 },

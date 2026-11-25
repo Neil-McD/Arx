@@ -27,7 +27,7 @@ describe("the operations list", () => {
     const of = (effect: string) => CALL_OPERATION_NAMES.filter((name) => CALL_OPERATIONS[name].effect === effect);
     expect(of("destroy")).toEqual(["community.interaction.remove", "community.course.delete", "community.members.remove", "community.members.ban"]);
     // What every member is told. Opening the community is join_mode.set's variant.
-    expect(of("broadcast")).toEqual(["community.agent.instructions.set", "community.handbook.approve", "community.course.publish"]);
+    expect(of("broadcast")).toEqual(["community.agent.instructions.set", "community.handbook.approve", "community.event.cancel", "community.announcement.post", "community.course.publish"]);
     expect(CALL_OPERATION_VARIANTS["community.join_mode.set:open"]).toMatchObject({ effect: "broadcast", ask: "every_time" });
   });
 
@@ -41,6 +41,8 @@ describe("the operations list", () => {
       "community.interaction.remove": "every_time",
       "community.agent.instructions.set": "every_time",
       "community.handbook.approve": "every_time",
+      "community.event.cancel": "every_time",
+      "community.announcement.post": "every_time",
       "community.course.publish": "every_time",
       "community.course.delete": "every_time",
       "community.members.set_role": "every_time",

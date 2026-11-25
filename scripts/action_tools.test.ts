@@ -250,6 +250,10 @@ describe("a named tool is the call the executor already runs", () => {
     expect(run("polynet_require_approval_to_join", { community: "run-club" }).input).toMatchObject({ operation: "community.join_mode.set", input: { mode: "approval" } });
     expect(run("polynet_update_event", { community: "run-club", event: "e1", location_label: "Boathouse" }).input)
       .toMatchObject({ operation: "community.event.update", input: { event: "e1", location_label: "Boathouse" } });
+    expect(run("polynet_cancel_event", { community: "run-club", event: "e1", scope: "occurrence", occurrence_starts_at: "2026-12-04T15:00:00.000Z", note: "Out this week" }).input)
+      .toMatchObject({ operation: "community.event.cancel", input: { event: "e1", scope: "occurrence", occurrence_starts_at: "2026-12-04T15:00:00.000Z", note: "Out this week" } });
+    expect(run("polynet_announce", { community: "run-club", channel: "general", text: "No call this Thursday.", send_email: false }).input)
+      .toMatchObject({ operation: "community.announcement.post", input: { channel: "general", text: "No call this Thursday.", send_email: false } });
     expect(run("polynet_approve_join_requests", { community: "run-club", requests: [{ ref: "join-request:r1", created_at: "t1", updated_at: "t2" }] }).input)
       .toMatchObject({ operation: "community.admission.approve", input: { requests: [{ request_ref: "join-request:r1", expected_created_at: "t1", expected_updated_at: "t2" }] } });
     expect(run("polynet_update_community", { community: "run-club", revision: 4, one_liner: "We run." }).input)
@@ -330,7 +334,7 @@ describe("what reviewers and their scanners check, on every tool an outside AI i
   });
   it("what emails people is labelled as reaching beyond the chat; the rest isn't", () => {
     const open = (shown() as any[]).filter((tool) => tool.annotations.openWorldHint).map((tool) => tool.name).sort();
-    expect(open).toEqual(["polynet_approve_join_requests", "polynet_create_event", "polynet_update_community", "polynet_update_event"]);
+    expect(open).toEqual(["polynet_announce", "polynet_approve_join_requests", "polynet_cancel_event", "polynet_create_event", "polynet_update_community", "polynet_update_event"]);
   });
   it("an outside AI is told a DM reply is sent, never that the person is asked", () => {
     const dm = actionToolDefinition(ACTION_TOOLS.find((tool) => tool.name === "polynet_reply_message")!);

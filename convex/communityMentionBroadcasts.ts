@@ -1,9 +1,10 @@
 import { internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   communityMembershipRowIsActive,
   normalizeIdValue,
+  requireCommunityManager,
   type CommunityLike,
   type CommunityMembershipLike,
 } from "./communityCore";
@@ -277,6 +278,7 @@ export async function scheduleEverybodyMentionBroadcast(args: {
   actorUserId: any;
   sourceMentionId: any;
   nowMs: number;
+  forceInAppOnly?: boolean;
 }): Promise<{ broadcastId: any; emailMode: BroadcastEmailMode }> {
   if (!args.rootId) {
     throw new Error("interaction_mention_broadcast_source_required");
@@ -290,11 +292,16 @@ export async function scheduleEverybodyMentionBroadcast(args: {
   ) {
     throw new Error("interaction_mention_broadcast_channel_invalid");
   }
-  const availability = await readEverybodyMentionEmailAvailability({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    nowMs: args.nowMs,
-  });
+  const emailMode: BroadcastEmailMode =
+    args.forceInAppOnly === true
+      ? "in_app_only"
+      : (
+          await readEverybodyMentionEmailAvailability({
+            ctx: args.ctx,
+            communityId: args.communityId,
+            nowMs: args.nowMs,
+          })
+        ).emailMode;
   const broadcastId = await args.ctx.db.insert("communityMentionBroadcasts" as any, {
     communityId: args.communityId,
     channelId: args.channelId,
@@ -303,7 +310,7 @@ export async function scheduleEverybodyMentionBroadcast(args: {
     sourceRootId: args.rootId,
     sourceMentionId: args.sourceMentionId,
     sourceCreatedAt: args.nowMs,
-    emailMode: availability.emailMode,
+    emailMode,
     status: "queued",
     ownerProcessed: false,
     processedCount: 0,
@@ -324,8 +331,44 @@ export async function scheduleEverybodyMentionBroadcast(args: {
       limit: 1,
     },
   );
-  return { broadcastId, emailMode: availability.emailMode };
+  return { broadcastId, emailMode };
 }
+
+export const describeAnnouncementTargetInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    channelSlug: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const slug = args.channelSlug.trim().toLowerCase();
+    if (!slug) return { ok: false as const, code: "community_channel_not_found" as const };
+    const channel = (await ctx.db
+      .query("communityChannels" as any)
+      .withIndex("by_community_slug", (q: any) => q.eq("communityId", args.communityId).eq("slug", slug))
+      .first()) as CommunityChannelLike | null;
+    if (!channel || channel.status !== "active") {
+      return { ok: false as const, code: "community_channel_not_found" as const };
+    }
+    if (channel.accessMode !== "all_members") {
+      return { ok: false as const, code: "community_announcement_channel_restricted" as const };
+    }
+    const availability = await readEverybodyMentionEmailAvailability({
+      ctx,
+      communityId: args.communityId,
+      nowMs: args.nowMs ?? Date.now(),
+    });
+    return {
+      ok: true as const,
+      channelSlug: channel.slug,
+      channelName: channel.name,
+      emailMode: availability.emailMode,
+      cooldownUntil: availability.cooldownUntil,
+    };
+  },
+});
 
 async function getExistingMentionRowForBroadcastRecipient(args: {
   ctx: any;

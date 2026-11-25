@@ -114,10 +114,12 @@ export const CALL_OPERATIONS = {
   "community.channel.move": entry("builder", "write", "builder_change"),
   // Who runs the community.
   // Events members see (not a pod's calls: those are changed in the pod).
-  // A cancelled event can be put back in the app.
+  // Cancelling emails members automatically, so it waits for the person's yes.
   "community.event.create": entry("builder", "write", "builder_change"),
   "community.event.update": entry("builder", "write", "builder_change"),
-  "community.event.cancel": entry("builder", "write", "builder_change"),
+  "community.event.cancel": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
+  // An @everybody announcement to the whole community (owners and admins only).
+  "community.announcement.post": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
   // A course members see, or stop seeing, all at once; and deleting what they
   // can see. Asked every time (a course batch builds in draft only).
   "community.course.publish": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),

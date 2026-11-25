@@ -42,7 +42,7 @@ import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  courseDeleteQuestion, coursePublishQuestion, guideInstructionsQuestion, handbookQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
+  announcementQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideInstructionsQuestion, handbookQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -112,6 +112,7 @@ const EVENT_CREATE_OPERATION = "community.event.create";
 const EVENT_UPDATE_OPERATION = "community.event.update";
 const EVENT_CANCEL_OPERATION = "community.event.cancel";
 const EVENT_OPERATIONS = [EVENT_CREATE_OPERATION, EVENT_UPDATE_OPERATION, EVENT_CANCEL_OPERATION];
+const ANNOUNCEMENT_POST_OPERATION = "community.announcement.post";
 // An event made through an AI is for members; making one public is the app's.
 const EVENT_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezone", "location_type", "location_label", "url",
   "recurrence_frequency", "recurrence_interval", "recurrence_until"];
@@ -119,7 +120,7 @@ const EVENT_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezo
 const COURSE_PUBLISH_OPERATION = "community.course.publish";
 const COURSE_DELETE_OPERATION = "community.course.delete";
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS,
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS, ANNOUNCEMENT_POST_OPERATION,
   COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
@@ -1002,9 +1003,22 @@ function capabilityDocument(args: {
       result: "result: { event }, as the events listing shows it", effects: [args.operation === EVENT_CREATE_OPERATION ? "create_event_members_see" : "change_event"],
       forbidden_effects: ["pod_calls", "public_events", "notify_members"] }
     : args.operation === EVENT_CANCEL_OPERATION ? {
-      required: ["event"], event: "parent_event_id from the events listing; a repeating event is cancelled whole",
-      result: "result: { event } with status cancelled. A person can put it back in the app.", effects: ["cancel_event"],
-      forbidden_effects: ["delete_event", "pod_calls", "notify_members"] }
+      required: ["event"], optional: ["scope", "occurrence_starts_at", "note"],
+      event: "parent_event_id from the events listing",
+      scope: "\"occurrence\" cancels one date of a repeating event (needs occurrence_starts_at); \"series\" cancels the whole event (default)",
+      occurrence_starts_at: "exact ISO start time from starts_at or next_starts_at in the events listing",
+      note: "optional short note from the host (up to 500 characters), shown on the cancelled event and included in the cancellation email",
+      result: "the person is shown the cancellation with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { event } with status cancelled, and members are emailed automatically.",
+      effects: ["cancel_event_and_email_members_after_the_persons_yes"],
+      forbidden_effects: ["delete_event", "pod_calls"] }
+    : args.operation === ANNOUNCEMENT_POST_OPERATION ? {
+      required: ["channel", "text"], optional: ["send_email"],
+      channel: "a shared channel slug from the channels listing (such as general)",
+      text: "the announcement words (up to 8,000 characters); @everybody is added automatically if not present",
+      send_email: "true (default) emails members if outside the 72-hour cooldown; false notifies in-app only",
+      result: "the person is shown the announcement with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { post_ref, channel, text, email_mode }.",
+      effects: ["post_everybody_announcement_after_the_persons_yes"],
+      forbidden_effects: ["private_channels", "pods", "replies"] }
     : args.operation === CHANNEL_CREATE_OPERATION ? {
       required: ["name"], name: "the channel's name (up to 40 characters); its slug is made from it",
       result: "result: { channel: { slug, name, description, position } }", effects: ["create_channel_open_to_members"],
@@ -3090,6 +3104,67 @@ async function askPersonFirst(args: {
         if (!found.live) return canonicalError("not_published", "That is a draft: delete it with polynet_delete_draft (the guide: a delete in polynet_change_courses), no question needed.");
         question = courseDeleteQuestion(found);
       }
+    } else if (operation === EVENT_CANCEL_OPERATION) {
+      const eventId = typeof callInput.event === "string" ? callInput.event.trim() : "";
+      const scope = callInput.scope === "occurrence" || callInput.scope === "series" ? callInput.scope : undefined;
+      const occurrenceStartsAtIso = typeof callInput.occurrence_starts_at === "string" ? callInput.occurrence_starts_at.trim() : undefined;
+      const note = typeof callInput.note === "string" ? callInput.note.trim() : "";
+      if (!eventId || eventId.length > 64 || (callInput.scope !== undefined && !scope) ||
+          (scope === "occurrence" && !occurrenceStartsAtIso) ||
+          (callInput.occurrence_starts_at !== undefined && (!occurrenceStartsAtIso || occurrenceStartsAtIso.length > 40)) ||
+          (callInput.note !== undefined && (typeof callInput.note !== "string" || note.length > 500))) return null;
+      const found = await args.ctx.runQuery((internal as any).communityEvents.describeEventCancellationTargetInternal, {
+        userId: args.userId,
+        communityId: target.communityId,
+        eventId,
+        ...(scope ? { scope } : {}),
+        ...(occurrenceStartsAtIso ? { occurrenceStartsAtIso } : {}),
+      }) as { ok: true; title: string; isRecurring: boolean; effectiveScope: "occurrence" | "series"; whenLabel: string | null; willEmail: boolean; alreadyCancelled: boolean }
+        | { ok: false; code: string };
+      if (!found.ok) {
+        const refusal = COMMUNITY_REFUSALS[found.code] ?? ["event_not_found", "No event with that id here. List events/ and use its parent_event_id."];
+        return canonicalError(refusal[0], refusal[1]);
+      }
+      if (found.alreadyCancelled) {
+        return canonicalError("nothing_to_change", found.effectiveScope === "occurrence" ? "That date is already cancelled." : "That event is already cancelled.");
+      }
+      question = eventCancelQuestion({
+        title: found.title,
+        scope: found.effectiveScope,
+        isRecurring: found.isRecurring,
+        whenLabel: found.whenLabel,
+        willEmail: found.willEmail,
+      });
+      if (note) text = `Note for members: ${note}`;
+    } else if (operation === ANNOUNCEMENT_POST_OPERATION) {
+      const channelSlug = typeof callInput.channel === "string" ? callInput.channel.trim() : "";
+      const words = typeof callInput.text === "string" ? callInput.text.trim() : "";
+      if (!channelSlug || channelSlug.length > 64 || !words || words.length > 8_000 ||
+          (callInput.send_email !== undefined && typeof callInput.send_email !== "boolean")) return null;
+      const found = await args.ctx.runQuery((internal as any).communityMentionBroadcasts.describeAnnouncementTargetInternal, {
+        communityId: target.communityId,
+        userId: args.userId,
+        channelSlug,
+      }) as { ok: true; channelSlug: string; channelName: string; emailMode: "in_app_only" | "in_app_and_email"; cooldownUntil: number | null }
+        | { ok: false; code: string };
+      if (!found.ok) {
+        const refusal = COMMUNITY_REFUSALS[found.code] ?? ["channel_not_found", "No shared channel with that slug here. List channels/ for the slugs."];
+        return canonicalError(refusal[0], refusal[1]);
+      }
+      const inAppRequested = callInput.send_email === false;
+      const willEmail = !inAppRequested && found.emailMode === "in_app_and_email";
+      const cooldownUntilLabel =
+        !inAppRequested && !willEmail && typeof found.cooldownUntil === "number"
+          ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" }).format(new Date(found.cooldownUntil))
+          : null;
+      place = found.channelName;
+      question = announcementQuestion({
+        channelName: found.channelName,
+        willEmail,
+        inAppRequested,
+        cooldownUntilLabel,
+      });
+      text = words;
     } else {
       const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
       if (!refs) return null;
@@ -3365,6 +3440,11 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_general_channel_immutable: ["general_channel_fixed", "General can't be renamed or moved."],
   community_event_not_found: ["event_not_found", "No event with that id here. List events/ and use its parent_event_id."],
   community_event_pod_call: ["event_is_pod_call", "That is a pod's call. It is changed in its pod, in the app."],
+  community_event_occurrence_invalid: ["invalid_tool_args", "occurrence_starts_at must be an exact ISO start time from starts_at or next_starts_at in the events listing."],
+  community_event_occurrence_not_found: ["event_occurrence_not_found", "That date isn't a scheduled occurrence of this event. List events/ and copy starts_at or next_starts_at."],
+  community_announcement_channel_restricted: ["channel_restricted", "Announcements can only be posted in a shared channel open to all members (such as general), never in a private channel or pod."],
+  interaction_content_required: ["invalid_tool_args", "Give the announcement words."],
+  profile_setup_required: ["profile_setup_required", "Finish setting up your profile in Polynet before posting announcements."],
   community_event_starts_at_invalid: ["invalid_tool_args", "starts_at isn't a time. Use an ISO time with its offset, such as 2026-11-21T07:00:00-05:00."],
   community_event_ends_at_invalid: ["invalid_tool_args", "ends_at must be a time after starts_at."],
   community_event_timezone_invalid: ["invalid_tool_args", "timezone must be an IANA zone, such as America/New_York."],
@@ -3398,7 +3478,15 @@ async function executeCommunityOperation(args: {
     : operation === EVENT_CREATE_OPERATION ? only(EVENT_FIELDS) && text("title", 200) && String(rawInput.title).trim().length > 0 &&
       text("starts_at", 40) && text("timezone", 64)
     : operation === EVENT_UPDATE_OPERATION ? only(["event", ...EVENT_FIELDS]) && text("event", 64) && EVENT_FIELDS.some(key => key in rawInput)
-    : operation === EVENT_CANCEL_OPERATION ? only(["event"]) && text("event", 64)
+    : operation === EVENT_CANCEL_OPERATION
+      ? only(["event", "scope", "occurrence_starts_at", "note"]) && text("event", 64) &&
+        (rawInput.scope === undefined || rawInput.scope === "occurrence" || rawInput.scope === "series") &&
+        (rawInput.scope !== "occurrence" || text("occurrence_starts_at", 40)) &&
+        (rawInput.occurrence_starts_at === undefined || text("occurrence_starts_at", 40)) &&
+        (rawInput.note === undefined || text("note", 500))
+    : operation === ANNOUNCEMENT_POST_OPERATION
+      ? only(["channel", "text", "send_email"]) && text("channel", 64) && text("text", 8_000) && String(rawInput.text).trim().length > 0 &&
+        (rawInput.send_email === undefined || typeof rawInput.send_email === "boolean")
     : operation === CHANNEL_CREATE_OPERATION ? only(["name"]) && text("name", 80) && String(rawInput.name).trim().length > 0
     : operation === CHANNEL_RENAME_OPERATION ? only(["channel", "name"]) && text("channel", 64) && text("name", 80) && String(rawInput.name).trim().length > 0
     : operation === CHANNEL_DESCRIBE_OPERATION ? only(["channel", "description"]) && text("channel", 64) && text("description", 400)
@@ -3415,7 +3503,8 @@ async function executeCommunityOperation(args: {
       : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 12,000 characters)."
       : operation === EVENT_CREATE_OPERATION ? "Give title, starts_at (an ISO time) and timezone (an IANA zone), and only the fields the capability lists."
       : operation === EVENT_UPDATE_OPERATION ? "Give event (its parent_event_id) and at least one field to change."
-      : operation === EVENT_CANCEL_OPERATION ? "Give event (its parent_event_id)."
+      : operation === EVENT_CANCEL_OPERATION ? "Give event (its parent_event_id), and optional scope (\"occurrence\" or \"series\"), occurrence_starts_at (required for \"occurrence\"), and note (up to 500 characters)."
+      : operation === ANNOUNCEMENT_POST_OPERATION ? "Give channel (a shared channel slug), text (up to 8,000 characters), and optional send_email (true or false)."
       : operation === CHANNEL_CREATE_OPERATION ? "Give name."
       : operation === CHANNEL_RENAME_OPERATION ? "Give channel (its slug) and name."
       : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
@@ -3436,6 +3525,12 @@ async function executeCommunityOperation(args: {
       : operation === COURSE_PUBLISH_OPERATION || operation === COURSE_DELETE_OPERATION
         ? personOnly({ what: operation === COURSE_PUBLISH_OPERATION ? "Publishing or unpublishing a course" : "Deleting a published course or lesson",
           where: "Knowledge: open the course, then the Published switch or Delete", path: buildCommunityTabPath(target.communitySlug, "resources") })
+      : operation === EVENT_CANCEL_OPERATION
+        ? personOnly({ what: "Cancelling a community event", where: "Events: open the event, then Cancel event",
+          path: buildCommunityTabPath(target.communitySlug, "events") })
+      : operation === ANNOUNCEMENT_POST_OPERATION
+        ? personOnly({ what: "Posting an @everybody announcement", where: "Chat: open a shared channel and mention @everybody",
+          path: buildCommunityTabPath(target.communitySlug, "chat") })
         : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
           path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }
