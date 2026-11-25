@@ -12,7 +12,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
-import { readCanonicalUserIdentityProjection } from "./profileCore";
+import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
@@ -88,16 +88,6 @@ export function validTimeZone(timeZone: string): boolean {
 function clip(raw: unknown, max: number): string {
   const text = String(raw ?? "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-export async function displayName(ctx: any, userId: unknown, cache: Map<string, string>): Promise<string> {
-  const key = String(userId ?? "");
-  if (!key) return "A member";
-  if (!cache.has(key)) {
-    const identity = await readCanonicalUserIdentityProjection(ctx, userId as any).catch(() => null);
-    cache.set(key, identity?.displayName || (identity?.handle ? `@${identity.handle}` : "A member"));
-  }
-  return cache.get(key)!;
 }
 
 export async function buildSnapshot(

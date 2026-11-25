@@ -10,7 +10,7 @@ import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from ".
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { seatReasons, setChannelParticipantCore } from "./communityChannelParticipants";
 import { assertUnclaimedPublicImageStorageId, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager, resolvePublicUserId } from "./communityCore";
-import { displayName } from "./communityFounderBrief";
+import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { notesByUpdated, podScopeKey } from "./communityNotesStore";
 import { podPaymentStateOf, podPriceOf } from "./communityPodPayments";

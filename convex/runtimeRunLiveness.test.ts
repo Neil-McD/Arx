@@ -3,11 +3,10 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob(["./threads.ts", "./_generated/**/*.*s"]);
-const apiRefs = api as any;
 const internalRefs = internal as any;
 
 async function createFixture() {
@@ -90,7 +89,7 @@ test("terminal runs reject new public and internal events but replay existing ev
     nowMs: 2_000,
   };
   const created = await asOwner.mutation(
-    apiRefs.threads.appendCloudRuntimeRunEvent,
+    internalRefs.threads.appendCloudRuntimeRunEvent,
     eventArgs,
   );
   await t.run(async (ctx) => {
@@ -102,7 +101,7 @@ test("terminal runs reject new public and internal events but replay existing ev
   });
 
   await expect(
-    asOwner.mutation(apiRefs.threads.appendCloudRuntimeRunEvent, {
+    asOwner.mutation(internalRefs.threads.appendCloudRuntimeRunEvent, {
       ...eventArgs,
       eventKey: `${ids.runId}:tool_call_started:2`,
       nowMs: 3_000,
@@ -110,7 +109,7 @@ test("terminal runs reject new public and internal events but replay existing ev
   ).rejects.toThrow("runtime_run_not_active");
 
   const replayed = await asOwner.mutation(
-    apiRefs.threads.appendCloudRuntimeRunEvent,
+    internalRefs.threads.appendCloudRuntimeRunEvent,
     { ...eventArgs, payload: { ignored: true }, nowMs: 4_000 },
   );
   expect(replayed._id).toBe(created._id);

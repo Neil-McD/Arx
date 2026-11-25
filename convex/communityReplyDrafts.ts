@@ -18,7 +18,7 @@ import { communityAgentIsOn } from "./communityApps";
 import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import { communityResourceIsLiveModulePage, communityResourceModuleIsLive, normalizeIdValue } from "./communityCore";
-import { displayName } from "./communityFounderBrief";
+import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { communityTimeZone, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import {
   communityScopeKey,

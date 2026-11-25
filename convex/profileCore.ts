@@ -39,6 +39,23 @@ export async function readCanonicalUserIdentityProjection(
   };
 }
 
+// A person's name for a sentence: display name, else @handle, else the
+// fallback. Reads each user once per cache.
+export async function readCachedUserDisplayName(
+  ctx: any,
+  userId: unknown,
+  cache: Map<string, string>,
+  fallback = "A member",
+): Promise<string> {
+  const key = String(userId ?? "");
+  if (!key) return fallback;
+  if (!cache.has(key)) {
+    const identity = await readCanonicalUserIdentityProjection(ctx, userId as any).catch(() => null);
+    cache.set(key, identity?.displayName || (identity?.handle ? `@${identity.handle}` : fallback));
+  }
+  return cache.get(key)!;
+}
+
 export async function getUniqueUserByNormalizedHandle<TRow = any>(
   ctx: any,
   normalizedHandle: string,

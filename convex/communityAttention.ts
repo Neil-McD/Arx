@@ -19,7 +19,7 @@ import {
   readCommunityChannelReadState,
   readCommunityChatReadState,
 } from "./communityReadCursorCore";
-import { readCanonicalUserIdentityProjection } from "./profileCore";
+import { readCachedUserDisplayName } from "./profileCore";
 import { homeTagLines, type HomeTag } from "../shared/communityHomeTags";
 import {
   type CommunityChannelLike,
@@ -924,15 +924,7 @@ export const listMyHomeTags = query({
       return positions.get(key)!;
     };
     const names = new Map<string, string>();
-    const nameOf = async (authorId: any) => {
-      const key = normalizeIdValue(authorId);
-      if (!key) return "Someone";
-      if (!names.has(key)) {
-        const identity = await readCanonicalUserIdentityProjection(ctx, authorId).catch(() => null);
-        names.set(key, identity?.displayName || (identity?.handle ? `@${identity.handle}` : "Someone"));
-      }
-      return names.get(key)!;
-    };
+    const nameOf = (authorId: any) => readCachedUserDisplayName(ctx, authorId, names, "Someone");
     const viewerKey = normalizeIdValue(userId);
     const tags: HomeTag[] = [];
     for (const mention of rows) {

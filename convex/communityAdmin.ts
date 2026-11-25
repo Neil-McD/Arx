@@ -8,7 +8,6 @@ import {
   maybeScheduleMemberSearchBackfill,
   syncCommunityMemberSearchEntry,
 } from "./communityMemberSearch";
-import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";

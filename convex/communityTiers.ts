@@ -29,6 +29,22 @@ const PRICE_MAX = 1_000_000;
 // Grants the community gives itself: every member holds "community", and a
 // pod's members "pod:<slug>". Builders name the rest.
 const GRANT_PATTERN = /^[a-z0-9][a-z0-9:_.-]{0,39}$/;
+// A named plan's key, as checkout and plan change accept it.
+export const PLAN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
+
+// The names of the live pods a plan includes, at most four. Pass maxNameLength
+// to cut each name; leave it out to keep names whole.
+export async function planPodNames(ctx: any, communityId: any, channelIds: any[] | undefined, maxNameLength?: number): Promise<string[]> {
+  const names: string[] = [];
+  for (const channelId of channelIds ?? []) {
+    const room = await ctx.db.get(channelId) as any;
+    if (room && String(room.communityId) === String(communityId) && room.status === "active" && room.accessMode === "restricted") {
+      const name = String(room.name ?? "");
+      names.push(maxNameLength === undefined ? name : name.slice(0, maxNameLength));
+    }
+  }
+  return names.filter(Boolean).slice(0, 4);
+}
 
 export function normalizeTierGrants(raw: string[]): string[] {
   const grants: string[] = [];

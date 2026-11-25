@@ -13,7 +13,7 @@ import {
   normalizeIdValue,
 } from "./communityCore";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
-import { readCanonicalUserIdentityProjection } from "./profileCore";
+import { readCachedUserDisplayName as nameOf } from "./profileCore";
 import {
   COURSE_STALL_MIN_AGE_MS,
   MEMBER_COACH_DRAFT_MAX_AGE_MS,
@@ -60,16 +60,6 @@ export type FounderChiefOfStaffSignals = {
     messages7d: number;
   }>;
 };
-
-async function nameOf(ctx: any, userId: unknown, cache: Map<string, string>): Promise<string> {
-  const key = String(userId ?? "");
-  if (!key) return "A member";
-  if (!cache.has(key)) {
-    const identity = await readCanonicalUserIdentityProjection(ctx, userId as any).catch(() => null);
-    cache.set(key, identity?.displayName || (identity?.handle ? `@${identity.handle}` : "A member"));
-  }
-  return cache.get(key)!;
-}
 
 async function readProactiveGuideSummary(
   ctx: any,

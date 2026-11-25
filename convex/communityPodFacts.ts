@@ -10,7 +10,7 @@ import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { normalizeIdValue } from "./communityCore";
-import { displayName } from "./communityFounderBrief";
+import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { nextPodCall } from "./communityEvents";
 import { podPriceOf } from "./communityPodPayments";
 import { hostNames, memberGrants, podRecord, podVisibilityOf } from "./communityPods";
