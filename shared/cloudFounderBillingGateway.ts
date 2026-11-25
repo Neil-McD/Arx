@@ -4,6 +4,10 @@ import type {
   BuilderFundingLane,
   BuilderFundingState,
 } from "./builderFunding";
+import {
+  POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
+  type FounderPlanTier,
+} from "./founderPlan";
 
 export type CloudFounderBillingCommunityStatus =
   | "operator_comped"
@@ -28,6 +32,8 @@ export type CloudFounderBillingCommunity = {
   allowed_actions: BuilderFundingAction[];
   funding_mode: "managed" | "operator_comp";
   status: CloudFounderBillingCommunityStatus;
+  plan_tier?: FounderPlanTier | null;
+  pending_checkout_plan_tier?: FounderPlanTier | null;
   monthly_price_base_units: number;
   platform_fee_bps: number;
   checkout_pending: boolean;
@@ -39,6 +45,9 @@ export type CloudFounderBillingCommunity = {
 
 export type CloudFounderBillingOverview = {
   monthly_price_base_units: number;
+  guide_tier_available?: boolean;
+  guide_monthly_price_base_units?: number;
+  chief_of_staff_monthly_price_base_units?: number;
   communities: CloudFounderBillingCommunity[];
   unassigned_subscriptions: CloudFounderBillingUnassignedSubscription[];
   managed_monthly_total_base_units: number;
@@ -47,6 +56,7 @@ export type CloudFounderBillingOverview = {
 export type CloudFounderBillingUnassignedSubscription = {
   subscription_id: string;
   status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  plan_tier?: FounderPlanTier;
   grants_setup: boolean;
   monthly_price_base_units: number;
   current_period_start_at: string;
@@ -56,10 +66,18 @@ export type CloudFounderBillingUnassignedSubscription = {
 
 export const EMPTY_FOUNDER_BILLING_OVERVIEW: CloudFounderBillingOverview = {
   monthly_price_base_units: 7_900,
+  guide_tier_available: false,
+  guide_monthly_price_base_units: POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
+  chief_of_staff_monthly_price_base_units: 7_900,
   communities: [],
   unassigned_subscriptions: [],
   managed_monthly_total_base_units: 0,
 };
+
+function nullablePlanTier(value: unknown): FounderPlanTier | null {
+  if (value === "guide" || value === "chief_of_staff") return value;
+  return null;
+}
 
 function nullableString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
@@ -145,6 +163,8 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
         ? "operator_comp"
         : "managed",
     status,
+    plan_tier: nullablePlanTier(row.plan_tier),
+    pending_checkout_plan_tier: nullablePlanTier(row.pending_checkout_plan_tier),
     monthly_price_base_units: finiteNumber(row.monthly_price_base_units, 7_900),
     platform_fee_bps: finiteNumber(row.platform_fee_bps),
     checkout_pending: row.checkout_pending === true,
@@ -158,8 +178,18 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
 export function coerceOverview(payload: unknown): CloudFounderBillingOverview {
   if (!payload || typeof payload !== "object") return EMPTY_FOUNDER_BILLING_OVERVIEW;
   const row = payload as Record<string, unknown>;
+  const monthlyPriceBaseUnits = finiteNumber(row.monthly_price_base_units, 7_900);
   return {
-    monthly_price_base_units: finiteNumber(row.monthly_price_base_units, 7_900),
+    monthly_price_base_units: monthlyPriceBaseUnits,
+    guide_tier_available: row.guide_tier_available === true,
+    guide_monthly_price_base_units: finiteNumber(
+      row.guide_monthly_price_base_units,
+      POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
+    ),
+    chief_of_staff_monthly_price_base_units: finiteNumber(
+      row.chief_of_staff_monthly_price_base_units,
+      monthlyPriceBaseUnits,
+    ),
     communities: Array.isArray(row.communities)
       ? row.communities.flatMap((community) => {
           const normalized = coerceCommunity(community);
@@ -177,9 +207,11 @@ export function coerceOverview(payload: unknown): CloudFounderBillingOverview {
             !status ||
             !["active", "past_due", "cancel_at_period_end", "canceled", "ended"].includes(status)
           ) return [];
+          const planTier = nullablePlanTier(subscription.plan_tier);
           return [{
             subscription_id: subscriptionId,
             status: status as CloudFounderBillingUnassignedSubscription["status"],
+            ...(planTier ? { plan_tier: planTier } : {}),
             grants_setup: subscription.grants_setup === true,
             monthly_price_base_units: finiteNumber(subscription.monthly_price_base_units, 7_900),
             current_period_start_at: nullableString(subscription.current_period_start_at) ?? "",
@@ -207,6 +239,7 @@ export async function loadCloudFounderBillingOverview<SessionT>(params: {
 export async function startCloudFounderSubscriptionCheckout<SessionT>(params: {
   session: SessionT;
   communityId: string;
+  planTier?: FounderPlanTier;
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ checkout_url: string }> {
@@ -214,12 +247,32 @@ export async function startCloudFounderSubscriptionCheckout<SessionT>(params: {
   const payload = await client.action("founderBilling:startFounderSubscriptionCheckout" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.planTier ? { planTier: params.planTier } : {}),
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
   }) as { checkout_url?: unknown } | null;
   const checkoutUrl = nullableString(payload?.checkout_url);
   if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
   return { checkout_url: checkoutUrl };
+}
+
+export async function switchCloudFounderSubscriptionTier<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  targetTier: FounderPlanTier;
+}): Promise<{ plan_tier: FounderPlanTier; monthly_price_base_units: number }> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  const payload = await client.action("founderBilling:switchFounderSubscriptionTier" as any, {
+    authSubject,
+    communityId: params.communityId,
+    targetTier: params.targetTier,
+  }) as { plan_tier?: unknown; monthly_price_base_units?: unknown } | null;
+  const planTier = nullablePlanTier(payload?.plan_tier);
+  if (!planTier) throw new Error("founder_subscription_tier_switch_failed");
+  return {
+    plan_tier: planTier,
+    monthly_price_base_units: finiteNumber(payload?.monthly_price_base_units),
+  };
 }
 
 export async function startCloudFounderBillingPortal<SessionT>(params: {

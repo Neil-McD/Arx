@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
+  POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS,
+  POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
+  POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
   founderPlanTierIncludedCostMicros,
   founderPlanTierMaxRunReservationMicros,
@@ -43,6 +46,67 @@ export function readFounderStripePriceIdForTierFromEnv(tier: FounderPlanTier): s
     readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID") ||
     null
   );
+}
+
+export function isGuideTierAvailableFromEnv(): boolean {
+  return Boolean(readEnv("POLYNET_FOUNDER_GUIDE_STRIPE_PRICE_ID"));
+}
+
+export function requireFounderStripePriceIdForTierFromEnv(tier: FounderPlanTier): string {
+  const priceId = readFounderStripePriceIdForTierFromEnv(tier);
+  if (!priceId) {
+    throw new Error(
+      tier === "guide"
+        ? "founder_guide_stripe_price_id_missing"
+        : "founder_stripe_price_id_missing",
+    );
+  }
+  return priceId;
+}
+
+export function expectedFounderStripeUnitAmountForTierPriceId(
+  tier: FounderPlanTier,
+  providerPriceId: string,
+): number {
+  const normalized = String(providerPriceId ?? "").trim();
+  if (tier === "guide") {
+    return POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS;
+  }
+  const cosPriceId = readEnv("POLYNET_FOUNDER_CHIEF_OF_STAFF_STRIPE_PRICE_ID");
+  if (cosPriceId && normalized === cosPriceId) {
+    return POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS;
+  }
+  const legacyPriceId = readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID");
+  if (legacyPriceId && normalized === legacyPriceId) {
+    return POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS;
+  }
+  return POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS;
+}
+
+export function resolveFounderSubscriptionMonthlyPriceBaseUnits(
+  providerPriceId?: string | null,
+  planTier?: FounderPlanTier | null,
+): number {
+  const normalizedPriceId = String(providerPriceId ?? "").trim();
+  const effectiveTier = planTier
+    ? normalizeFounderPlanTier(planTier)
+    : resolveFounderPlanTierFromPriceId(normalizedPriceId);
+  if (effectiveTier === "guide") {
+    return POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS;
+  }
+  const cosPriceId = readEnv("POLYNET_FOUNDER_CHIEF_OF_STAFF_STRIPE_PRICE_ID");
+  const legacyPriceId = readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID");
+  if (normalizedPriceId) {
+    if (cosPriceId && normalizedPriceId === cosPriceId) {
+      return POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS;
+    }
+    if (legacyPriceId && normalizedPriceId === legacyPriceId) {
+      return POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS;
+    }
+  }
+  return cosPriceId
+    ? POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS
+    : POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS;
 }
 
 export function isConfiguredFounderTierPriceId(providerPriceId: unknown): boolean {

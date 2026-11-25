@@ -2,11 +2,16 @@ import { api, internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
   founderSubscriptionStatusGrantsAccess,
+  normalizeFounderPlanTier,
+  type FounderPlanTier,
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
+import { computeAllowancePercentUsed } from "../shared/allowanceGuardrails";
+import { computeEffectiveCycleAllowanceMicros } from "../shared/founderUsageBoosts";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { resolveBuilderFundingProjection } from "../shared/builderFunding";
 import {
@@ -24,10 +29,15 @@ import {
   type FounderSubscriptionRow,
 } from "./founderPlanCore";
 import {
+  expectedFounderStripeUnitAmountForTierPriceId,
   isConfiguredFounderTierPriceId,
+  isGuideTierAvailableFromEnv,
+  readFounderStripePriceIdForTierFromEnv,
   requireFounderInferencePricingFromEnv,
+  requireFounderStripePriceIdForTierFromEnv,
   resolveFounderInferencePricingForTier,
   resolveFounderPlanTierFromPriceId,
+  resolveFounderSubscriptionMonthlyPriceBaseUnits,
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { getStripeClient } from "./stripeCore";
@@ -99,15 +109,29 @@ function readFounderCheckoutRiskSnapshot(checkout: any): FounderRiskSnapshot {
 }
 
 function readFounderStripePriceIdOptional(): string {
-  return String(
-    (globalThis as any)?.process?.env?.POLYNET_FOUNDER_STRIPE_PRICE_ID ?? "",
-  ).trim();
+  return readFounderStripePriceIdForTierFromEnv("chief_of_staff") ?? "";
 }
 
-function readFounderStripePriceId(): string {
-  const value = readFounderStripePriceIdOptional();
-  if (!value) throw new Error("founder_stripe_price_id_missing");
-  return value;
+function toStripeTimestampMs(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return numeric > 1_000_000_000_000 ? Math.floor(numeric) : Math.floor(numeric * 1000);
+}
+
+function readStripeSubscriptionPeriodMs(subscription: any): {
+  cycleStartedAt: number | null;
+  cycleEndsAt: number | null;
+} {
+  const firstItem = subscription?.items?.data?.[0];
+  const itemStart = toStripeTimestampMs(firstItem?.current_period_start);
+  const itemEnd = toStripeTimestampMs(firstItem?.current_period_end);
+  if (itemStart && itemEnd) {
+    return { cycleStartedAt: itemStart, cycleEndsAt: itemEnd };
+  }
+  return {
+    cycleStartedAt: toStripeTimestampMs(subscription?.current_period_start),
+    cycleEndsAt: toStripeTimestampMs(subscription?.current_period_end),
+  };
 }
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -133,19 +157,25 @@ async function requireFounderCheckoutLifecycle(
   return lifecycle;
 }
 
-async function verifyFounderStripePrice(): Promise<string> {
-  const providerPriceId = readFounderStripePriceId();
+async function verifyFounderStripePrice(
+  tier: FounderPlanTier = "chief_of_staff",
+): Promise<{ providerPriceId: string; unitAmount: number }> {
+  const providerPriceId = requireFounderStripePriceIdForTierFromEnv(tier);
+  const expectedUnitAmount = expectedFounderStripeUnitAmountForTierPriceId(
+    tier,
+    providerPriceId,
+  );
   const price: any = await getStripeClient().prices.retrieve(providerPriceId);
   if (
     price?.active !== true ||
-    Number(price?.unit_amount ?? 0) !== POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS ||
+    Number(price?.unit_amount ?? 0) !== expectedUnitAmount ||
     String(price?.currency ?? "").trim().toLowerCase() !== "usd" ||
     String(price?.recurring?.interval ?? "").trim().toLowerCase() !== "month" ||
     Number(price?.recurring?.interval_count ?? 1) !== 1
   ) {
     throw new Error("founder_stripe_price_contract_invalid");
   }
-  return providerPriceId;
+  return { providerPriceId, unitAmount: expectedUnitAmount };
 }
 
 export const getFounderSubscriptionCheckoutSessionInternal = internalQuery({
@@ -164,6 +194,8 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
     sessionId: v.string(),
     ownerUserId: v.id("users"),
     communityId: v.id("communities"),
+    providerPriceId: v.optional(v.string()),
+    amountBaseUnits: v.optional(v.number()),
     expiresAt: v.number(),
     nowMs: v.number(),
   },
@@ -173,6 +205,18 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       throw new Error("founder_subscription_community_forbidden");
     }
     const lifecycle = await requireFounderCheckoutLifecycle(ctx, community);
+    const requestedPriceId = normalizeOptionalString(args.providerPriceId);
+    if (requestedPriceId && !isConfiguredFounderTierPriceId(requestedPriceId)) {
+      throw new Error("founder_subscription_price_mismatch");
+    }
+    const effectiveAmountBaseUnits =
+      typeof args.amountBaseUnits === "number" &&
+      Number.isSafeInteger(args.amountBaseUnits) &&
+      args.amountBaseUnits > 0
+        ? args.amountBaseUnits
+        : resolveFounderSubscriptionMonthlyPriceBaseUnits(
+            requestedPriceId ?? readFounderStripePriceIdOptional(),
+          );
     const existingSubscription = await getFounderSubscriptionByCommunity(
       ctx,
       args.communityId,
@@ -208,6 +252,7 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       return {
         sessionId: row.sessionId,
         providerCheckoutSessionId: row.providerCheckoutSessionId ?? null,
+        providerPriceId: row.providerPriceId ?? null,
         expiresAt: row.expiresAt,
         reused: true,
       };
@@ -233,8 +278,9 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       ownerUserId: args.ownerUserId,
       communityId: args.communityId,
       communityLifecycleGeneration: lifecycle.generation,
+      providerPriceId: requestedPriceId,
       billingPeriod: "monthly",
-      amountBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
+      amountBaseUnits: effectiveAmountBaseUnits,
       currency: "usd",
       currencyDecimals: 2,
       status: "pending",
@@ -245,6 +291,7 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
     return {
       sessionId: args.sessionId,
       providerCheckoutSessionId: null,
+      providerPriceId: requestedPriceId ?? null,
       expiresAt: args.expiresAt,
       reused: false,
     };
@@ -286,7 +333,10 @@ export const attachFounderStripeCheckoutSessionInternal = internalMutation({
         throw new Error("community_lifecycle_generation_mismatch");
       }
     }
-    if (args.providerPriceId !== readFounderStripePriceId()) {
+    if (
+      !isConfiguredFounderTierPriceId(args.providerPriceId) ||
+      (row.providerPriceId && row.providerPriceId !== args.providerPriceId)
+    ) {
       throw new Error("founder_subscription_price_mismatch");
     }
     if (row.ownerUserId) {
@@ -656,6 +706,32 @@ async function syncFounderSubscription(args: {
         nowMs: args.providerEventCreatedAt,
       })
     : null;
+  // Mid-cycle tier upgrades (e.g. Guide $3 -> Chief of Staff $20) expand the
+  // cycle ceiling; re-arm 80%/100% allowance alerts cleanly if percent used
+  // dropped below the last notified threshold.
+  if (usageCycle && subscription.communityId) {
+    const coachSettings = await args.ctx.db
+      .query("communityMemberCoachSettings")
+      .withIndex("by_community", (q: any) => q.eq("communityId", subscription.communityId))
+      .first();
+    if (coachSettings && coachSettings.allowanceAlertCycleKey === usageCycle.cycleKey) {
+      const effectiveAllowanceMicros = computeEffectiveCycleAllowanceMicros({
+        includedCostMicros: usageCycle.includedCostMicros,
+        paidBoostCostMicros: usageCycle.paidBoostCostMicros,
+      });
+      const nextPercent = computeAllowancePercentUsed(
+        usageCycle.settledCostMicros,
+        effectiveAllowanceMicros,
+      );
+      const nextNotified = nextPercent < 80 ? 0 : nextPercent < 100 ? 80 : 100;
+      if (nextNotified < Number(coachSettings.allowanceAlertNotifiedPercent ?? 0)) {
+        await args.ctx.db.patch(coachSettings._id, {
+          allowanceAlertNotifiedPercent: nextNotified,
+          updatedAt: Math.max(Number(coachSettings.updatedAt ?? 0), args.providerEventCreatedAt),
+        });
+      }
+    }
+  }
   if (checkout) {
     await args.ctx.db.patch(checkout._id, {
       providerCheckoutSessionId:
@@ -874,6 +950,12 @@ export const getFounderBillingOverview = query({
         .collect(),
       hasPlatformOwnerComplimentaryAccess(ctx, ownerUserId),
     ]);
+    const guideTierAvailable = isGuideTierAvailableFromEnv();
+    const defaultChiefOfStaffMonthlyPriceBaseUnits =
+      resolveFounderSubscriptionMonthlyPriceBaseUnits(
+        readFounderStripePriceIdForTierFromEnv("chief_of_staff"),
+        "chief_of_staff",
+      );
     const rows = await Promise.all(
       communities
         .slice()
@@ -950,6 +1032,24 @@ export const getFounderBillingOverview = query({
           } else {
             status = "managed_required";
           }
+          const planTier: FounderPlanTier | null = subscription
+            ? normalizeFounderPlanTier(
+                subscription.planTier ??
+                  resolveFounderPlanTierFromPriceId(subscription.providerPriceId),
+              )
+            : operatorComped
+              ? "chief_of_staff"
+              : null;
+          const pendingCheckoutPlanTier: FounderPlanTier | null =
+            pendingCheckout?.providerPriceId
+              ? resolveFounderPlanTierFromPriceId(pendingCheckout.providerPriceId)
+              : null;
+          const rowMonthlyPriceBaseUnits = subscription
+            ? resolveFounderSubscriptionMonthlyPriceBaseUnits(
+                subscription.providerPriceId,
+                planTier,
+              )
+            : defaultChiefOfStaffMonthlyPriceBaseUnits;
           return {
             community_id: String(community._id),
             community_name: community.name,
@@ -969,7 +1069,9 @@ export const getFounderBillingOverview = query({
                 ? "operator_comp"
                 : "managed",
             status,
-            monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
+            plan_tier: planTier,
+            pending_checkout_plan_tier: pendingCheckoutPlanTier,
+            monthly_price_base_units: rowMonthlyPriceBaseUnits,
             platform_fee_bps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
             checkout_pending: Boolean(pendingCheckout),
             subscription_id: subscription ? String(subscription._id) : null,
@@ -992,33 +1094,51 @@ export const getFounderBillingOverview = query({
           subscription.status !== "ended",
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map((subscription) => ({
-        subscription_id: String(subscription._id),
-        status: subscription.status,
-        grants_setup: founderSubscriptionStatusGrantsAccess({
+      .map((subscription) => {
+        const subPlanTier = normalizeFounderPlanTier(
+          subscription.planTier ??
+            resolveFounderPlanTierFromPriceId(subscription.providerPriceId),
+        );
+        return {
+          subscription_id: String(subscription._id),
           status: subscription.status,
-          currentPeriodEndAt: subscription.currentPeriodEndAt,
-          nowMs,
-        }),
-        monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
-        current_period_start_at: new Date(subscription.currentPeriodStartAt).toISOString(),
-        current_period_end_at: new Date(subscription.currentPeriodEndAt).toISOString(),
-        cancel_at_period_end: subscription.cancelAtPeriodEnd === true,
-      }));
-    return {
-      monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
-      communities: rows,
-      unassigned_subscriptions: unassignedSubscriptions,
-      managed_monthly_total_base_units: rows.filter(
+          plan_tier: subPlanTier,
+          grants_setup: founderSubscriptionStatusGrantsAccess({
+            status: subscription.status,
+            currentPeriodEndAt: subscription.currentPeriodEndAt,
+            nowMs,
+          }),
+          monthly_price_base_units: resolveFounderSubscriptionMonthlyPriceBaseUnits(
+            subscription.providerPriceId,
+            subPlanTier,
+          ),
+          current_period_start_at: new Date(subscription.currentPeriodStartAt).toISOString(),
+          current_period_end_at: new Date(subscription.currentPeriodEndAt).toISOString(),
+          cancel_at_period_end: subscription.cancelAtPeriodEnd === true,
+        };
+      });
+    const activeCommunityMonthlyTotal = rows
+      .filter(
         (row) =>
           row.lifecycle_status === "active" &&
           row.funding_mode === "managed" &&
           row.subscription_id !== null &&
           row.status !== "canceled" &&
           row.status !== "ended",
-      ).length * POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS +
-        unassignedSubscriptions.filter((subscription) => subscription.grants_setup).length *
-          POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
+      )
+      .reduce((sum, row) => sum + row.monthly_price_base_units, 0);
+    const unassignedMonthlyTotal = unassignedSubscriptions
+      .filter((subscription) => subscription.grants_setup)
+      .reduce((sum, subscription) => sum + subscription.monthly_price_base_units, 0);
+    return {
+      monthly_price_base_units: defaultChiefOfStaffMonthlyPriceBaseUnits,
+      guide_tier_available: guideTierAvailable,
+      guide_monthly_price_base_units: POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
+      chief_of_staff_monthly_price_base_units: defaultChiefOfStaffMonthlyPriceBaseUnits,
+      communities: rows,
+      unassigned_subscriptions: unassignedSubscriptions,
+      managed_monthly_total_base_units:
+        activeCommunityMonthlyTotal + unassignedMonthlyTotal,
     };
   },
 });
@@ -1109,10 +1229,208 @@ export const startFounderBillingPortal = action({
   },
 });
 
+export const prepareFounderSubscriptionTierSwitchInternal = internalQuery({
+  args: {
+    ownerUserId: v.id("users"),
+    communityId: v.id("communities"),
+    targetTier: v.union(v.literal("guide"), v.literal("chief_of_staff")),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.ownerUserId)) {
+      throw new Error("founder_subscription_community_forbidden");
+    }
+    await requireFounderCheckoutLifecycle(ctx, community);
+    const subscription = await getFounderSubscriptionByCommunity(
+      ctx,
+      args.communityId,
+      args.nowMs,
+    );
+    if (
+      !subscription ||
+      String(subscription.ownerUserId) !== String(args.ownerUserId) ||
+      !founderSubscriptionStatusGrantsAccess({
+        status: subscription.status,
+        currentPeriodEndAt: subscription.currentPeriodEndAt,
+        nowMs: args.nowMs,
+      }) ||
+      readFounderSubscriptionRiskSnapshot(subscription).state === "revoked"
+    ) {
+      throw new Error("founder_subscription_required");
+    }
+    const currentTier = normalizeFounderPlanTier(
+      subscription.planTier ??
+        resolveFounderPlanTierFromPriceId(subscription.providerPriceId),
+    );
+    if (currentTier === args.targetTier) {
+      throw new Error("founder_subscription_tier_unchanged");
+    }
+    return {
+      founderSubscriptionId: subscription._id,
+      providerSubscriptionId: subscription.providerSubscriptionId,
+      providerCustomerId: subscription.providerCustomerId,
+      currentPriceId: subscription.providerPriceId,
+      currentTier,
+      lastProviderEventCreatedAt: subscription.lastProviderEventCreatedAt,
+    };
+  },
+});
+
+export const switchFounderSubscriptionTier = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    targetTier: v.union(v.literal("guide"), v.literal("chief_of_staff")),
+  },
+  handler: async (ctx, args) => {
+    const actor = (await ctx.runQuery(
+      (internal as any).authActor.resolveAuthenticatedActorInternal,
+      { authSubject: args.authSubject ?? null },
+    )) as { dbUserId?: any };
+    if (!actor?.dbUserId) throw new Error("user_not_found");
+    const exemption = (await ctx.runQuery(
+      (internal as any).founderBilling.getFounderBillingExemptionInternal,
+      { userId: actor.dbUserId },
+    )) as { operatorComped?: boolean } | null;
+    if (exemption?.operatorComped) throw new Error("operator_billing_exempt");
+    requireFounderInferencePricingFromEnv();
+
+    const nowMs = Date.now();
+    const target = (await ctx.runQuery(
+      (internal as any).founderBilling.prepareFounderSubscriptionTierSwitchInternal,
+      {
+        ownerUserId: actor.dbUserId,
+        communityId: args.communityId,
+        targetTier: args.targetTier,
+        nowMs,
+      },
+    )) as {
+      founderSubscriptionId: string;
+      providerSubscriptionId: string;
+      providerCustomerId: string;
+      currentPriceId: string;
+      currentTier: FounderPlanTier;
+      lastProviderEventCreatedAt: number;
+    };
+
+    const verifiedTargetPrice = await verifyFounderStripePrice(args.targetTier);
+    const stripe = getStripeClient();
+    const liveSubscription: any = await stripe.subscriptions.retrieve(
+      target.providerSubscriptionId,
+    );
+    const liveCustomerId =
+      typeof liveSubscription?.customer === "string"
+        ? liveSubscription.customer
+        : String(liveSubscription?.customer?.id ?? "").trim();
+    if (
+      !liveSubscription ||
+      liveCustomerId !== target.providerCustomerId ||
+      String(liveSubscription.status ?? "").trim().toLowerCase() !== "active"
+    ) {
+      throw new Error("founder_subscription_not_active_on_provider");
+    }
+    const items = Array.isArray(liveSubscription?.items?.data)
+      ? liveSubscription.items.data
+      : [];
+    if (items.length !== 1 || !items[0]?.id) {
+      throw new Error("founder_subscription_items_invalid");
+    }
+    const currentLiveItem = items[0];
+    const currentLivePriceId = String(currentLiveItem?.price?.id ?? "").trim();
+
+    let updatedSubscription = liveSubscription;
+    if (currentLivePriceId !== verifiedTargetPrice.providerPriceId) {
+      const isUpgrade = args.targetTier === "chief_of_staff";
+      // Upgrades invoice and collect the prorated difference immediately,
+      // failing atomically if the card on file cannot be charged so unpaid
+      // Chief of Staff access or $20 AI allowance is never granted.
+      updatedSubscription = await stripe.subscriptions.update(
+        target.providerSubscriptionId,
+        {
+          items: [
+            {
+              id: currentLiveItem.id,
+              price: verifiedTargetPrice.providerPriceId,
+            },
+          ],
+          proration_behavior: isUpgrade ? "always_invoice" : "create_prorations",
+          ...(isUpgrade
+            ? {
+                payment_behavior: "error_if_incomplete" as const,
+                cancel_at_period_end: false,
+              }
+            : {}),
+          metadata: {
+            ...(liveSubscription.metadata ?? {}),
+            plan_tier: args.targetTier,
+          },
+        },
+      );
+    }
+
+    const updatedPriceId = String(
+      updatedSubscription?.items?.data?.[0]?.price?.id ??
+        verifiedTargetPrice.providerPriceId,
+    ).trim();
+    const { cycleStartedAt, cycleEndsAt } =
+      readStripeSubscriptionPeriodMs(updatedSubscription);
+
+    // Sync immediately without advancing `lastProviderEventCreatedAt` past
+    // Stripe's clock so the authoritative `customer.subscription.updated`
+    // webhook that follows is never treated as stale.
+    await ctx.runMutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      {
+        providerCustomerId: target.providerCustomerId,
+        providerSubscriptionId: target.providerSubscriptionId,
+        providerPriceId: updatedPriceId,
+        subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
+          subscriptionStatus: updatedSubscription?.status ?? "active",
+          cancelAtPeriodEnd: Boolean(updatedSubscription?.cancel_at_period_end),
+        }),
+        currentPeriodStartAt: cycleStartedAt,
+        currentPeriodEndAt: cycleEndsAt,
+        cancelAtPeriodEnd: Boolean(updatedSubscription?.cancel_at_period_end),
+        providerEventCreatedAt: target.lastProviderEventCreatedAt,
+      },
+    );
+
+    await ctx.runMutation(
+      (internal as any).criticalAudit.recordCriticalAuditEventInternal,
+      {
+        eventKey: `founder_subscription_tier_switched:${target.providerSubscriptionId}:${target.currentPriceId}:${updatedPriceId}:${nowMs}`,
+        eventType: "founder_subscription_tier_switched",
+        severity: "info",
+        status: "succeeded",
+        actorUserId: actor.dbUserId,
+        communityId: args.communityId,
+        provider: "stripe",
+        providerObjectId: target.providerSubscriptionId,
+        metadata: {
+          fromTier: target.currentTier,
+          toTier: args.targetTier,
+          fromPriceId: target.currentPriceId,
+          toPriceId: updatedPriceId,
+          providerSubscriptionId: target.providerSubscriptionId,
+        },
+        createdAt: nowMs,
+      },
+    );
+
+    return {
+      ok: true,
+      plan_tier: args.targetTier,
+      monthly_price_base_units: verifiedTargetPrice.unitAmount,
+    };
+  },
+});
+
 export const startFounderSubscriptionCheckout = action({
   args: {
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    planTier: v.optional(v.union(v.literal("guide"), v.literal("chief_of_staff"))),
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
@@ -1143,40 +1461,107 @@ export const startFounderSubscriptionCheckout = action({
     if (!setupStatus?.steps?.some((step) => step.step === "identity" && step.completed)) {
       throw new Error("profile_setup_required");
     }
+    const requestedTier: FounderPlanTier = normalizeFounderPlanTier(
+      args.planTier ?? "chief_of_staff",
+    );
     const nowMs = Date.now();
-    const providerPriceId = await verifyFounderStripePrice();
+    const { providerPriceId, unitAmount } = await verifyFounderStripePrice(requestedTier);
     const providerCustomerId = await ensureStripeCustomerForUser({
       ctx,
       userId: actor.dbUserId,
       email: actor.email ?? null,
       nowMs,
     });
-    const proposedSessionId = newOpaqueToken("founder");
     const expiresAt = nowMs + FOUNDER_CHECKOUT_TTL_MS;
-    const prepared = (await ctx.runMutation(
+    let prepared = (await ctx.runMutation(
       (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
       {
-        sessionId: proposedSessionId,
+        sessionId: newOpaqueToken("founder"),
         ownerUserId: actor.dbUserId,
         communityId: args.communityId,
+        providerPriceId,
+        amountBaseUnits: unitAmount,
         expiresAt,
         nowMs,
       },
     )) as {
       sessionId: string;
       providerCheckoutSessionId?: string | null;
+      providerPriceId?: string | null;
       expiresAt: number;
       reused: boolean;
     };
-    const sessionId = prepared.sessionId;
-    if (prepared.providerCheckoutSessionId) {
-      const existingCheckout: any = await getStripeClient().checkout.sessions.retrieve(
-        prepared.providerCheckoutSessionId,
-      );
-      const existingCheckoutUrl = String(existingCheckout?.url ?? "").trim();
-      if (!existingCheckoutUrl) throw new Error("stripe_checkout_url_missing");
-      return { ok: true, session_id: sessionId, checkout_url: existingCheckoutUrl };
+    if (prepared.reused) {
+      const samePrice =
+        !prepared.providerPriceId || prepared.providerPriceId === providerPriceId;
+      if (prepared.providerCheckoutSessionId) {
+        const existingCheckout: any = await getStripeClient().checkout.sessions.retrieve(
+          prepared.providerCheckoutSessionId,
+        );
+        if (
+          existingCheckout?.status === "complete" ||
+          existingCheckout?.payment_status === "paid" ||
+          existingCheckout?.subscription
+        ) {
+          throw new Error("founder_subscription_payment_settling");
+        }
+        const existingCheckoutUrl = String(existingCheckout?.url ?? "").trim();
+        if (samePrice && existingCheckout?.status === "open" && existingCheckoutUrl) {
+          return { ok: true, session_id: prepared.sessionId, checkout_url: existingCheckoutUrl };
+        }
+        // Either the founder picked a different tier or the prior Stripe session
+        // expired/closed; expire it cleanly on Stripe and confirm it did not
+        // complete mid-race before issuing a fresh session.
+        if (existingCheckout?.status === "open") {
+          const expireResult = await expireStripeCheckoutSessionIfOpen({
+            providerCheckoutSessionId: prepared.providerCheckoutSessionId,
+          });
+          if (expireResult.providerSubscriptionId) {
+            throw new Error("founder_subscription_payment_settling");
+          }
+          if (expireResult.outcome === "already_closed") {
+            const rechecked: any = await getStripeClient().checkout.sessions.retrieve(
+              prepared.providerCheckoutSessionId,
+            );
+            if (
+              rechecked?.status === "complete" ||
+              rechecked?.payment_status === "paid" ||
+              rechecked?.subscription
+            ) {
+              throw new Error("founder_subscription_payment_settling");
+            }
+          }
+        }
+        await ctx.runMutation(
+          (internal as any).founderBilling.expireFounderSubscriptionCheckoutInternal,
+          { sessionId: prepared.sessionId, nowMs: Date.now() },
+        );
+        prepared = (await ctx.runMutation(
+          (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+          {
+            sessionId: newOpaqueToken("founder"),
+            ownerUserId: actor.dbUserId,
+            communityId: args.communityId,
+            providerPriceId,
+            amountBaseUnits: unitAmount,
+            expiresAt: Date.now() + FOUNDER_CHECKOUT_TTL_MS,
+            nowMs: Date.now(),
+          },
+        )) as {
+          sessionId: string;
+          providerCheckoutSessionId?: string | null;
+          providerPriceId?: string | null;
+          expiresAt: number;
+          reused: boolean;
+        };
+        if (prepared.reused) {
+          throw new Error("founder_subscription_checkout_in_progress");
+        }
+      } else if (!samePrice) {
+        throw new Error("founder_subscription_checkout_in_progress");
+      }
     }
+    const sessionId = prepared.sessionId;
     let checkoutSession: any = null;
     try {
       checkoutSession = await getStripeClient().checkout.sessions.create({
@@ -1190,6 +1575,7 @@ export const startFounderSubscriptionCheckout = action({
         metadata: {
           local_session_id: sessionId,
           checkout_mode: "founder_subscription",
+          plan_tier: requestedTier,
           user_id: String(actor.dbUserId),
           community_id: String(args.communityId),
         },
@@ -1197,6 +1583,7 @@ export const startFounderSubscriptionCheckout = action({
           metadata: {
             local_session_id: sessionId,
             checkout_mode: "founder_subscription",
+            plan_tier: requestedTier,
             user_id: String(actor.dbUserId),
             community_id: String(args.communityId),
           },
