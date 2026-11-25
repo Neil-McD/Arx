@@ -92,16 +92,25 @@ function normalizeServerAlias(rawServerAlias: string): string {
   return serverAlias;
 }
 
+export type PolynetMcpSetupCommunityContext = {
+  name: string;
+  slug: string;
+};
+
 export function buildPolynetMcpSetup(args: {
   environment: PolynetMcpSetupEnvironment;
   endpointUrl: string;
   serverAlias: string;
+  community?: PolynetMcpSetupCommunityContext | null;
 }): PolynetMcpSetup {
   if (!POLYNET_MCP_ENVIRONMENTS.has(args.environment)) {
     throw new Error("polynet_mcp_environment_invalid");
   }
   const endpointUrl = normalizeEndpointUrl(args.endpointUrl);
   const serverAlias = normalizeServerAlias(args.serverAlias);
+  const communityName = args.community?.name?.trim() || "";
+  const communitySlug = args.community?.slug?.trim() || "";
+  const hasCommunity = Boolean(communityName && communitySlug);
   const claudeCodeAddCommand =
     `claude mcp add --transport http ${serverAlias} ${endpointUrl}`;
   const codexAddCommand =
@@ -141,7 +150,7 @@ export function buildPolynetMcpSetup(args: {
     "You are helping the user connect this AI harness to Polynet.",
     "",
     "Goal:",
-    "Connect Polynet so this harness can operate the user's authorized Polynet repository through the canonical five tools.",
+    "Connect Polynet so this harness can read and operate the user's authorized Polynet communities through the official Polynet MCP tools.",
     "",
     "Polynet environment:",
     args.environment,
@@ -180,7 +189,7 @@ export function buildPolynetMcpSetup(args: {
     "1. Identify which harness you are running in.",
     "2. Add Polynet with the matching setup path below, unless this exact endpoint is already configured.",
     "3. If authentication is needed, give the user one clear sign-in action for this harness.",
-    "4. After sign-in, verify that exactly five Polynet tools are present, then call `polynet_list` with `path: \"/\"`.",
+    "4. After sign-in, verify that Polynet tools are present (such as `polynet_list`, `polynet_read`, `polynet_search`, and named action tools), then call `polynet_list` with `path: \"/\"`.",
     "5. If this already-open chat cannot see the tools after sign-in, tell the user to start a fresh chat or reconnect tools.",
     "6. Tell the user when Polynet is connected.",
     "",
@@ -262,13 +271,18 @@ export function buildPolynetMcpSetup(args: {
     "",
     "Complete Polynet sign-in in the browser. If this session was already open, run `/reload-mcp` or start a fresh Hermes session before verification.",
     "",
-    "## Cursor Or Other JSON-Based Harnesses",
+    "## Cursor, ChatGPT, Grok, Or Other MCP Harnesses",
     "",
-    "Use this HTTP MCP config:",
+    "For JSON-configured harnesses (such as Cursor), use this HTTP MCP config:",
     "",
     "```json",
     genericHttpConfig,
     "```",
+    "",
+    "For web or desktop harnesses that add remote MCP servers in settings (such as ChatGPT, Claude Desktop, or Grok), add a new remote HTTP MCP connector with:",
+    `- Name: \`${serverAlias}\``,
+    `- URL: \`${endpointUrl}\``,
+    "- Authentication: OAuth (sign in with your Polynet account when prompted).",
     "",
     "## After Sign-In",
     "",
@@ -293,20 +307,36 @@ export function buildPolynetMcpSetup(args: {
     "If successful, tell the user:",
     "",
     "```text",
-    "Polynet is connected. I can now operate your authorized Polynet communities through the canonical repository.",
+    hasCommunity
+      ? `Polynet is connected. I can see "${communityName}" and I'm ready to help you set it up.`
+      : "Polynet is connected. I can now read and operate your authorized Polynet communities.",
     "```",
+    ...(hasCommunity
+      ? [
+          "",
+          "## First-Time Community Setup",
+          "",
+          `The user just created the community "${communityName}" (slug: \`${communitySlug}\`).`,
+          "",
+          "Right after confirming connection with `polynet_list` on `/`, locate this community, read what is currently set up, and offer to help the founder build out:",
+          "- Starter channels and a pinned welcome post",
+          "- Member Board stages and graduation criteria",
+          "- Community handbook and starter community notes",
+          "- First upcoming event or starter course",
+          "- Connecting their software product or building a custom landing page (if they want one)",
+          "",
+          "Ask which of these they want to set up first before making changes.",
+        ]
+      : []),
     "",
     "## Usage Guidance",
     "",
     "Use Polynet when the user asks about:",
-    "- Polynet communities",
-    "- accepted community memory",
-    "- accepted community context",
-    "- resources",
-    "- prior decisions",
-    "- playbooks",
-    "- warnings",
-    "- outcomes",
+    "- Polynet communities, channels, posts, and pinned threads",
+    "- Member Board stages, Daily Brief, and Home suggestions",
+    "- courses, events, and pods",
+    "- accepted community memory, handbook, and community notes",
+    "- resources, prior decisions, playbooks, warnings, and outcomes",
     "",
     "Before using community-specific memory, list the relevant community directory and follow the returned `memory/` path.",
     "",
@@ -333,6 +363,7 @@ export function buildPolynetMcpSetup(args: {
 
 export function buildPolynetMcpSetupForOrigin(
   rawOrigin: string,
+  options?: { community?: PolynetMcpSetupCommunityContext | null },
 ): PolynetMcpSetup {
   const origin = normalizeOrigin(rawOrigin);
   const hostname = origin.hostname.toLowerCase();
@@ -356,5 +387,6 @@ export function buildPolynetMcpSetupForOrigin(
     environment,
     endpointUrl: new URL(POLYNET_MCP_PATH, endpointOrigin).toString(),
     serverAlias,
+    community: options?.community ?? null,
   });
 }

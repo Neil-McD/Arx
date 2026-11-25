@@ -4,7 +4,8 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { eventPlaceWord, eventSoonWord } = await import("../apps/web/src/v1/KitEventsList");
+const { eventPlaceWord, eventSoonWord, KitEventsList } = await import("../apps/web/src/v1/KitEventsList");
+const { renderToStaticMarkup } = await import("react-dom/server");
 const { eventRepeatWord } = await import("../apps/web/src/components/communityEventsList");
 const { readFileSync } = await import("node:fs");
 
@@ -52,4 +53,58 @@ test("the Events page has no pop-up and no browser confirm", () => {
   const section = readFileSync(new URL("../apps/web/src/components/WebCommunityEventsSection.tsx", import.meta.url), "utf8");
   expect(section).not.toMatch(/EventModal|window\.confirm/);
   expect(readFileSync(new URL("../apps/web/src/v1/KitEventsList.tsx", import.meta.url), "utf8")).not.toMatch(/window\.confirm|modal/);
+});
+
+test("KitEventsList shows an inline cancelled notice in the Next card when an earlier date of that series is cancelled", () => {
+  const now = Date.parse("2026-11-25T23:00:00.000Z");
+  const baseEvent = {
+    community_id: "comm_1",
+    parent_event_id: "ev_series",
+    title: "Group Call",
+    description_md: null,
+    starts_at: "2026-12-04T15:00:00.000Z",
+    ends_at: "2026-12-04T16:00:00.000Z",
+    timezone: "America/New_York",
+    location_type: "online" as const,
+    location_label: "Zoom",
+    url: "https://zoom.us/j/123",
+    recurrence_frequency: "weekly" as const,
+    visibility: "members" as const,
+    status: "scheduled" as const,
+    pod_channel_id: null,
+    pod_name: null,
+    cancellation_scope: null,
+    cancellation_note: null,
+    created_at: "2026-11-01T00:00:00.000Z",
+    updated_at: "2026-11-01T00:00:00.000Z",
+  };
+  const html = renderToStaticMarkup(React.createElement(KitEventsList, {
+    featured: { ...baseEvent, id: "ev_series:dec4" },
+    comingUp: [],
+    cancelled: [{
+      ...baseEvent,
+      id: "ev_series:nov27",
+      starts_at: "2026-11-27T15:00:00.000Z",
+      ends_at: "2026-11-27T16:00:00.000Z",
+      status: "cancelled",
+      cancellation_scope: "occurrence",
+      cancellation_note: "Canceled for Thanksgiving.",
+    }],
+    past: [],
+    now,
+    canManage: true,
+    communityName: "Test",
+    timeLabel: () => ({ primary: "10:00 AM EST", secondary: null }),
+    calendarUrl: () => "https://example.com/cal",
+    form: null,
+    editingId: null,
+    onNew: () => {},
+    onEdit: () => {},
+    onCancel: () => {},
+    onSetPublic: () => {},
+    renderRail: () => null,
+  }));
+  expect(html).toContain("Canceled for Thanksgiving.");
+  expect(html).toContain("is cancelled");
+  expect(html).toContain("Group Call");
 });

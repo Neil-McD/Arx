@@ -579,6 +579,8 @@ css += """
 .app .evday.past{opacity:.55}
 .app .evnext{display:grid;grid-template-columns:84px minmax(0,1fr);gap:0 22px;margin-top:10px;padding:22px 24px;border-radius:12px;border:1px solid var(--line2);background:var(--panel2,var(--s1))}
 .app .evnext.on{border-color:rgba(var(--w),.28)}
+.app .evnext-cancelled{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:8px;border:1px solid rgba(240,104,104,.28);background:rgba(240,104,104,.07);font:inherit;font-size:13px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),border-color .14s var(--ease)}
+.app .evnext-cancelled:hover{background:rgba(240,104,104,.12);border-color:rgba(240,104,104,.4);color:var(--ink)}
 .app .evnext h2{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0 0;font-size:22px;font-weight:600;letter-spacing:-.012em;color:var(--ink)}
 .app .evsoon{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--aurora-ink)}
 .app .evsoon i{width:6px;height:6px;border-radius:50%;background:var(--aurora-ink);box-shadow:0 0 0 4px rgba(var(--au),.18)}
@@ -1162,6 +1164,21 @@ css += """
 .app .startc-link{display:flex;align-items:center;gap:8px}
 .app .startc-link input[type=text]{flex:1;min-width:0}
 .app .startc-link .btn{height:38px;flex:none}
+.app .startc-ai{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border-radius:11px;border:1px solid var(--line2);background:var(--s1)}
+.app .startc-ai-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.app .startc-ai-head strong{display:block;font-size:13.5px;font-weight:600;color:var(--ink)}
+.app .startc-ai-head p{margin:4px 0 0;font-size:12.5px;line-height:1.45;color:var(--ink2)}
+.app .startc-ai-head .btn{flex:none;white-space:nowrap}
+.app .startc-app-wrap{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.app .startc-app-toggle{display:flex;align-items:center;gap:7px;width:100%;padding:2px 0;font:inherit;font-size:13px;font-weight:500;color:var(--ink2);text-align:left;cursor:pointer}
+.app .startc-app-toggle:hover{color:var(--ink)}
+.app .startc-app-toggle em{margin-left:auto;font-style:normal;font-size:11.5px;font-weight:400;color:var(--ink4)}
+.app .startc-app-box{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:10px;border:1px solid var(--line);background:var(--s1)}
+.app .startc-app-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.app .startc-app-copy{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink2)}
+.app .startc-app-acts{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.app .startc-app-acts>span{font-size:12px;color:var(--ink3)}
+@media (max-width:600px){.app .startc-ai-head{flex-direction:column}.app .startc-app-fields{grid-template-columns:1fr}}
 /* Every step is as tall as the tallest, so the window holds still between them. */
 .app .startc-form{min-height:432px}
 /* One bar under every step: back on the left, the dots in the middle, forward on the right. */

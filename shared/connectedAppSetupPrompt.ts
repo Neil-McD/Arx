@@ -49,3 +49,46 @@ Before writing code, find where this app records subscription changes and where 
 ${guide}
 `;
 }
+
+export function buildCustomLandingPagePrompt(args: {
+  communityName: string;
+  communitySlug: string;
+  communityUrl: string;
+  oneLiner?: string | null;
+  tiers: SetupPromptTier[];
+  appName?: string | null;
+  appUrl?: string | null;
+}): string {
+  const plans = args.tiers.length
+    ? args.tiers
+        .map(
+          (tier) =>
+            `- ${tier.name}${tier.grants.length ? ` (includes: ${tier.grants.join(", ")})` : ""}`,
+        )
+        .join("\n")
+    : "- Standard membership (managed on Polynet).";
+  const oneLiner = args.oneLiner?.trim();
+  const appName = args.appName?.trim();
+  const appUrl = args.appUrl?.trim();
+  return `Build a clean, conversion-focused custom landing page for "${args.communityName}" that I can host anywhere (Vercel, Cloudflare Pages, or Netlify).
+
+Polynet runs the community, member gate, and checkout. This landing page should sell the value clearly and send every primary call-to-action straight to my Polynet join and checkout page — do not build a separate signup form or checkout flow.
+
+Community details:
+- Name: ${args.communityName}
+- Slug: ${args.communitySlug}
+${oneLiner ? `- Positioning: ${oneLiner}\n` : ""}- Polynet join & checkout link (use this for every "Join" / "Get started" button): ${args.communityUrl}
+${appName ? `- Connected software product: ${appName}${appUrl ? ` (${appUrl})` : ""}\n` : ""}
+Plans to reflect on the page:
+${plans}
+
+What to build:
+1. A focused hero section with a clear headline, subheadline, social proof placeholder, and a prominent primary CTA linking to ${args.communityUrl}.
+2. A concise "What's inside" section highlighting the community${appName ? `, ${appName},` : ""} and how members get results.
+3. A clean pricing / access section matching the plans above, where every plan button links to ${args.communityUrl}.
+4. A short FAQ section answering common objections and ending with a final CTA to ${args.communityUrl}.
+5. Responsive layout (desktop + mobile), fast load time, clean semantic HTML/CSS, and ready-to-deploy config for Vercel or Cloudflare Pages.
+
+Before writing code, ask me 3 quick questions (brand vibe/colors, target audience & main promise, and any real testimonials or numbers I want included) — or tell me you can start immediately with crisp defaults if I say "just build it".
+`;
+}

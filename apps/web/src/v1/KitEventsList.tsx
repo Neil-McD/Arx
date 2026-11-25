@@ -18,7 +18,13 @@ import type {
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { eventAddressKey, eventIdFromAddressKey } from "../../../../shared/webAppRouteState";
 import { registerMobilePageBack } from "../components/CommunityPageHeader";
-import { eventDateBlock, eventDayWord, eventRepeatWord, featuredEventLabel } from "../components/communityEventsList";
+import {
+  earlierCancelledForEvent,
+  eventDateBlock,
+  eventDayWord,
+  eventRepeatWord,
+  featuredEventLabel,
+} from "../components/communityEventsList";
 import { Btn, cx, Icon, KitApp, Rail, useMinWidth, usePhoneLayout } from "./kit";
 import { PanelPart } from "./KitPanel";
 
@@ -331,6 +337,7 @@ export function KitEventsList(props: {
   const last = props.past[0] ?? null;
   const showPast = pastOpen || (upcoming.length === 0 && cancelledList.length === 0);
   const featuredBlock = featured ? eventDateBlock(featured.starts_at, false) : null;
+  const earlierCancelled = featured ? earlierCancelledForEvent(featured, cancelledList) : null;
 
   return (
     <>
@@ -363,6 +370,19 @@ export function KitEventsList(props: {
             <>
               <span className={cx("lab")} style={{ display: "block", marginTop: 28 }}>Next</span>
               <div className={cx("evnext", pickedId === featured.id && "on", props.editingId === featured.parent_event_id && "evdim")} id={`community-event-${featured.id}`}>
+                {earlierCancelled ? (
+                  <button
+                    type="button"
+                    className={cx("evnext-cancelled")}
+                    onClick={() => pick(earlierCancelled)}
+                  >
+                    <span className={cx("evtag bad")}>Cancelled</span>
+                    <span>
+                      {eventDayWord(earlierCancelled.starts_at, props.now)} is cancelled
+                      {earlierCancelled.cancellation_note ? ` — ${earlierCancelled.cancellation_note}` : "."}
+                    </span>
+                  </button>
+                ) : null}
                 <span className={cx("evday")}><b>{featuredBlock.number}</b><span>{featuredBlock.word}</span></span>
                 <div>
                   {label.live ? <span className={cx("livepill")}><i />{label.text}</span> : <span className={cx("evsoon")}><i />{eventSoonWord(featured.starts_at, props.now)}</span>}

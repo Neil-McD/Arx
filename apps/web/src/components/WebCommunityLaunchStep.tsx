@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
+import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
+import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { fetchCloudCommunitySettings, saveCloudCommunitySettings } from "../../../../shared/cloudCommunityAdminGateway";
+import { registerCloudConnectedApp } from "../../../../shared/cloudConnectedAppsGateway";
 import { communityPageAddress } from "../../../../shared/communitySlug";
-import { KitStartLaunch } from "../v1/KitStartCommunity";
+import { buildConnectedAppSetupPrompt } from "../../../../shared/connectedAppSetupPrompt";
+import { buildPolynetMcpSetupForOrigin } from "../../../../shared/polynetMcpSetup";
+import { announceCommunityAppLinksChanged } from "../controllers/communityAppLinks";
+import { KitStartLaunch, type LaunchConnectedAppResult } from "../v1/KitStartCommunity";
 import { clearStartExtras, readStartExtras, startExtrasNeedSaving } from "../v1/startCommunityExtras";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 
@@ -50,6 +56,13 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   const [monthlyCents, setMonthlyCents] = useState<number | null>(null);
   const [opening, setOpening] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [aiCopied, setAiCopied] = useState(false);
+  const [connectedApp, setConnectedApp] = useState<LaunchConnectedAppResult | null>(null);
+  const [connectingApp, setConnectingApp] = useState(false);
+  const [connectAppError, setConnectAppError] = useState<string | null>(null);
+  const [appSecretCopied, setAppSecretCopied] = useState(false);
+  const [webhookSecretCopied, setWebhookSecretCopied] = useState(false);
+  const [appPromptCopied, setAppPromptCopied] = useState(false);
   const ensureSessionRef = useRef(props.ensureSession);
   ensureSessionRef.current = props.ensureSession;
   const communityId = props.community.id;
@@ -132,6 +145,83 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   const copy = () => {
     void navigator.clipboard?.writeText(`https://${communityPageAddress(slug)}`).then(() => setCopied(true), () => setCopied(false));
   };
+  const copyAiSetup = async () => {
+    try {
+      const setup = buildPolynetMcpSetupForOrigin(window.location.origin, {
+        community: { name: props.community.name, slug },
+      });
+      const ok = await tryCopyTextToClipboard(setup.setupBundle);
+      setAiCopied(ok);
+      if (ok) window.setTimeout(() => setAiCopied(false), 2200);
+    } catch {
+      setAiCopied(false);
+    }
+  };
+  const connectApp = async (input: { name: string; appUrl: string }) => {
+    if (connectingApp) return;
+    setConnectingApp(true);
+    setConnectAppError(null);
+    try {
+      const session = await ensureSessionRef.current();
+      if (!session) throw new Error("session");
+      const result = await registerCloudConnectedApp({
+        session,
+        communityId,
+        name: input.name,
+        appUrl: input.appUrl || undefined,
+      });
+      setConnectedApp({
+        appId: result.app_id,
+        name: input.name,
+        appUrl: input.appUrl || null,
+        secret: result.secret,
+        webhookSigningSecret: result.webhook_signing_secret ?? null,
+      });
+      announceCommunityAppLinksChanged();
+    } catch (failure) {
+      const code = String((failure as Error)?.message ?? "");
+      setConnectAppError(
+        code.includes("connected_app_url_invalid")
+          ? "Use your app's public https address."
+          : code.includes("name_required")
+            ? "Give your app a name."
+            : "Couldn't connect your app. You can add it in Settings anytime.",
+      );
+    } finally {
+      setConnectingApp(false);
+    }
+  };
+  const copyAppSecret = async () => {
+    if (!connectedApp) return;
+    const ok = await tryCopyTextToClipboard(connectedApp.secret);
+    setAppSecretCopied(ok);
+    if (ok) window.setTimeout(() => setAppSecretCopied(false), 2200);
+  };
+  const copyWebhookSecret = async () => {
+    if (!connectedApp?.webhookSigningSecret) return;
+    const ok = await tryCopyTextToClipboard(connectedApp.webhookSigningSecret);
+    setWebhookSecretCopied(ok);
+    if (ok) window.setTimeout(() => setWebhookSecretCopied(false), 2200);
+  };
+  const copyAppPrompt = async () => {
+    if (!connectedApp) return;
+    const convex = String((import.meta as any).env?.VITE_CONVEX_URL ?? "");
+    const apiOrigin = convex ? convex.replace(".convex.cloud", ".convex.site") : "";
+    const prompt = buildConnectedAppSetupPrompt({
+      communityName: props.community.name,
+      appName: connectedApp.name,
+      appId: connectedApp.appId,
+      apiOrigin,
+      hasWebhook: false,
+      guide: connectYourAppGuide,
+      communityUrl: `${window.location.origin}/c/${encodeURIComponent(slug)}`,
+      hasAppLink: Boolean(connectedApp.appUrl),
+      tiers: [],
+    });
+    const ok = await tryCopyTextToClipboard(prompt);
+    setAppPromptCopied(ok);
+    if (ok) window.setTimeout(() => setAppPromptCopied(false), 2200);
+  };
   const open = async () => {
     if (opening) return;
     setOpening(true);
@@ -175,6 +265,18 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
         opening={opening}
         copied={copied}
         onCopy={copy}
+        aiCopied={aiCopied}
+        onCopyAiSetup={() => void copyAiSetup()}
+        connectedApp={connectedApp}
+        connectingApp={connectingApp}
+        connectAppError={connectAppError}
+        appSecretCopied={appSecretCopied}
+        webhookSecretCopied={webhookSecretCopied}
+        appPromptCopied={appPromptCopied}
+        onConnectApp={connectApp}
+        onCopyAppSecret={() => void copyAppSecret()}
+        onCopyWebhookSecret={() => void copyWebhookSecret()}
+        onCopyAppPrompt={() => void copyAppPrompt()}
         onOpen={() => void open()}
       />
     </WebBlockingSetupModal>
