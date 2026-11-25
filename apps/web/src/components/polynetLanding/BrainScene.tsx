@@ -5,18 +5,21 @@ import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 // workspace, uneven and grown rather than drawn with a compass, and the
 // different kinds of memory each with its own look). The same community as
 // the preview at the top. The looks are the app's own (kit.module.css,
-// .brain-*): courses and their lessons white; what members worked out grey;
-// new this week violet; what a host taught the guide a hollow ring; a pod's
-// memory inside its own dashed circle, off to the side; notes the guide
-// often answers with together joined by a faint thread. Only the middle and
+// .brain-*): courses and their lessons white; the notes the guide wrote
+// from helpful posts grey; new this week violet; notes saved from
+// conversations with the guide a softer blue; what a host wrote a hollow
+// ring; notes the guide often answers with together joined by a faint
+// thread. Pods are left to their own page (Neil, Nov 25). Only the middle and
 // each cluster's main dot are named. The card starts with the kinds as a
 // key: pick one and its dots light. Pick a cluster or a dot to open it.
 
-export type Kind = "course" | "learned" | "fresh" | "taught" | "pod";
+export type Kind = "course" | "learned" | "talk" | "fresh" | "taught";
 type Source = [who: string, channel: string, excerpt: string];
-type Note = { id: string; title: string; body: string; under: string; days: number; uses: number; taught?: boolean; sources: Source[] };
+// Where a note came from, as Knowledge says it (KitKnowledgeNotes.tsx noteOrigin).
+type Origin = "guide" | "ask" | "tag" | "host";
+type Note = { id: string; title: string; body: string; under: string; days: number; uses: number; taught?: boolean; origin?: Origin; sources: Source[] };
 type Dot = { id: string; x: number; y: number; from: string; kind: "lesson" | "note"; title?: string; note?: Note };
-type Hub = { id: string; name: string; kind: "course" | "subject" | "pod"; x: number; y: number; bend: number; about: string; side?: "left" };
+type Hub = { id: string; name: string; kind: "course" | "subject"; x: number; y: number; bend: number; about: string; side?: "left" };
 
 const W = 680, H = 500;
 const C = { x: 300, y: 250 };
@@ -26,7 +29,6 @@ export const HUBS: Hub[] = [
   { id: "launch", name: "Launch week", kind: "course", x: 196, y: 388, bend: -0.18, side: "left", about: "A course you built. Members who launched left what worked under its lessons." },
   { id: "growth", name: "Growth", kind: "subject", x: 498, y: 112, bend: -0.26, about: "No course teaches this yet. The guide grouped it on its own from what members shared, so you can see what to teach next." },
   { id: "calls", name: "Calls", kind: "subject", x: 526, y: 312, bend: 0.2, about: "Learned on its own from the community's calls: how they run, and what to do when they don't." },
-  { id: "pod", name: "Launch pod", kind: "pod", x: 612, y: 452, bend: 0.32, about: "A pod's memory stays inside the pod, for the people in it. The rest of the community never sees it." },
 ];
 
 const n = (id: string, title: string, under: string, days: number, uses: number, body: string, sources: Source[], taught = false): Note =>
@@ -49,14 +51,20 @@ export const DOTS: Dot[] = [
     [["Dev", "general", "My first three were people who'd DM'd me questions for months."]]) },
   { id: "dms", x: 120, y: 246, from: "l-first10", kind: "note", note: n("dms", "Ten DMs, not one big post", "Lesson 4 · Your first ten customers", 9, 3,
     "Ten personal messages bring more first customers than one big post.", [["Kai", "wins", "Ten DMs, four yeses. The big post got one like."]]) },
+  { id: "talk-tiers", x: 262, y: 200, from: "l-price", kind: "note", note: { ...n("talk-tiers", "One price at $49 for the first ten", "Lesson 3 · Pricing your first offer", 4, 2,
+    "Dev weighed one price against two tiers with the guide and went with one price, $49, for his first ten members.",
+    [["Dev", "guide", "Should I do one price or two tiers for my first offer?"]]), origin: "ask" } },
   // Launch week: three lessons, smaller.
   { id: "l-page", x: 162, y: 404, from: "launch", kind: "lesson", title: "Lesson 1 · A one-page offer" },
   { id: "l-post", x: 214, y: 424, from: "launch", kind: "lesson", title: "Lesson 2 · The launch post" },
   { id: "l-after", x: 226, y: 370, from: "launch", kind: "lesson", title: "Lesson 3 · The week after launch" },
   { id: "headline", x: 236, y: 458, from: "l-post", kind: "note", note: n("headline", "Launch post headlines that worked", "Lesson 2 · The launch post", 3, 2,
-    "Headlines that worked here say the result, then who it's for. Short beats clever.", [["Hana", "launch-pod", "Changed my headline to the result first and sign-ups doubled."]]) },
+    "Headlines that worked here say the result, then who it's for. Short beats clever.", [["Hana", "general", "Changed my headline to the result first and sign-ups doubled."]]) },
   { id: "onepage", x: 128, y: 430, from: "l-page", kind: "note", note: n("onepage", "What goes on a one-page offer", "Lesson 1 · A one-page offer", 18, 1,
     "Who it's for, the one result, what's inside, the price, and one way to join. Nothing else.", [["Jon", "general", "My page is five lines now and it converts better."]]) },
+  { id: "talk-checklist", x: 264, y: 398, from: "l-after", kind: "note", note: { ...n("talk-checklist", "Launch-day checklist", "Lesson 3 · The week after launch", 6, 3,
+    "Post at 9am, pin it, reply to every comment in the first hour, and send the founding-price DMs the same day.",
+    [["Hana", "general", "@guide what should I do on launch day itself?"]]), origin: "tag" } },
   // Growth: learned on its own, looser, with one thing you taught it.
   { id: "invite", x: 470, y: 66, from: "growth", kind: "note", note: n("invite", "Invitations that work", "Growth", 0, 7,
     "Personal invitations beat posts. Name why you thought of them, say what's inside in one line, and give one date to show up.",
@@ -80,11 +88,9 @@ export const DOTS: Dot[] = [
     "Recordings go under the course they belong to, with a two-line summary pinned in the channel.", [["Hana", "general", "Found the recording under the course, thanks!"]]) },
   { id: "cameras", x: 574, y: 330, from: "calls", kind: "note", note: n("cameras", "Cameras on for hot seats", "Calls", 30, 2,
     "On the Friday call, whoever is in the hot seat has their camera on. Everyone else can choose.", [], true) },
-  // The pod's own, inside its circle.
-  { id: "podplan", x: 604, y: 444, from: "pod", kind: "note", note: n("podplan", "The pod's weekly plan", "Launch pod", 2, 3,
-    "Monday goals, Wednesday check-in, Friday demo. Everyone posts one line each day.", [["Hana", "launch-pod", "Weekly plan pinned. One line a day, no excuses."]]) },
-  { id: "podreview", x: 622, y: 462, from: "pod", kind: "note", note: n("podreview", "Page reviews go in the thread", "Launch pod", 9, 1,
-    "Post your page in the review thread, not the main channel, so feedback stays together.", [["Jon", "launch-pod", "Moved my page to the review thread, much easier to follow."]]) },
+  { id: "talk-consent", x: 468, y: 292, from: "calls", kind: "note", note: { ...n("talk-consent", "Ask before you record", "Calls", 11, 1,
+    "Ask once at the start whether everyone's fine being recorded, and keep hot seats off the recording if anyone isn't.",
+    [["Amir", "guide", "Do I need to ask before recording the call?"]]), origin: "ask" } },
 ];
 
 // Notes the guide often answers with together.
@@ -92,17 +98,17 @@ const THREADS: Array<[string, string]> = [["founding", "invite"], ["askedHelp", 
 
 function kindOf(dot: Dot): Kind {
   if (dot.kind === "lesson") return "course";
-  if (HUBS.find((hub) => hub.id === dot.from)?.kind === "pod") return "pod";
   if (dot.note?.taught) return "taught";
+  if (dot.note?.origin === "ask" || dot.note?.origin === "tag") return "talk";
   return (dot.note?.days ?? 99) <= 7 ? "fresh" : "learned";
 }
 
 export const KINDS: Array<{ kind: Kind; name: string; line: string }> = [
   { kind: "course", name: "Courses and lessons", line: "The frame you built" },
-  { kind: "learned", name: "Learned from members", line: "Saved from helpful posts, filed where it belongs" },
-  { kind: "fresh", name: "New this week", line: "Still glowing" },
-  { kind: "taught", name: "Taught by you", line: "Notes you wrote for the guide" },
-  { kind: "pod", name: "A pod's own", line: "Kept inside the pod" },
+  { kind: "learned", name: "Notes the guide wrote", line: "From helpful posts, filed where they belong" },
+  { kind: "talk", name: "Saved from conversations", line: "What got worked out when someone asked the guide" },
+  { kind: "fresh", name: "New this week", line: "Notes still glowing" },
+  { kind: "taught", name: "Notes you wrote", line: "Kept in your words" },
 ];
 
 function when(days: number): string {
@@ -157,7 +163,7 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
       return (
         <>
           {hub ? <button type="button" className="bsc-crumb-btn" onClick={() => pick(hub.id)}>← {hub.name}</button> : null}
-          <span className="sc-eyebrow">{edit ? "Corrected by you" : note.taught ? "Taught by you" : "Learned"} · {when(note.days)}</span>
+          <span className="sc-eyebrow">Note · {edit ? "corrected by you" : note.taught ? "written by you" : note.origin === "ask" ? "saved from a conversation with the guide" : note.origin === "tag" ? "saved from a conversation in a channel" : `written by the guide from ${note.sources.length} ${note.sources.length === 1 ? "post" : "posts"}`} · {when(note.days)}</span>
           <b className="bsc-title">{title}</b>
           <p className="bsc-text">{body}</p>
           <div className="bsc-facts">
@@ -167,11 +173,11 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
           {note.sources.length ? (
             <div className="bsc-sources">
               <span className="bsc-label">Where it came from</span>
-              {note.sources.map(([who, channel, excerpt]) => <p key={excerpt}><b>{who}</b> in #{channel}: {excerpt}</p>)}
+              {note.sources.map(([who, channel, excerpt]) => <p key={excerpt}><b>{who}</b> {channel === "guide" ? "asked the guide" : `in #${channel}`}: {excerpt}</p>)}
             </div>
           ) : <div className="bsc-sources"><span className="bsc-label">You wrote it for the guide. It answers with your words.</span></div>}
           {said ? <p className="bsc-said" role="status">{said}</p> : null}
-          {kindOf(dot) === "pod" ? null : mode === "correct" ? (
+          {mode === "correct" ? (
             <div className="bsc-form">
               <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} aria-label="Title" maxLength={120} />
               <textarea value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} aria-label="What it says" rows={3} maxLength={600} />
@@ -227,7 +233,7 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
       return (
         <>
           <button type="button" className="bsc-crumb-btn" onClick={() => pick(null)}>← What your community remembers</button>
-          <span className="sc-eyebrow">{hub.kind === "course" ? "A course" : hub.kind === "pod" ? "A pod" : "Learned on its own"}</span>
+          <span className="sc-eyebrow">{hub.kind === "course" ? "A course" : "Learned on its own"}</span>
           <b className="bsc-title">{hub.name}</b>
           <p className="bsc-text">{hub.about}</p>
           {said ? <p className="bsc-said" role="status">{said}</p> : null}
@@ -244,7 +250,7 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
       <>
         <span className="sc-eyebrow">The Build Club's memory</span>
         <b className="bsc-title">What your community remembers</b>
-        <p className="bsc-text">The guide answers from all of it. Pick a kind to see where it lives, or any dot to open it.</p>
+        <p className="bsc-text">Your courses are the frame. Around them, the guide keeps notes: what it learns from posts, what gets worked out in conversations, and what you write. It answers from all of it. Pick a kind, or any dot.</p>
         <div className="bsc-kinds" role="group" aria-label="Kinds of memory">
           {KINDS.map((entry) => (
             <button key={entry.kind} type="button" className={kind === entry.kind ? "bsc-kind on" : "bsc-kind"} aria-pressed={kind === entry.kind} onClick={() => showKind(entry.kind)}>
@@ -259,7 +265,7 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
   })();
 
   const lit = (entry: Dot) => kind ? kindOf(entry) === kind : hub ? ownerOf(entry)?.id === hub.id : true;
-  const hubLit = (entry: Hub) => kind ? (kind === "course" && entry.kind === "course") || (kind === "pod" && entry.kind === "pod") : hub ? hub.id === entry.id : true;
+  const hubLit = (entry: Hub) => kind ? kind === "course" && entry.kind === "course" : hub ? hub.id === entry.id : true;
   const fresh = dots.filter((entry) => kindOf(entry) === "fresh");
   return (
     <div className="bsc">
@@ -268,10 +274,10 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
           <radialGradient id="bscGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#A78BFA" stopOpacity=".55" /><stop offset="1" stopColor="#A78BFA" stopOpacity="0" /></radialGradient>
         </defs>
         {HUBS.map((entry) => (
-          <path key={`t-${entry.id}`} className={["bsc-trunk", entry.kind === "pod" ? "pod" : "", hubLit(entry) ? "" : "dim", hub?.id === entry.id ? "on" : ""].filter(Boolean).join(" ")} d={trunk(entry)} />
+          <path key={`t-${entry.id}`} className={["bsc-trunk", hubLit(entry) ? "" : "dim", hub?.id === entry.id ? "on" : ""].filter(Boolean).join(" ")} d={trunk(entry)} />
         ))}
         {/* Now and then, a signal out to something new. */}
-        {HUBS.filter((entry) => entry.kind !== "pod" && fresh.some((f) => ownerOf(f)?.id === entry.id)).map((entry, index) => (
+        {HUBS.filter((entry) => fresh.some((f) => ownerOf(f)?.id === entry.id)).map((entry, index) => (
           <path key={`s-${entry.id}`} className="bsc-signal" pathLength={1} d={trunk(entry)} style={{ animationDelay: `${index * 2.2}s` }} />
         ))}
         {THREADS.map(([a, b]) => {
@@ -284,9 +290,6 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
           return from ? <line key={`w-${entry.id}`} className={lit(entry) ? "bsc-twig" : "bsc-twig dim"} x1={from.x} y1={from.y} x2={entry.x} y2={entry.y} /> : null;
         })}
         <circle className="bsc-glow" cx={C.x} cy={C.y} r={62} fill="url(#bscGlow)" />
-        {HUBS.filter((entry) => entry.kind === "pod").map((entry) => (
-          <circle key={`m-${entry.id}`} className={hubLit(entry) ? "bsc-membrane" : "bsc-membrane dim"} cx={entry.x} cy={entry.y} r={30} />
-        ))}
         {dots.map((entry) => {
           const k = kindOf(entry);
           const on = picked === entry.id;
@@ -306,12 +309,12 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
           return (
             <g key={`h-${entry.id}`} className={["bsc-hub", `h-${entry.kind}`, hubLit(entry) ? "" : "dim", on ? "on" : ""].filter(Boolean).join(" ")}
               role="button" tabIndex={0} aria-label={entry.name} onClick={() => pick(entry.id)} onKeyDown={onKey(() => pick(entry.id))}>
-              <circle className="bsc-hit" cx={entry.x} cy={entry.y} r={entry.kind === "pod" ? 30 : 15} />
-              {entry.kind === "pod" ? null : <circle className="bsc-hubdot" cx={entry.x} cy={entry.y} r={entry.kind === "course" ? 7 : 6} />}
-              {on ? <circle className="bsc-ring" cx={entry.x} cy={entry.y} r={entry.kind === "pod" ? 34 : 12} /> : null}
+              <circle className="bsc-hit" cx={entry.x} cy={entry.y} r={15} />
+              <circle className="bsc-hubdot" cx={entry.x} cy={entry.y} r={entry.kind === "course" ? 7 : 6} />
+              {on ? <circle className="bsc-ring" cx={entry.x} cy={entry.y} r={12} /> : null}
               {entry.side === "left"
                 ? <text className="bsc-name" x={entry.x - 16} y={entry.y - 6} textAnchor="end">{entry.name}</text>
-                : <text className="bsc-name" x={entry.x} y={entry.kind === "pod" ? entry.y - 38 : entry.y + (above ? -16 : 26)} textAnchor="middle">{entry.name}</text>}
+                : <text className="bsc-name" x={entry.x} y={entry.y + (above ? -16 : 26)} textAnchor="middle">{entry.name}</text>}
             </g>
           );
         })}

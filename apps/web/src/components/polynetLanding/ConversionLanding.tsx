@@ -587,7 +587,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
         <FeatureSection id="brain" title={["Good answers get", "buried in old threads."]} sceneLabel="Try the community brain: click a node or something it learned, see the posts it came from, and correct or remove it"
           live={<Suspense fallback={<div className="gsc-wait" />}><BrainScene /></Suspense>}
-          features={["A map of what your community knows", "Learns from helpful posts, and shows which", "Correct or remove anything it learned"]}>
+          features={["A map of what your community knows", "Notes the guide writes from posts and conversations", "Every note shows where it came from", "Correct or remove any note"]}>
           Polynet keeps them. Helpful answers become notes on one map, filed under your lessons, so what one member figures out, the next one finds.
         </FeatureSection>
 
