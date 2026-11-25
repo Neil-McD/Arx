@@ -66,9 +66,7 @@ The active surface includes:
 - living community memory notes and founder handbook
 - the official OAuth-protected Polynet MCP for everyone, scoped to each person's role
 - three read tools (`polynet_list`, `polynet_read`, `polynet_search`) plus role-scoped named action tools
-
-Community sites on `polynet.page` are built and running on Polynet's staging
-environment; production sites are not live yet.
+- connected apps ("Your app") so a founder's own software product can share access and plans with their community
 
 ## Rules
 
@@ -107,6 +105,5 @@ substrate without becoming product navigation.
 - `agent`
 - `community-lens`
 - `memory`
-- `community-site`
 - `polynet-mcp`
 - `entitlement`

@@ -7,6 +7,7 @@ import schema from "./schema";
 import {
   briefMarkdown,
   deterministicBrief,
+  formatEventStartInTimeZone,
   localDateAndHour,
   nextOccurrenceMs,
   parseBrief,
@@ -51,6 +52,52 @@ describe("founder brief writing", () => {
     expect(localDateAndHour(nowMs, "America/New_York")).toEqual({ date: "2026-10-26", hour: 9 });
     expect(localDateAndHour(nowMs, "Asia/Tokyo")).toEqual({ date: "2026-10-26", hour: 22 });
     expect(localDateAndHour(Date.parse("2026-10-26T02:00:00.000Z"), "America/Los_Angeles").date).toBe("2026-10-25");
+  });
+
+  it("formats upcoming event start times in the founder's configured time zone for both plain and model briefs", async () => {
+    const saturdayStartMs = Date.parse("2026-10-31T11:00:00.000Z"); // Sat 7:00 AM EDT / Sat 8:00 PM JST
+    expect(formatEventStartInTimeZone(saturdayStartMs, "America/New_York")).toBe("Sat 7:00 AM");
+    expect(formatEventStartInTimeZone(saturdayStartMs, "Asia/Tokyo")).toBe("Sat 8:00 PM");
+
+    const t = convexTest(schema, modules);
+    const nowMs = Date.parse("2026-10-30T12:00:00.000Z");
+    const f = await fixture(t, nowMs);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityFounderBriefSettings", {
+        communityId: f.communityId,
+        enabled: true,
+        localHour: 8,
+        timeZone: "America/New_York",
+        nextDueAt: nowMs,
+        updatedByUserId: f.ownerId,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await ctx.db.insert("communityEvents", {
+        communityId: f.communityId,
+        createdByUserId: f.ownerId,
+        title: "Saturday Long Run",
+        startsAt: saturdayStartMs,
+        timezone: "America/New_York",
+        locationType: "online",
+        visibility: "members",
+        status: "live",
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      } as any);
+    });
+
+    const read = await t.query(internalRefs.communityFounderBrief.readFounderBriefSnapshotInternal, {
+      communityId: f.communityId,
+      windowStartMs: nowMs - DAY,
+      nowMs,
+    });
+    expect(read.snapshot.upcomingEvents).toEqual([
+      { title: "Saturday Long Run", startsAt: "Sat 7:00 AM" },
+    ]);
+    const plain = deterministicBrief(read.snapshot);
+    const comingUp = plain.sections.find((section) => section.title === "Coming up");
+    expect(comingUp?.items).toEqual(["Saturday Long Run (Sat 7:00 AM)"]);
   });
 
   it("writes a plain brief: quiet days get one nudge, busy days lead with what's waiting", () => {

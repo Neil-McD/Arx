@@ -93,8 +93,6 @@ The cash path is simple: configure the community, define the paid access model, 
   removal, owners and admins as builders.
 - Polynet does not mount third-party MCP servers or app integrations into
   the community agent.
-- Community sites on `polynet.page` are staging-only until the production edge
-  is live.
 
 ## Rules
 
@@ -120,6 +118,5 @@ The cash path is simple: configure the community, define the paid access model, 
 - `agent`
 - `join-page`
 - `resource`
-- `community-site`
 - `polynet-mcp`
 - `entitlement`

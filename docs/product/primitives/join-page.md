@@ -55,7 +55,7 @@ Signing in establishes identity; it never creates community membership.
 ## Rules
 
 1. The join page is the canonical public entry surface for join and gate flows.
-   A community site or website is only a marketing destination.
+   A founder's own website or product can link directly to `/c/<slug>`.
 2. Join page visibility does not imply community access.
 3. Published communities can still be gated.
 4. Unlisted communities can still be shared by direct link.
@@ -66,13 +66,12 @@ Signing in establishes identity; it never creates community membership.
 
 ## Non-Goals
 
-Polynet does not offer a funnel composer or page builder. Founders build their
-front door as a community site.
+Polynet does not offer a funnel composer or hosted website builder. Founders
+can link directly to `/c/<slug>` from their own website or product.
 
 ## Related Concepts
 
 - `community`
-- `community-site`
 - `entitlement`
 - `billing-entitlements`
 - `access-model`

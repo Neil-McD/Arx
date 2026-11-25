@@ -26,7 +26,6 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `primitives/join-page` (Primitives) — Join Page: The community's one public join page (/c/<slug>) for joining, approval, sign-in, and checkout.
 - `primitives/voice` (Primitives) — Voice: Voice input as a core member interaction surface.
 - `primitives/polynet-mcp` (Primitives) — Polynet MCP: The official gateway for anyone's external AI harness into the Polynet context their role allows.
-- `primitives/community-site` (Primitives) — Community Site: A community's own website on polynet.page, built with @polynet/cli; staging only for now.
 - `primitives/resource` (Primitives) — Resource: Community-owned durable knowledge available to members and agents where allowed.
 - `primitives/entitlement` (Primitives) — Entitlement: Durable backend access truth for products, communities, plans, and capabilities.
 - `primitives/role` (Primitives) — Role: Community authority level, separate from entitlement and payment state.
