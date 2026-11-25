@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   beginOAuthSignIn,
   bootstrapSessionDetailed,
@@ -23,6 +23,9 @@ const WebLandingPage = lazy(() =>
 const PublicFindPage = lazy(() =>
   import("./polynetLanding/PublicFindPage").then((module) => ({ default: module.PublicFindPage })),
 );
+const PricingPage = lazy(() =>
+  import("./polynetLanding/PricingPage").then((module) => ({ default: module.PricingPage })),
+);
 const WebCommunityLandingPage = lazy(() =>
   import("./WebCommunityLandingPage").then((module) => ({
     default: module.WebCommunityLandingPage,
@@ -33,6 +36,11 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
   const [route, setRoute] = useState<PublicEntryRoute>(props.initialRoute);
   const [handoffToStudioApp, setHandoffToStudioApp] = useState(false);
   const [sessionCheckPending, setSessionCheckPending] = useState(true);
+  // Pricing is for everyone: a signed-in person reading it stays on it, and
+  // starting a community from it opens the app's create flow.
+  const [signedIn, setSignedIn] = useState(false);
+  const routeRef = useRef(route);
+  routeRef.current = route;
 
   // Check for an existing browser session in the background without blocking
   // first paint. Returning signed-in members — and transient session-check
@@ -44,6 +52,11 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
       .then((result) => {
         if (cancelled) return;
         if (result.session) {
+          if (routeRef.current.kind === "pricing") {
+            setSignedIn(true);
+            setSessionCheckPending(false);
+            return;
+          }
           setHandoffToStudioApp(true);
           return;
         }
@@ -69,7 +82,7 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
         search: window.location.search || "",
         hasRecentAuthFlowPending: hasRecentAuthFlowPending(),
       });
-      if (!next) {
+      if (!next || (signedIn && next.kind !== "pricing")) {
         setHandoffToStudioApp(true);
         return;
       }
@@ -77,7 +90,7 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [handoffToStudioApp]);
+  }, [handoffToStudioApp, signedIn]);
 
   const handleStartBuilderPurchase = useCallback(() => {
     captureProductAnalyticsEvent("signin_started", { reason: "create_community" });
@@ -88,8 +101,17 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
     if (intent) {
       storeAuthResumeState({ intent });
     }
+    // Already signed in (on Pricing): the app picks the saved intent up and
+    // opens its create flow.
+    if (signedIn) {
+      window.location.assign("/");
+      return;
+    }
     markAuthFlowPending();
-    const returnTo = `${window.location.pathname || "/"}${window.location.search || ""}`;
+    // Pricing has no signed-in twin in the app, so sign-in returns home.
+    const returnTo = routeRef.current.kind === "pricing"
+      ? "/"
+      : `${window.location.pathname || "/"}${window.location.search || ""}`;
     void beginOAuthSignIn({ returnTo })
       .then((result) => {
         if (result.ok && result.authUrl) {
@@ -103,7 +125,7 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
         clearAuthFlowPending();
         setHandoffToStudioApp(true);
       });
-  }, []);
+  }, [signedIn]);
 
   if (handoffToStudioApp) {
     return (
@@ -123,6 +145,8 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
         />
       ) : route.kind === "discover" ? (
         <PublicFindPage onJoin={handleStartBuilderPurchase} />
+      ) : route.kind === "pricing" ? (
+        <PricingPage onJoin={handleStartBuilderPurchase} />
       ) : (
         <WebLandingPage onStartBuilderPurchase={handleStartBuilderPurchase} />
       )}

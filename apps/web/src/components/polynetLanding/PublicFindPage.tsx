@@ -22,7 +22,7 @@ export function PublicFindPage({ onJoin }: PublicFindPageProps) {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Find a community · Polynet";
+    document.title = "Communities · Polynet";
     return () => {
       document.title = previousTitle;
     };
@@ -52,8 +52,8 @@ export function PublicFindPage({ onJoin }: PublicFindPageProps) {
   return (
     <PublicFrame onJoin={onJoin}>
       <section className="find" aria-labelledby="find-title">
-        <p className="kicker">Find a community</p>
-        <h1 id="find-title">Find your people.</h1>
+        <h1 id="find-title">Communities on Polynet</h1>
+        <p className="subhead">Find your people, or see what other builders are making. The most active are first.</p>
         <KitApp view="home" part="flow" light={false}>
           {communities.length > DISCOVER_SEARCH_FROM ? <div style={{ margin: "20px 0 0" }}><DiscoverSearch query={query} onQuery={setQuery} /></div> : null}
           <div style={{ marginTop: 28 }}>

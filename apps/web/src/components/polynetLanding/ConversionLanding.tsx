@@ -22,7 +22,7 @@ const GUIDE = POLYNET_FOUNDER_TIER_CATALOG.guide;
 const CHIEF = POLYNET_FOUNDER_TIER_CATALOG.chief_of_staff;
 export const LANDING_OFFER_LINE =
   `Free to build · Guide ${dollars(GUIDE.monthlyPriceBaseUnits)}/mo · Chief of Staff ${dollars(CHIEF.monthlyPriceBaseUnits)}/mo`;
-const FEE = `${POLYNET_COMMUNITY_PLATFORM_FEE_BPS / 100}%`;
+export const FEE = `${POLYNET_COMMUNITY_PLATFORM_FEE_BPS / 100}%`;
 
 type Plan = { tier: FounderPlanTier | null; name: string; line: string; price: string; per: string; points: string[]; ai: string | null; note?: string; button: string; lit?: boolean };
 export const LANDING_PLANS: Plan[] = [
@@ -45,7 +45,7 @@ export const LANDING_PLANS: Plan[] = [
   },
 ];
 
-const INCLUDED = [
+export const INCLUDED: Array<[string, string]> = [
   ["Channels and messages", "Group channels, threaded replies and a calm inbox."],
   ["Courses and knowledge", "Publish lessons, see who's progressing, attach notes and files."],
   ["Events", "One-off or recurring sessions, with reminders."],
@@ -54,7 +54,7 @@ const INCLUDED = [
   ["Works with your own AI", "Connect Claude or ChatGPT. It acts inside your permissions."],
 ];
 
-const QUESTIONS = [
+export const QUESTIONS: Array<[string, string]> = [
   ["Is the Free plan really free?", "Yes. Unlimited members, courses, channels, pods and events, with no time limit. You pay only if you turn on Guide or Chief of Staff, or when you sell memberships."],
   ["What happens at the monthly AI limit?", "The AI pauses until your next billing cycle. You never get a surprise bill. On Chief of Staff you can turn on prepaid boosts, under a monthly cap you set."],
   ["How does charging members work?", `Connect Stripe once and set your community to free, approval-only or paid. Payouts go to your account, less a ${FEE} Polynet fee and Stripe's processing fee.`],
@@ -76,11 +76,15 @@ function trackFind(placement: string) {
   return () => captureProductAnalyticsEvent("find_community_clicked", { placement });
 }
 
+// Named in the Terms and on the server-rendered public pages (apps/web/publicPages.ts).
+const OPERATOR_NAME = "EXECUTIVEINTELLIGENCE LLC";
+const SUPPORT_EMAIL = "support@polynet.ai";
+
 // "See it live": Polynet's own community, open to look around before signing up.
 const LIVE_COMMUNITY_PATH = "/c/polynet";
 
 // Visitors only see communities that look finished: a banner and a one-liner.
-const SHOWCASE_LIMIT = 6;
+const SHOWCASE_LIMIT = 8;
 
 // The Polynet mark on its graphite tile, as the tab icon draws it. Same
 // geometry as scripts/generate_brand_icons.mjs.
@@ -251,8 +255,11 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
   if (props.communities.length === 0) return null;
   return (
     <section className="showcase" id="communities" aria-labelledby="showcase-title" data-rv>
-      <h2 id="showcase-title" className="label">Communities on Polynet</h2>
-      <div className="showcase-grid">
+      <div className="showcase-head">
+        <h2 id="showcase-title" className="label">Communities on Polynet</h2>
+        <a className="more" href="/discover" onClick={trackFind("home_showcase")}>See all communities →</a>
+      </div>
+      <div className="showcase-row">
         {props.communities.map((community) => (
           <a
             className="showcase-card"
@@ -284,8 +291,8 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
   );
 }
 
-// The top bar's Product menu: what Polynet is made of, each entry a place on
-// the home page (or a public page) that exists today.
+// The top bar's Product menu: what Polynet is made of, each entry a place
+// that exists today (a home page section or a public page).
 const PRODUCT_MENU: Array<Array<[string, string, string]>> = [
   [
     ["The guide", "Answers your members from your courses and past posts", "/#guide"],
@@ -293,18 +300,33 @@ const PRODUCT_MENU: Array<Array<[string, string, string]>> = [
     ["Chief of Staff", "Morning briefs, member check-ins and reply drafts", "/#chief-of-staff"],
   ],
   [
-    ["Community home", "Channels, messages, courses, events and pods", "/#included"],
-    ["Paid memberships", "Charge for access, with payouts straight to you", "/#included"],
+    ["Community home", "Channels, messages, courses, events and pods", "/pricing#included"],
+    ["Paid memberships", "Charge for access, with payouts straight to you", "/pricing#included"],
     ["Your own AI", "Bring Claude or ChatGPT into your community", "/ai"],
   ],
 ];
 const PRODUCT_MENU_LINKS: Array<[string, string]> = [
-  ["See it live", "/c/polynet"],
-  ["Find a community", "/discover"],
-  ["Questions", "/#questions"],
+  ["See it live", LIVE_COMMUNITY_PATH],
+  ["Communities", "/discover"],
+  ["Pricing", "/pricing"],
 ];
 
-function ProductMenu() {
+// The Resources menu: where to learn Polynet and get help.
+const RESOURCES_MENU: Array<[string, string, string]> = [
+  ["Use your own AI", "Connect Claude, ChatGPT or Cursor to your communities", "/ai"],
+  ["The Polynet community", "Ask questions and learn alongside other builders", LIVE_COMMUNITY_PATH],
+];
+const RESOURCES_MENU_LINKS: Array<[string, string]> = [
+  ["Questions", "/pricing#questions"],
+  ["Contact support", `mailto:${SUPPORT_EMAIL}`],
+  ["Terms", "/terms"],
+  ["Privacy", "/privacy"],
+];
+
+// A top bar menu. It opens on hover or click; leaving waits a moment before
+// closing, so crossing the gap between the button and the panel (or cutting a
+// corner) never drops it. Escape, clicking elsewhere or tabbing out closes.
+function NavMenu(props: { label: string; id: string; narrow?: boolean; children: (close: () => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -321,8 +343,6 @@ function ProductMenu() {
       document.removeEventListener("pointerdown", onPointer);
     };
   }, [open]);
-  // Leaving waits a moment before closing, so crossing the gap between the
-  // button and the panel (or cutting a corner) never drops the menu.
   const leaving = useRef<number | null>(null);
   const stay = () => {
     if (leaving.current !== null) window.clearTimeout(leaving.current);
@@ -340,14 +360,21 @@ function ProductMenu() {
       ref={wrap}
       onMouseEnter={() => { stay(); setOpen(true); }}
       onMouseLeave={closeSoon}
-      // Tabbing out of the menu closes it.
       onBlur={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) close(); }}
     >
       {/* Hovering has already opened it by the time a click lands, so a click
-          only ever opens; Escape, moving away or tabbing out closes. */}
-      <button type="button" className={open ? "menu-button open" : "menu-button"} aria-expanded={open} aria-controls="product-menu" onClick={() => setOpen(true)}>Product</button>
-      {open ? (
-        <div className="menu-panel" id="product-menu">
+          only ever opens. */}
+      <button type="button" className={open ? "menu-button open" : "menu-button"} aria-expanded={open} aria-controls={props.id} onClick={() => setOpen(true)}>{props.label}</button>
+      {open ? <div className={props.narrow ? "menu-panel narrow" : "menu-panel"} id={props.id}>{props.children(close)}</div> : null}
+    </div>
+  );
+}
+
+function ProductMenu() {
+  return (
+    <NavMenu label="Product" id="product-menu">
+      {(close) => (
+        <>
           <div className="menu-grid">
             {PRODUCT_MENU.map((column, index) => (
               <div key={index}>
@@ -362,17 +389,32 @@ function ProductMenu() {
           </div>
           <div className="menu-foot">
             <span><b>New</b> Three plans: Free, Guide and Chief of Staff</span>
-            <a href="/#pricing" onClick={close}>See pricing →</a>
+            <a href="/pricing" onClick={close}>See pricing →</a>
           </div>
-        </div>
-      ) : null}
-    </div>
+        </>
+      )}
+    </NavMenu>
   );
 }
 
-// Named in the Terms and on the server-rendered public pages (apps/web/publicPages.ts).
-const OPERATOR_NAME = "EXECUTIVEINTELLIGENCE LLC";
-const SUPPORT_EMAIL = "support@polynet.ai";
+function ResourcesMenu() {
+  return (
+    <NavMenu label="Resources" id="resources-menu" narrow>
+      {(close) => (
+        <div className="menu-grid two">
+          <div>
+            {RESOURCES_MENU.map(([title, text, href]) => (
+              <a key={title} href={href} onClick={close}><b>{title}</b><span>{text}</span></a>
+            ))}
+          </div>
+          <div className="menu-plain">
+            {RESOURCES_MENU_LINKS.map(([title, href]) => <a key={title} href={href} onClick={close}>{title}</a>)}
+          </div>
+        </div>
+      )}
+    </NavMenu>
+  );
+}
 
 // Header and footer shared by every public page.
 export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) {
@@ -383,8 +425,9 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
           <Brand />
           <nav className="topbar-links" aria-label="Site">
             <ProductMenu />
+            <ResourcesMenu />
             <a href="/discover" onClick={trackFind("header")}>Communities</a>
-            <a href="/#pricing">Pricing</a>
+            <a href="/pricing">Pricing</a>
           </nav>
           <nav aria-label="Account">
             <a href="/login">Sign in</a>
@@ -406,14 +449,16 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
             </nav>
             <nav aria-label="Polynet">
               <b>Polynet</b>
-              <a href="/#pricing">Pricing</a>
-              <a href="/discover" onClick={trackFind("footer")}>Find a community</a>
-              <a href="/c/polynet">See it live</a>
+              <a href="/pricing">Pricing</a>
+              <a href="/discover" onClick={trackFind("footer")}>Communities</a>
+              <a href={LIVE_COMMUNITY_PATH}>See it live</a>
               <a href="/login">Sign in</a>
             </nav>
-            <nav aria-label="Help">
-              <b>Help</b>
-              <a href="/#questions">Questions</a>
+            <nav aria-label="Resources">
+              <b>Resources</b>
+              <a href="/ai">Use your own AI</a>
+              <a href={LIVE_COMMUNITY_PATH}>The Polynet community</a>
+              <a href="/pricing#questions">Questions</a>
               <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
             </nav>
             <nav aria-label="Legal">
@@ -430,6 +475,44 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
       </div>
     </div>
   );
+}
+
+// The three plans. A plan button remembers the plan, so it is offered first
+// once the community exists.
+export function PlanCards(props: { onJoin: () => void; placement: string }) {
+  return (
+    <div className="cards three plans">
+      {LANDING_PLANS.map((plan) => (
+        <article className={plan.lit ? "card plan lit" : "card plan"} key={plan.name}>
+          <header>
+            <h3>{plan.name}{plan.lit ? <span className="recommended">Recommended</span> : null}</h3>
+            <p>{plan.line}</p>
+          </header>
+          <p className="price"><strong>{plan.price}</strong> {plan.per}</p>
+          <ul>
+            {plan.points.map((point) => <li key={point}>{point}</li>)}
+            {plan.ai ? <li className="ai">{plan.ai}</li> : null}
+          </ul>
+          {plan.note ? <p className="plan-note">{plan.note}</p> : null}
+          <button className={plan.lit ? "cta" : "cta-secondary"} type="button" onClick={trackStart(`${props.placement}_${plan.name.toLowerCase().replace(/\s+/g, "_")}`, props.onJoin, plan.tier)}>{plan.button}</button>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+// Pricing, the questions and the six "included" items moved to /pricing;
+// links people saved to their old places on the home page follow them there.
+const MOVED_TO_PRICING: Record<string, string> = {
+  "#pricing": "/pricing",
+  "#pricing-title": "/pricing",
+  "#questions": "/pricing#questions",
+  "#questions-title": "/pricing#questions",
+  "#included": "/pricing#included",
+  "#included-title": "/pricing#included",
+};
+export function movedToPricing(hash: string): string | null {
+  return MOVED_TO_PRICING[hash] ?? null;
 }
 
 // Sections fade in once as they come into view. Without the observer (or with
@@ -467,6 +550,11 @@ export function ConversionLanding({ onJoin }: JoinProps) {
   const chief = chiefScene();
 
   useEffect(() => {
+    const moved = movedToPricing(window.location.hash);
+    if (moved) {
+      window.location.replace(moved);
+      return;
+    }
     captureProductAnalyticsEvent("home_viewed");
   }, []);
 
@@ -476,7 +564,10 @@ export function ConversionLanding({ onJoin }: JoinProps) {
       .then((all) => {
         if (cancelled) return;
         setCommunities(
-          all.filter((community) => community.banner_url && community.one_liner?.trim()).slice(0, SHOWCASE_LIMIT),
+          all
+            .filter((community) => community.banner_url && community.one_liner?.trim())
+            .sort((a, b) => (Date.parse(b.last_active_at ?? "") || 0) - (Date.parse(a.last_active_at ?? "") || 0))
+            .slice(0, SHOWCASE_LIMIT),
         );
       })
       .catch(() => undefined);
@@ -523,43 +614,22 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           Know who's slipping before they cancel. Your chief of staff checks in on quiet members and drafts replies to unanswered questions, then waits for your yes.
         </FeatureSection>
 
-        <section className="included" id="included" aria-labelledby="included-title" data-rv>
-          <h2 id="included-title">Everything else your community needs.</h2>
-          <div className="grid-six">
-            {INCLUDED.map(([title, text]) => <article key={title}><h3>{title}</h3><p>{text}</p></article>)}
-          </div>
-        </section>
-
         <Showcase communities={communities} />
 
-        <section className="pricing" id="pricing" aria-labelledby="pricing-title" data-rv>
-          <h2 id="pricing-title">Pricing</h2>
-          <p className="section-sub">Start free with unlimited members. Add Guide or Chief of Staff per community when you're ready.</p>
-          <div className="cards three plans">
+        <section className="plans-line" aria-labelledby="plans-line-title" data-rv>
+          <div className="plans-line-head">
+            <h2 id="plans-line-title">Free to build. Add an AI when you're ready.</h2>
+            <a className="more" href="/pricing" onClick={() => captureProductAnalyticsEvent("compare_plans_clicked", { placement: "home" })}>Compare plans →</a>
+          </div>
+          <div className="plans-line-row">
             {LANDING_PLANS.map((plan) => (
-              <article className={plan.lit ? "card plan lit" : "card plan"} key={plan.name}>
-                <header>
-                  <h3>{plan.name}{plan.lit ? <span className="recommended">Recommended</span> : null}</h3>
-                  <p>{plan.line}</p>
-                </header>
-                <p className="price"><strong>{plan.price}</strong> {plan.per}</p>
-                <ul>
-                  {plan.points.map((point) => <li key={point}>{point}</li>)}
-                  {plan.ai ? <li className="ai">{plan.ai}</li> : null}
-                </ul>
-                {plan.note ? <p className="plan-note">{plan.note}</p> : null}
-                <button className={plan.lit ? "cta" : "cta-secondary"} type="button" onClick={trackStart(`pricing_${plan.name.toLowerCase().replace(/\s+/g, "_")}`, onJoin, plan.tier)}>{plan.button}</button>
-              </article>
+              <a className={plan.lit ? "plans-line-item lit" : "plans-line-item"} href="/pricing" key={plan.name}>
+                <b>{plan.name}{plan.lit ? <span className="recommended">Recommended</span> : null}</b>
+                <span className="plans-line-price"><strong>{plan.price}</strong> / month</span>
+                <span>{plan.line}</span>
+              </a>
             ))}
           </div>
-          <p className="microcopy">Month to month, cancel anytime. Selling memberships carries a {FEE} fee plus Stripe's processing. No surprise AI bills.</p>
-        </section>
-
-        <section className="questions" id="questions" aria-labelledby="questions-title" data-rv>
-          <h2 id="questions-title">Questions</h2>
-          <dl>
-            {QUESTIONS.map(([question, answer]) => <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>)}
-          </dl>
         </section>
 
         <section className="closing" aria-labelledby="closing-title">
