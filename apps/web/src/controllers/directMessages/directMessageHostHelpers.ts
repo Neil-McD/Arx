@@ -110,6 +110,16 @@ export function createLocalDirectMessageId(): string {
 
 export const VIRTUAL_DM_CONVERSATION_ID_PREFIX = "virtual:";
 
+export function resolveActivelyReadingConversationId(args: {
+  isOpen: boolean;
+  activeConversationId: string | null;
+  deferRead?: boolean;
+  isFollowingLive: boolean;
+}): string | null {
+  if (!args.isOpen || !args.activeConversationId || args.deferRead || !args.isFollowingLive) return null;
+  return args.activeConversationId;
+}
+
 export function isVirtualDirectConversationId(conversationId: string | null | undefined): boolean {
   return String(conversationId ?? "").startsWith(VIRTUAL_DM_CONVERSATION_ID_PREFIX);
 }

@@ -78,6 +78,9 @@ type WebDirectMessagePanelProps = {
   onDiscardLocalMessage?: (localId: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
+  // Reports whether the thread viewport is currently at the bottom following
+  // live messages (false while scrolled up reading older history).
+  onFollowingLiveChange?: (following: boolean) => void;
   // The first touch of a conversation that was opened for you (design v1).
   onEngage?: () => void;
   // Design system v1: shown beside the Inbox list, so it needs no way back.
@@ -645,6 +648,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
 
     if (conversationChanged) {
       shouldFollowMessagesRef.current = true;
+      props.onFollowingLiveChange?.(true);
     }
     if (!messageChanged && !conversationChanged) return;
 
@@ -655,6 +659,10 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       lastMessageIsOwn;
     if (!shouldScroll) return;
 
+    if (!shouldFollowMessagesRef.current && lastMessageIsOwn) {
+      shouldFollowMessagesRef.current = true;
+      props.onFollowingLiveChange?.(true);
+    }
     if (lastMessageSeq > 0) {
       void props.onReadThroughSeq?.(lastMessageSeq);
     }
@@ -662,6 +670,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   }, [
     props.conversation.id,
     props.isLoading,
+    props.onFollowingLiveChange,
     props.onReadThroughSeq,
     lastMessageId,
     lastMessageIsOwn,
@@ -835,7 +844,10 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             const target = event.currentTarget;
             const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
             const isNearBottom = distanceFromBottom <= DM_AUTO_SCROLL_THRESHOLD_PX;
-            shouldFollowMessagesRef.current = isNearBottom;
+            if (shouldFollowMessagesRef.current !== isNearBottom) {
+              shouldFollowMessagesRef.current = isNearBottom;
+              props.onFollowingLiveChange?.(isNearBottom);
+            }
             if (isNearBottom && lastMessageSeq > 0) void props.onReadThroughSeq?.(lastMessageSeq);
           }}>
             {props.isLoading ? (

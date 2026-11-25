@@ -14,6 +14,7 @@ const {
   isInboxConversationUnread,
 } = await import("../apps/web/src/components/WebDirectMessageInboxPanel");
 const { WebDirectMessagePanel } = await import("../apps/web/src/components/WebDirectMessagePanel");
+const { resolveActivelyReadingConversationId } = await import("../apps/web/src/controllers/directMessages/directMessageHostHelpers");
 
 const has = (html: string, ...names: string[]) =>
   new RegExp(`class="${names.map((name) => `_${name}_[^ "]*`).join(" ")}"`).test(html);
@@ -186,4 +187,33 @@ test("initialInboxFilterFor waits for inbox data, then latches once so live repl
   expect(initialInboxFilterFor({ conversationsCount: 0, isLoading: false, needsReply: 0 })).toBeNull();
   expect(initialInboxFilterFor({ conversationsCount: 5, isLoading: false, needsReply: 0 })).toBe("all");
   expect(initialInboxFilterFor({ conversationsCount: 5, isLoading: false, needsReply: 2 })).toBe("reply");
+});
+
+test("resolveActivelyReadingConversationId suppresses unread indicators only while engaged and following live messages", () => {
+  expect(resolveActivelyReadingConversationId({
+    isOpen: true,
+    activeConversationId: "rashid",
+    deferRead: false,
+    isFollowingLive: true,
+  })).toBe("rashid");
+  // Scrolled up reading older history: keep unread indicators visible until scrolled back down.
+  expect(resolveActivelyReadingConversationId({
+    isOpen: true,
+    activeConversationId: "rashid",
+    deferRead: false,
+    isFollowingLive: false,
+  })).toBeNull();
+  // Auto-opened untouched conversation (deferRead): keep unread until engaged.
+  expect(resolveActivelyReadingConversationId({
+    isOpen: true,
+    activeConversationId: "rashid",
+    deferRead: true,
+    isFollowingLive: true,
+  })).toBeNull();
+  expect(resolveActivelyReadingConversationId({
+    isOpen: false,
+    activeConversationId: "rashid",
+    deferRead: false,
+    isFollowingLive: true,
+  })).toBeNull();
 });
