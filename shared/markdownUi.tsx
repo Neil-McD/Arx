@@ -13,7 +13,7 @@ type MarkdownMathModule = typeof import("./markdownMath");
 let loadedHighlightModule: MarkdownHighlightModule | null = null;
 let pendingHighlightModule: Promise<MarkdownHighlightModule> | null = null;
 
-function loadMarkdownHighlight(): Promise<MarkdownHighlightModule> {
+export function loadMarkdownHighlight(): Promise<MarkdownHighlightModule> {
   if (loadedHighlightModule) return Promise.resolve(loadedHighlightModule);
   if (!pendingHighlightModule) {
     pendingHighlightModule = import("./markdownHighlight").then((mod) => {
@@ -669,7 +669,7 @@ function getLoadedMathPlugins(mathModule: MarkdownMathModule) {
 
 function containsMathExpression(normalized: string): boolean {
   if (!normalized.includes("$")) return false;
-  return /\$\$|(?<!\\)\$[^$\n]+\$/.test(normalized);
+  return /\$\$|(?<!\\)\$[\s\S]+?(?<!\\)\$/.test(normalized);
 }
 
 function LazyMathMarkdown(props: {
