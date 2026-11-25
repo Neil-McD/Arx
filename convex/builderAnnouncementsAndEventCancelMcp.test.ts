@@ -313,6 +313,8 @@ test("polynet_announce is builder-only, shared-channel-only, supports in-app-onl
     communityId: f.communityId,
   });
   expect(q1).toHaveLength(1);
+  // The approval card shows the exact @everybody text that will be posted.
+  expect(q1[0].text).toBe("@everybody No office hours this week — see you next Thursday!");
   const a1 = await asOwner.action(api.communityGuideQuestions.answerGuideQuestion, {
     authSubject: "owner_subj",
     communityId: f.communityId,
@@ -354,7 +356,8 @@ test("polynet_announce is builder-only, shared-channel-only, supports in-app-onl
   expect(broadcasts2).toHaveLength(2);
   expect(broadcasts2.some((b) => b.emailMode === "in_app_and_email")).toBe(true);
 
-  // 3) Third announcement within 72 hours clearly warns on the confirmation card that the 72-hour cooldown is active!
+  // 3) Third announcement within 72 hours clearly warns on the confirmation card that the 72-hour cooldown is active,
+  //    AND stays strictly in-app-only even if the 72-hour cooldown expires before the builder clicks Yes!
   const cooldownPending = await runMcpTool(t, owner, "polynet_announce", {
     community: "builders",
     channel: "general",
@@ -364,5 +367,50 @@ test("polynet_announce is builder-only, shared-channel-only, supports in-app-onl
   expect(cooldownPending.ok).toBe(true);
   if (cooldownPending.ok) {
     expect((cooldownPending.value as any).question).toContain("72-hour email cooldown is active");
+  }
+
+  const q3 = await asOwner.query(api.communityGuideQuestions.listGuideQuestions, {
+    authSubject: "owner_subj",
+    communityId: f.communityId,
+  });
+  expect(q3).toHaveLength(1);
+
+  // Simulate the 72-hour cooldown expiring BEFORE the builder clicks Yes on the in-app-only card.
+  await t.run(async (ctx) => {
+    const existing = await ctx.db.query("communityMentionBroadcasts").collect();
+    for (const row of existing) {
+      if (row.emailMode === "in_app_and_email") {
+        await ctx.db.patch(row._id, {
+          sourceCreatedAt: Date.now() - 80 * 60 * 60 * 1000,
+          createdAt: Date.now() - 80 * 60 * 60 * 1000,
+        });
+      }
+    }
+  });
+
+  const a3 = await asOwner.action(api.communityGuideQuestions.answerGuideQuestion, {
+    authSubject: "owner_subj",
+    communityId: f.communityId,
+    questionId: q3[0].id as any,
+    answer: "yes",
+  });
+  expect(a3).toMatchObject({ status: "done", line: "The announcement was posted." });
+
+  const broadcasts3 = await t.run(async (ctx) => ctx.db.query("communityMentionBroadcasts").collect());
+  expect(broadcasts3).toHaveLength(3);
+  const newestBroadcast = broadcasts3.reduce((latest, row) => (row.createdAt > latest.createdAt ? row : latest));
+  expect(newestBroadcast.emailMode).toBe("in_app_only");
+
+  // 4) An announcement of 7,995 characters without @everybody is rejected up front instead of silently truncating the tail.
+  const tooLongAttempt = await runMcpTool(t, owner, "polynet_announce", {
+    community: "builders",
+    channel: "general",
+    text: "a".repeat(7_995),
+    idempotency_key: "announce-too-long-after-prefix",
+  });
+  expect(tooLongAttempt.ok).toBe(false);
+  if (!tooLongAttempt.ok) {
+    expect(tooLongAttempt.code).toBe("invalid_tool_args");
+    expect(tooLongAttempt.message).toContain("@everybody");
   }
 });

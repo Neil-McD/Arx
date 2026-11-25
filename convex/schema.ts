@@ -2217,6 +2217,10 @@ export default defineSchema({
     // messages (convex/communityGuidePictures.ts). Optional: most questions
     // have none, and rows asked before pictures existed have none.
     pictures: v.optional(v.array(v.object({ id: v.id("cloudThreadAttachments"), name: v.string() }))),
+    // For @everybody announcements: binds an in-app-only approval so it can
+    // never escalate into an email broadcast if the 72h cooldown expires
+    // between asking and Yes.
+    approvedInAppOnly: v.optional(v.boolean()),
     status: v.union(v.literal("waiting"), v.literal("running"), v.literal("done"), v.literal("declined"), v.literal("failed")),
     // What happened, in one line, and where to see it.
     resultLine: v.optional(v.string()),

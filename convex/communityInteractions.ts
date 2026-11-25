@@ -26,6 +26,7 @@ import {
 } from "./communityAgentConciergeCore";
 import {
   EVERYBODY_MENTION_ROLE_KEY,
+  formatCommunityAnnouncementText,
   textContainsEverybodyMentionToken,
 } from "./communityMentionBroadcasts";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
@@ -505,11 +506,9 @@ export const postCommunityAnnouncementForTrustedManagerInternal = internalMutati
       .first()) as { _id: any; slug: string; name: string; status: string; accessMode: string } | null;
     if (!channel || channel.status !== "active") throw new Error("community_channel_not_found");
     if (channel.accessMode !== "all_members") throw new Error("community_announcement_channel_restricted");
-    const rawText = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    if (!rawText) throw new Error("interaction_content_required");
-    const finalText = textContainsEverybodyMentionToken(rawText)
-      ? rawText
-      : normalizeBoundedText(`@everybody ${rawText}`, MAX_INTERACTION_TEXT_CHARS);
+    const formatted = formatCommunityAnnouncementText(args.text, MAX_INTERACTION_TEXT_CHARS);
+    if (!formatted.ok) throw new Error(formatted.code);
+    const finalText = formatted.text;
     const asCommunityAgent = args.asCommunityAgent === true;
     const created = (await createCommunityInteractionComposerMessageCore(
       ctx,

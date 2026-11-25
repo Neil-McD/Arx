@@ -68,6 +68,7 @@ import { COMMUNITY_CARD_LIMITS, renderCommunityCard, renderMemberTimeline } from
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import { buildCommunityTabPath } from "../shared/webAppRouteState.ts";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl.ts";
+import { formatCommunityAnnouncementText } from "./communityMentionBroadcasts.ts";
 
 export type PolynetCanonicalExecutionResult =
   | { ok: true; value: Record<string, unknown> }
@@ -2797,6 +2798,7 @@ async function executeCanonicalWrite(args: {
 
 async function executeCanonicalCall(args: {
   personSaidYes?: boolean;
+  approvedInAppOnly?: boolean;
   runId?: string;
   ctx: any;
   authSubject: string;
@@ -3047,6 +3049,7 @@ async function askPersonFirst(args: {
   let text: string | undefined;
   let items: Array<{ who: string; text: string }> | undefined;
   let pictures: Array<{ id: string; name: string }> | undefined;
+  let approvedInAppOnly = false;
   if (args.toolName === "polynet_call") {
     const callInput = args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
@@ -3139,8 +3142,13 @@ async function askPersonFirst(args: {
     } else if (operation === ANNOUNCEMENT_POST_OPERATION) {
       const channelSlug = typeof callInput.channel === "string" ? callInput.channel.trim() : "";
       const words = typeof callInput.text === "string" ? callInput.text.trim() : "";
-      if (!channelSlug || channelSlug.length > 64 || !words || words.length > 8_000 ||
+      if (!channelSlug || channelSlug.length > 64 || !words ||
           (callInput.send_email !== undefined && typeof callInput.send_email !== "boolean")) return null;
+      const formatted = formatCommunityAnnouncementText(words, 8_000);
+      if (!formatted.ok) {
+        const refusal = COMMUNITY_REFUSALS[formatted.code] ?? ["invalid_tool_args", "That announcement is too long once @everybody is included (at most 8,000 characters). Make it slightly shorter."];
+        return canonicalError(refusal[0], refusal[1]);
+      }
       const found = await args.ctx.runQuery((internal as any).communityMentionBroadcasts.describeAnnouncementTargetInternal, {
         communityId: target.communityId,
         userId: args.userId,
@@ -3153,6 +3161,7 @@ async function askPersonFirst(args: {
       }
       const inAppRequested = callInput.send_email === false;
       const willEmail = !inAppRequested && found.emailMode === "in_app_and_email";
+      approvedInAppOnly = !willEmail;
       const cooldownUntilLabel =
         !inAppRequested && !willEmail && typeof found.cooldownUntil === "number"
           ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" }).format(new Date(found.cooldownUntil))
@@ -3164,7 +3173,7 @@ async function askPersonFirst(args: {
         inAppRequested,
         cooldownUntilLabel,
       });
-      text = words;
+      text = formatted.text;
     } else {
       const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
       if (!refs) return null;
@@ -3208,6 +3217,7 @@ async function askPersonFirst(args: {
     communityId: target.communityId, userId: args.userId, kind, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput),
     question, ...(place ? { place } : {}), ...(text ? { text } : {}), ...(items ? { items } : {}), ...(args.runId ? { runId: args.runId } : {}),
     ...(pictures ? { pictures } : {}),
+    ...(approvedInAppOnly ? { approvedInAppOnly: true } : {}),
     ...(ownAi ? { ownAiApp: ownAiAppName(args.ownAiApp) } : {}),
   });
   if (!asked.ok && asked.reason === "too_many_waiting") {
@@ -3444,6 +3454,7 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_event_occurrence_not_found: ["event_occurrence_not_found", "That date isn't a scheduled occurrence of this event. List events/ and copy starts_at or next_starts_at."],
   community_announcement_channel_restricted: ["channel_restricted", "Announcements can only be posted in a shared channel open to all members (such as general), never in a private channel or pod."],
   interaction_content_required: ["invalid_tool_args", "Give the announcement words."],
+  interaction_content_too_long: ["invalid_tool_args", "That announcement is too long once @everybody is included (at most 8,000 characters). Make it slightly shorter."],
   profile_setup_required: ["profile_setup_required", "Finish setting up your profile in Polynet before posting announcements."],
   community_event_starts_at_invalid: ["invalid_tool_args", "starts_at isn't a time. Use an ISO time with its offset, such as 2026-11-21T07:00:00-05:00."],
   community_event_ends_at_invalid: ["invalid_tool_args", "ends_at must be a time after starts_at."],
@@ -3458,6 +3469,7 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
 // owner-only fields checked there). One receipt per call.
 async function executeCommunityOperation(args: {
   personSaidYes?: boolean;
+  approvedInAppOnly?: boolean;
   ctx: any; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
   target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
 }): Promise<PolynetCanonicalExecutionResult> {
@@ -3558,8 +3570,14 @@ async function executeCommunityOperation(args: {
   }
   try {
     // The change and its receipt commit together (communityOperations).
+    // If the approval card promised in-app-only (including during a 72h email
+    // cooldown), pin send_email=false so approval can never escalate to email.
+    const operationInput =
+      operation === ANNOUNCEMENT_POST_OPERATION && args.approvedInAppOnly === true
+        ? { ...rawInput, send_email: false }
+        : rawInput;
     const applied = await args.ctx.runMutation((internal as any).communityOperations.applyCommunityOperationInternal, {
-      userId: args.userId, communityId: target.communityId, operation, input: rawInput, idempotencyKey: args.idempotencyKey,
+      userId: args.userId, communityId: target.communityId, operation, input: operationInput, idempotencyKey: args.idempotencyKey,
       ...(args.principalKind === "community_agent_for_member" ? { principalKind: args.principalKind } : {}),
       requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
       answer: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result: {} }),
@@ -3796,6 +3814,9 @@ export async function executePolynetCanonicalTool(args: {
   // The talk pictures that question showed (cloudThreadAttachments ids). Set
   // only by that answer, never from a tool's input.
   approvedPictures?: string[];
+  // Bound from the approval card when an announcement was presented as
+  // in-app-only so saying Yes can never escalate to sending member emails.
+  approvedInAppOnly?: boolean;
   // Which AI app a person's own AI is (from its verified sign-in, by the MCP
   // door), shown on the Yes/No card Polynet puts to the person.
   ownAiApp?: string | null;

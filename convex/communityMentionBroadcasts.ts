@@ -334,6 +334,21 @@ export async function scheduleEverybodyMentionBroadcast(args: {
   return { broadcastId, emailMode };
 }
 
+export function formatCommunityAnnouncementText(
+  rawText: string,
+  maxChars = 8_000,
+): { ok: true; text: string } | { ok: false; code: "interaction_content_required" | "interaction_content_too_long" } {
+  const trimmed = String(rawText ?? "").replace(/\r\n/g, "\n").trim();
+  if (!trimmed) return { ok: false, code: "interaction_content_required" };
+  const finalText = textContainsEverybodyMentionToken(trimmed)
+    ? trimmed
+    : `@everybody ${trimmed}`;
+  if (finalText.length > maxChars) {
+    return { ok: false, code: "interaction_content_too_long" };
+  }
+  return { ok: true, text: finalText };
+}
+
 export const describeAnnouncementTargetInternal = internalQuery({
   args: {
     communityId: v.id("communities"),
