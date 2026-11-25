@@ -3,6 +3,7 @@ import { STANDALONE_APP_LAUNCH_SEARCH_PARAM, STANDALONE_APP_LAUNCH_SEARCH_VALUE 
 export type PublicEntryRoute =
   | { kind: "landing" }
   | { kind: "discover" }
+  | { kind: "pricing" }
   | { kind: "community_landing"; slug: string };
 
 const BYPASS_QUERY_KEYS = [
@@ -60,6 +61,9 @@ export function resolvePublicEntryRoute(params: {
   }
   if (segments.length === 1 && segments[0].toLowerCase() === "discover") {
     return { kind: "discover" };
+  }
+  if (segments.length === 1 && segments[0].toLowerCase() === "pricing") {
+    return { kind: "pricing" };
   }
   if (segments.length === 2 && segments[0].toLowerCase() === "c") {
     let slug = "";

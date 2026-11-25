@@ -90,6 +90,8 @@
 .pn-landing .menu-panel::before { content: ""; position: absolute; inset: -28px 0 100% 0; }
 .pn-landing .menu-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 9px; background: #131417; }
 .pn-landing .menu-grid > div { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+.pn-landing .menu-panel.narrow { width: min(600px, 100%); }
+.pn-landing .menu-grid.two { grid-template-columns: 1.6fr 1fr; }
 .pn-landing .menu-grid > div + div { border-left: 1px solid var(--line); }
 .pn-landing .topbar .menu-grid a { display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; border-radius: 8px; color: var(--text); font-size: 14.5px; text-decoration: none; }
 .pn-landing .topbar .menu-grid a:hover { background: #1a1b1f; }
@@ -373,8 +375,34 @@
 .pn-landing .grid-six article { display: flex; flex-direction: column; gap: 6px; padding: 22px; background: #0b0c0e; }
 .pn-landing .grid-six p { color: var(--muted); font-size: 14.5px; }
 
-/* Showcase */
-.pn-landing .showcase-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+/* Showcase: one row that scrolls sideways, and a way to see them all. */
+.pn-landing .showcase-head,
+.pn-landing .plans-line-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.pn-landing a.more { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); font-size: 14px; text-decoration: none; white-space: nowrap; }
+.pn-landing a.more:hover { color: var(--text); }
+.pn-landing .showcase-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 32px) / 3);
+  gap: 16px;
+  margin-top: 12px;
+  padding-bottom: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.pn-landing .showcase-row > a { scroll-snap-align: start; }
+
+/* Home's pricing in one line; the full story is on /pricing. */
+.pn-landing .plans-line h2 { font-size: clamp(22px, 2vw, 28px); }
+.pn-landing .plans-line-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
+.pn-landing .plans-line-item { display: flex; flex-direction: column; gap: 6px; padding: 22px; background: #0b0c0e; color: var(--muted); font-size: 14.5px; text-decoration: none; }
+.pn-landing .plans-line-item:hover { background: #101114; }
+.pn-landing .plans-line-item b { color: var(--text); font-size: 15px; font-weight: 500; }
+.pn-landing .plans-line-price strong { color: var(--text); font-size: 26px; font-weight: 500; letter-spacing: -0.02em; }
+.pn-landing .plans-line-item.lit { background: linear-gradient(180deg, rgba(var(--ai-rgb), .1), rgba(var(--ai-rgb), .02)) #0b0c0e; }
+.pn-landing .plans-line-item.lit > span:last-child { color: var(--ai); }
 .pn-landing .showcase-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line-default); border-radius: 14px; background: var(--surface); color: var(--text); text-decoration: none; }
 .pn-landing .showcase-card:hover { border-color: var(--line-strong); }
 .pn-landing .showcase-banner { display: block; width: 100%; aspect-ratio: 16 / 7; background: var(--surface-raised); }
@@ -405,6 +433,32 @@
 .pn-landing .questions dt { font-size: 16px; font-weight: 500; }
 .pn-landing .questions dd { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
 
+/* The Pricing page */
+.pn-landing .pricing-head { padding: 88px 0 48px; }
+.pn-landing .pricing-head h1 { font-size: clamp(44px, 6vw, 72px); font-weight: 300; line-height: 1; letter-spacing: -0.045em; }
+.pn-landing .pricing-head .subhead { margin-top: 18px; }
+.pn-landing .pricing-page .included h2,
+.pn-landing .compare h2 { font-size: clamp(22px, 2vw, 28px); }
+.pn-landing .compare-scroll { margin-top: 24px; overflow-x: auto; }
+.pn-landing .compare table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 14.5px; }
+.pn-landing .compare th,
+.pn-landing .compare td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-weight: 400; }
+.pn-landing .compare thead th { position: sticky; top: 0; padding: 18px 16px; background: var(--bg); vertical-align: bottom; }
+.pn-landing .compare thead th b { display: block; color: var(--text); font-size: 15px; font-weight: 500; }
+.pn-landing .compare thead th span { display: block; margin: 2px 0 12px; color: var(--muted); font-size: 13.5px; }
+.pn-landing .compare thead th.lit b { color: var(--ai); }
+.pn-landing .compare tbody th { width: 34%; color: var(--secondary); }
+.pn-landing .compare tbody th small { display: block; margin-top: 3px; color: var(--quiet); font-size: 13px; }
+.pn-landing .compare td { width: 22%; color: var(--muted); }
+.pn-landing .compare td.lit,
+.pn-landing .compare thead th.lit { background: rgba(var(--ai-rgb), .05); }
+.pn-landing .compare tr.group th { padding: 28px 16px 10px; border-bottom-color: var(--line-default); color: var(--text); font-size: 13px; font-weight: 500; }
+.pn-landing .compare .tick { color: var(--text); }
+.pn-landing .compare td.lit .tick { color: var(--ai); }
+.pn-landing .compare .dash { color: var(--line-strong); }
+.pn-landing .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pn-landing .closing .microcopy a { color: var(--text); }
+
 /* Closing */
 .pn-landing main section.closing {
   display: flex;
@@ -431,7 +485,8 @@
 
 @media (max-width: 900px) {
   .pn-landing .cards.three,
-  .pn-landing .showcase-grid { grid-template-columns: 1fr; }
+  .pn-landing .plans-line-row { grid-template-columns: 1fr; }
+  .pn-landing .showcase-row { grid-auto-columns: 78%; }
   .pn-landing .grid-six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pn-landing .figs { grid-template-columns: 1fr; gap: 48px; margin-top: 56px; }
   .pn-landing .figs article,
@@ -474,4 +529,21 @@
   font-weight: 300;
   line-height: 1;
   letter-spacing: -0.045em;
+}
+.pn-landing .plans-line-item b { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* On a phone all three plans stay in view: smaller type, no column buttons
+   (the plan cards above have them). */
+@media (max-width: 560px) {
+  .pn-landing .compare table { min-width: 0; font-size: 13px; table-layout: fixed; }
+  .pn-landing .compare th,
+  .pn-landing .compare td { padding: 10px 6px; overflow-wrap: break-word; }
+  .pn-landing .compare thead th:first-child,
+  .pn-landing .compare tbody th { width: 42%; }
+  .pn-landing .compare thead th { padding: 12px 6px; }
+  .pn-landing .compare thead th b { font-size: 13px; }
+  .pn-landing .compare thead th span { margin-bottom: 0; font-size: 12px; }
+  .pn-landing .compare thead th button { display: none; }
+  .pn-landing .compare tbody th small { display: none; }
+  .pn-landing .compare tr.group th { padding: 20px 6px 8px; }
 }
