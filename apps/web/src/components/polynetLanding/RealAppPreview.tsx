@@ -28,9 +28,9 @@ export type PreviewState = {
   page: PreviewPage;
   /** Join requests still waiting (ids). */
   waiting: string[];
-  /** The guide's drafts still waiting on Home. */
-  replyDraft: boolean;
-  checkIn: boolean;
+  /** The guide's drafts on Home: still waiting, sent, or skipped (skipping sends nothing). */
+  replyDraft: DraftState;
+  checkIn: DraftState;
   /** The visitor sent the question waiting in #general's message box. */
   asked: boolean;
   answered: boolean;
@@ -39,6 +39,8 @@ export type PreviewState = {
   picked: string | null;
   podsOpen: boolean;
 };
+
+export type DraftState = "waiting" | "sent" | "skipped";
 
 export type PreviewAction =
   | { type: "open"; page: PreviewPage; picked?: string | null }
@@ -56,7 +58,7 @@ export type PreviewAction =
   | { type: "pods" };
 
 export const INITIAL_PREVIEW: PreviewState = {
-  page: "home", waiting: ["r1", "r2"], replyDraft: true, checkIn: true, asked: false, answered: false,
+  page: "home", waiting: ["r1", "r2"], replyDraft: "waiting", checkIn: "waiting", asked: false, answered: false,
   talk: null, member: null, picked: null, podsOpen: false,
 };
 
@@ -69,12 +71,13 @@ export function previewReducer(state: PreviewState, action: PreviewAction): Prev
     case "decline":
       return { ...state, waiting: state.waiting.filter((id) => id !== action.id) };
     case "post_reply":
-      return { ...state, replyDraft: false };
+      return state.replyDraft === "waiting" ? { ...state, replyDraft: "sent" } : state;
     case "skip_reply":
-      return { ...state, replyDraft: false };
+      return state.replyDraft === "waiting" ? { ...state, replyDraft: "skipped" } : state;
     case "send_check_in":
+      return state.checkIn === "waiting" ? { ...state, checkIn: "sent" } : state;
     case "skip_check_in":
-      return { ...state, checkIn: false };
+      return state.checkIn === "waiting" ? { ...state, checkIn: "skipped" } : state;
     case "ask":
       return state.asked ? state : { ...state, asked: true };
     case "answer":
@@ -229,7 +232,7 @@ function ChannelPage(props: { state: PreviewState; dispatch: (action: PreviewAct
   }, [props.slug, state.asked, state.answered, shown, state.replyDraft]);
   const typing = state.answered && shown < words.length;
   const extra: Array<Message | string> = general ? [
-    ...(state.replyDraft ? [] : [{ who: "Guide", tone: "guide", guide: true, time: "now", text: REPLY_DRAFT.text, note: { title: "Founding-member pricing", id: "note:founding" } } as Message]),
+    ...(state.replyDraft !== "sent" ? [] : [{ who: "Guide", tone: "guide", guide: true, time: "now", text: REPLY_DRAFT.text, note: { title: "Founding-member pricing", id: "note:founding" } } as Message]),
     ...(state.asked ? [
       { who: "You", tone: "a2", host: true, time: "now", text: <><span className={cx("at")}>@guide</span> where's the lesson on finding your first customers?</> } as Message,
       { who: "Guide", tone: "guide", guide: true, time: "now",
@@ -548,7 +551,7 @@ export function RealAppPreview() {
           {josh ? (
             <PanelPart label="Journey · steers your guide">
               <PanelLine dim>Quiet for 25 days. Asked about pricing in his first week.</PanelLine>
-              {state.checkIn ? <TextLink onClick={() => go("home")}>A check-in is drafted on Home</TextLink> : <PanelLine>You checked in today.</PanelLine>}
+              {state.checkIn === "waiting" ? <TextLink onClick={() => go("home")}>A check-in is drafted on Home</TextLink> : state.checkIn === "sent" ? <PanelLine>You checked in today.</PanelLine> : <PanelLine>You skipped the check-in for now.</PanelLine>}
             </PanelPart>
           ) : null}
           <PanelPart label="Notes · only hosts see these">
@@ -607,13 +610,13 @@ export function RealAppPreview() {
                       onDecline: (id) => { track("join_declined"); dispatch({ type: "decline", id }); } }}
                     joinCount={requests.length} onShowAllJoinRequests={() => go("members")} things={things} />
                   <GuideSuggests
-                    drafts={state.replyDraft ? [REPLY_DRAFT] : []}
+                    drafts={state.replyDraft === "waiting" ? [REPLY_DRAFT] : []}
                     onPost={async () => { track("reply_posted"); dispatch({ type: "post_reply" }); return null; }}
                     onSkip={() => dispatch({ type: "skip_reply" })}
-                    coachDrafts={state.checkIn ? [CHECK_IN] : []}
+                    coachDrafts={state.checkIn === "waiting" ? [CHECK_IN] : []}
                     onSendCoach={async () => { track("check_in_sent"); dispatch({ type: "send_check_in" }); return null; }}
                     onSkipCoach={() => dispatch({ type: "skip_check_in" })} />
-                  {!state.replyDraft && !state.checkIn && requests.length === 0 ? <p className={cx("hnone")}>Nothing else needs you today.</p> : null}
+                  {state.replyDraft !== "waiting" && state.checkIn !== "waiting" && requests.length === 0 ? <p className={cx("hnone")}>Nothing else needs you today.</p> : null}
                 </HomeBody>
               )}
             </Scroll>
@@ -705,7 +708,7 @@ export function RealAppPreview() {
                 <div className={cx("mrow one sel")}><span className={cx("av a1")}>J</span><div><div className={cx("h")}><b>Jon Park</b><span>{PREVIEW_COMMUNITY}</span><time>20 min</time></div><p>Happy to share the full invitation sequence if you want it for Friday.</p></div><span className={cx("dot")} /></div>
                 <div className={cx("mrow one")}><span className={cx("av a6")}>S</span><div><div className={cx("h")}><b>Sara Lind</b><span>{PREVIEW_COMMUNITY}</span><time>1 h</time></div><p>How did you price your founding tier?</p></div><span className={cx("dot")} /></div>
                 <div className={cx("mrow one read")}><span className={cx("av a3")}>L</span><div><div className={cx("h")}><b>Lena Novak</b><span>{PREVIEW_COMMUNITY}</span><time>Yesterday</time></div><p>Thanks for the welcome! Starting the course tonight.</p></div></div>
-                {!state.checkIn ? <div className={cx("mrow one read")}><span className={cx("av a2")}>J</span><div><div className={cx("h")}><b>Josh Reed</b><span>You checked in</span><time>now</time></div><p>{CHECK_IN_TEXT}</p></div></div> : null}
+                {state.checkIn === "sent" ? <div className={cx("mrow one read")}><span className={cx("av a2")}>J</span><div><div className={cx("h")}><b>Josh Reed</b><span>You checked in</span><time>now</time></div><p>{CHECK_IN_TEXT}</p></div></div> : null}
               </div>
             </KitApp>
           </div>

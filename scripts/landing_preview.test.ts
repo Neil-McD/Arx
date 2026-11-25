@@ -19,12 +19,15 @@ test("join requests are approved or declined one at a time", () => {
   expect(run({ type: "approve", id: "r1" }, { type: "decline", id: "r2" }).waiting).toEqual([]);
 });
 
-test("the guide's drafts leave Home once sent or skipped", () => {
-  expect(run({ type: "send_check_in" }).checkIn).toBe(false);
-  expect(run({ type: "skip_check_in" }).checkIn).toBe(false);
-  expect(run({ type: "post_reply" }).replyDraft).toBe(false);
+test("the guide's drafts leave Home once sent or skipped, and skipping never sends", () => {
+  expect(run({ type: "send_check_in" }).checkIn).toBe("sent");
+  expect(run({ type: "skip_check_in" }).checkIn).toBe("skipped");
+  expect(run({ type: "post_reply" }).replyDraft).toBe("sent");
+  expect(run({ type: "skip_reply" }).replyDraft).toBe("skipped");
+  // Once decided it stays decided: a skipped draft can't become sent.
+  expect(run({ type: "skip_check_in" }, { type: "send_check_in" }).checkIn).toBe("skipped");
   // Leaving Home keeps what was decided.
-  expect(previewReducer(run({ type: "send_check_in" }), { type: "open", page: "members" }).checkIn).toBe(false);
+  expect(previewReducer(run({ type: "send_check_in" }), { type: "open", page: "members" }).checkIn).toBe("sent");
 });
 
 test("the guide answers only after the question is sent", () => {
