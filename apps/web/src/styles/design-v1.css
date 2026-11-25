@@ -3651,14 +3651,19 @@
    The index is the Settings sidebar, full width; a section's page has its own
    title (the rows' head), so the phone's second title goes. */
 :root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 {
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   padding: 0 12px 12px;
   border: 0;
   background: transparent;
   box-shadow: none;
+  overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 :root[data-design="v1"] .mobile-settings-detail-title { display: none; }
 /* The phone's top bar has the way back; the list starts below it. */
@@ -4237,9 +4242,29 @@
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .app-shell {
   grid-template-rows: minmax(0, 1fr);
 }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .workspace {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .workspace.community-mode {
   height: 100%;
   min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-settings-shell .settings-panel {
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height, 0px) + 24px);
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-settings-panel {
+  overflow: visible;
 }
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-interaction-projection {
   grid-template-rows: minmax(0, 1fr);

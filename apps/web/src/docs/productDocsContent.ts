@@ -12,8 +12,8 @@ export type ProductDocEntry = {
   section: string;
   summary: string;
   audience: ProductDocAudience[];
-  status: string;
-  source: string;
+  status?: string;
+  source?: string;
   search?: {
     aliases: string[];
     keywords: string[];
@@ -22,9 +22,9 @@ export type ProductDocEntry = {
     boost: number;
   };
   content: string;
-  headings: string[];
-  keywords: string[];
-  chunks: Array<{
+  headings?: string[];
+  keywords?: string[];
+  chunks?: Array<{
     id: string;
     slug: string;
     heading: string | null;
@@ -33,8 +33,8 @@ export type ProductDocEntry = {
     word_count: number;
     search_text: string;
   }>;
-  word_count: number;
-  search_text: string;
+  word_count?: number;
+  search_text?: string;
 };
 
 type ProductDocsIndex = {

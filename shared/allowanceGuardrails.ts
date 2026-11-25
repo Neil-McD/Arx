@@ -76,6 +76,8 @@ export function buildFounderAllowanceAlertCopy(input: {
   resetDateLabel: string | null;
   reengaged30d: number;
   contacted30d: number;
+  actionUrl?: string | null;
+  boostAvailable?: boolean;
 }): {
   subject: string;
   headline: string;
@@ -92,32 +94,51 @@ export function buildFounderAllowanceAlertCopy(input: {
     input.contacted30d > 0 && input.reengaged30d > 0
       ? `In the last 30 days, ${input.reengaged30d} of ${input.contacted30d} members checked in by your guide came back to participate.`
       : null;
+  const boostClause = input.boostAvailable
+    ? "If you need extra room before reset, you can add an optional $30 boost (+$20 AI allowance) anytime in Guide settings."
+    : null;
+  const actionUrl = String(input.actionUrl ?? "").trim();
+  const threadActionLine = actionUrl
+    ? input.boostAvailable
+      ? `[Manage allowance & boosts](${actionUrl})`
+      : `[View allowance & impact](${actionUrl})`
+    : null;
 
   if (input.milestone === 100) {
     const headline = `${name} reached 100% of this month's AI allowance`;
     const bodyLines = [
-      `Your community has used ${usedLabel} of its ${allowanceLabel} included monthly AI allowance — a great sign of active member conversations.`,
+      `Your community has used ${usedLabel} of its ${allowanceLabel} monthly AI allowance — a great sign of active member conversations.`,
       ...(winBackLine ? [winBackLine] : []),
       `${resetClause} Your community, channels, courses, events, and zero-AI weekly digests keep running normally in the meantime.`,
+      ...(boostClause ? [boostClause] : []),
     ];
     return {
       subject: `${name} reached its monthly AI allowance`,
       headline,
       bodyText: bodyLines.join(" "),
-      threadMarkdown: [`**${headline}**`, ...bodyLines].join("\n\n"),
+      threadMarkdown: [
+        `**${headline}**`,
+        ...bodyLines,
+        ...(threadActionLine ? [threadActionLine] : []),
+      ].join("\n\n"),
     };
   }
 
   const headline = `${name} is at 80% of this month's AI allowance`;
   const bodyLines = [
-    `Your community has used ${usedLabel} of its ${allowanceLabel} included monthly AI allowance.`,
+    `Your community has used ${usedLabel} of its ${allowanceLabel} monthly AI allowance.`,
     ...(winBackLine ? [winBackLine] : []),
     `At 90%, background check-ins and reply drafts will pause automatically to reserve the final 10% for live member chats, @mentions, and your Daily Brief. ${resetClause}`,
+    ...(boostClause ? [boostClause] : []),
   ];
   return {
     subject: `${name} is at 80% of its monthly AI allowance`,
     headline,
     bodyText: bodyLines.join(" "),
-    threadMarkdown: [`**${headline}**`, ...bodyLines].join("\n\n"),
+    threadMarkdown: [
+      `**${headline}**`,
+      ...bodyLines,
+      ...(threadActionLine ? [threadActionLine] : []),
+    ].join("\n\n"),
   };
 }

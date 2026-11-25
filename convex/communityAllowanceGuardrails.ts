@@ -36,6 +36,7 @@ const REENGAGEMENT_DRAFT_SCAN_LIMIT = 60;
 const REENGAGEMENT_MEMBER_CHECK_CAP = 25;
 
 export type ActiveCommunityAllowanceState = {
+  fundingSource: "stripe" | "operator_grant";
   cycleKey: string;
   cycleStartAt: number;
   cycleEndAt: number;
@@ -70,16 +71,18 @@ export async function readActiveCommunityAllowanceState(
       .first(),
   ]);
 
-  const activeCycle =
+  const isStripeCycle = Boolean(
     openFounderCycle &&
-    typeof openFounderCycle.cycleEndAt === "number" &&
-    openFounderCycle.cycleEndAt > nowMs
-      ? openFounderCycle
-      : operatorCycle &&
-          typeof operatorCycle.cycleEndAt === "number" &&
-          operatorCycle.cycleEndAt > nowMs
-        ? operatorCycle
-        : null;
+      typeof openFounderCycle.cycleEndAt === "number" &&
+      openFounderCycle.cycleEndAt > nowMs,
+  );
+  const activeCycle = isStripeCycle
+    ? openFounderCycle
+    : operatorCycle &&
+        typeof operatorCycle.cycleEndAt === "number" &&
+        operatorCycle.cycleEndAt > nowMs
+      ? operatorCycle
+      : null;
   if (!activeCycle) return null;
 
   const includedMicros = Math.max(
@@ -110,6 +113,7 @@ export async function readActiveCommunityAllowanceState(
     (settledMicros >= allowanceMicros ||
       (maxReservation > 0 && settledMicros + maxReservation > allowanceMicros));
   return {
+    fundingSource: isStripeCycle ? "stripe" : "operator_grant",
     cycleKey: String(activeCycle.cycleKey),
     cycleStartAt: Number(activeCycle.cycleStartAt),
     cycleEndAt: Number(activeCycle.cycleEndAt),
@@ -247,6 +251,7 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
       const reengagement = await readCompactReengagement30d(ctx, settings.communityId, args.nowMs);
       const communityName = String(community.name ?? "your community").trim() || "your community";
       const slug = String(community.slug ?? "").trim();
+      const actionUrl = slug ? `${origin}/c/${encodeURIComponent(slug)}/settings?pane=agent` : origin;
       const copy = buildFounderAllowanceAlertCopy({
         milestone,
         communityName,
@@ -255,6 +260,8 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
         resetDateLabel: formatAllowanceResetDate(state.cycleEndAt),
         reengaged30d: reengagement.reengagedCount,
         contacted30d: reengagement.contactedCount,
+        actionUrl,
+        boostAvailable: state.fundingSource === "stripe",
       });
 
       const dedupeKey = `founder-allowance:${String(settings.communityId)}:${state.cycleKey}:${milestone}`;
@@ -294,7 +301,7 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
             subject: copy.subject,
             headline: copy.headline,
             bodyText: copy.bodyText,
-            actionUrl: slug ? `${origin}/c/${encodeURIComponent(slug)}/settings?pane=agent` : origin,
+            actionUrl,
           },
           dedupeKey,
           nowMs: args.nowMs,
