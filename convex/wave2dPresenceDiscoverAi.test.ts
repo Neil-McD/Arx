@@ -146,7 +146,14 @@ describe("Wave 2D: presence storm coalescing and parallel online resolution", ()
           createdAt: nowMs,
           updatedAt: nowMs,
         });
-        await ctx.db.insert("communityMemberships", {
+        await ctx.db.insert("operatorRoles", {
+        userId: ownerId,
+        role: "owner",
+        active: true,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await ctx.db.insert("communityMemberships", {
           communityId,
           userId,
           role: "member",
@@ -380,6 +387,13 @@ describe("Wave 2D: parallelized AI workers and bounded parallel founder briefs",
         entryPolicy: "open",
         activeMemberCount: 2,
         createdAt: nowMs - 10 * DAY_MS,
+        updatedAt: nowMs,
+      });
+      await ctx.db.insert("operatorRoles", {
+        userId: ownerId,
+        role: "owner",
+        active: true,
+        createdAt: nowMs,
         updatedAt: nowMs,
       });
       await ctx.db.insert("communityMemberships", {

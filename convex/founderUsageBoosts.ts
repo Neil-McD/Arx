@@ -21,7 +21,11 @@ import {
   communityLifecycleGenerationMatches,
   normalizeCommunityLifecycle,
 } from "../shared/communityLifecycle";
-import { founderSubscriptionStatusGrantsAccess } from "../shared/founderPlan";
+import {
+  founderPlanTierAllowsUsageBoosts,
+  founderSubscriptionStatusGrantsAccess,
+  normalizeFounderPlanTier,
+} from "../shared/founderPlan";
 import { computeAllowancePercentUsed } from "../shared/allowanceGuardrails";
 import {
   FOUNDER_USAGE_BOOST_ALLOWANCE_MICROS,
@@ -104,6 +108,9 @@ export const prepareFounderUsageBoostCheckoutInternal = internalMutation({
       subscriptionIsRiskRevoked(subscription)
     ) {
       throw new Error("founder_usage_boost_subscription_required");
+    }
+    if (!founderPlanTierAllowsUsageBoosts(normalizeFounderPlanTier(subscription.planTier))) {
+      throw new Error("founder_usage_boost_tier_required");
     }
 
     const cycle = await readOpenActiveCycleForSubscription(ctx, subscription._id, args.nowMs);

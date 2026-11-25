@@ -161,6 +161,7 @@ test("one active platform owner receives metered operator-funded Luna without a 
       mode: "platform_operator_grant",
       transitional: false,
       payerUserId: fixture.ownerId,
+      planTier: "chief_of_staff",
       modelId: "gpt-6-luna",
     });
     const asOperatorOwner = t.withIdentity({

@@ -9,6 +9,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { communityAgentIsOn } from "./communityApps";
 import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
+import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import {
   communityMembershipRowIsActive,
   getActiveCommunityBlock,
@@ -223,7 +224,12 @@ export const claimBuilderHeartbeatScanInternal = internalMutation({
       return null;
     }
     const community = await ctx.db.get(settings.communityId);
-    if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, settings.communityId))) {
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, settings.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, settings.communityId, args.nowMs))
+    ) {
       await ctx.db.patch(settings._id, {
         builderNextScanAt: args.nowMs + BUILDER_HEARTBEAT_SCAN_INTERVAL_MS,
         builderLeaseUntil: undefined,

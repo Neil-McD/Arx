@@ -168,6 +168,9 @@ export default defineSchema({
     providerCustomerId: v.string(),
     providerSubscriptionId: v.string(),
     providerPriceId: v.string(),
+    // Resolved subscription tier (`guide` = $20/$3 AI reactive, `chief_of_staff` = $100/$20 AI proactive).
+    // Absent on legacy $79 subscriptions, which grandfather as `chief_of_staff`.
+    planTier: v.optional(v.union(v.literal("guide"), v.literal("chief_of_staff"))),
     status: v.union(
       v.literal("active"),
       v.literal("past_due"),

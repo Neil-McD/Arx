@@ -1,3 +1,5 @@
+import type { FounderPlanTier } from "./founderPlan";
+
 export const COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-6-luna";
 export const COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT = true;
 
@@ -62,6 +64,7 @@ export type CommunityInferenceFundingAdmission =
       transitional: false;
       payerUserId: unknown;
       subscriptionId: unknown;
+      planTier: FounderPlanTier;
       modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
     }
   | {
@@ -69,6 +72,7 @@ export type CommunityInferenceFundingAdmission =
       mode: "platform_operator_grant";
       transitional: false;
       payerUserId: unknown;
+      planTier: FounderPlanTier;
       modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
     }
   | {

@@ -23,7 +23,12 @@ import {
   syncFounderUsageCycle,
   type FounderSubscriptionRow,
 } from "./founderPlanCore";
-import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
+import {
+  isConfiguredFounderTierPriceId,
+  requireFounderInferencePricingFromEnv,
+  resolveFounderInferencePricingForTier,
+  resolveFounderPlanTierFromPriceId,
+} from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { getStripeClient } from "./stripeCore";
 import {
@@ -413,7 +418,13 @@ async function syncFounderSubscription(args: {
   if (!expectedPriceId) {
     return { ok: true, ignored: true, reason: "founder_subscription_price_not_configured" };
   }
-  if (providerPriceId !== expectedPriceId) {
+  // An existing subscription may switch between configured Polynet founder tiers
+  // (Guide <-> Chief of Staff); unknown prices and mismatched initial checkouts
+  // continue to fail closed with `founder_subscription_price_changed`.
+  const allowedExistingTierSwitch = Boolean(
+    existing && providerPriceId && isConfiguredFounderTierPriceId(providerPriceId),
+  );
+  if (providerPriceId !== expectedPriceId && !allowedExistingTierSwitch) {
     if (!existing) {
       if (checkout) {
         if (
@@ -568,6 +579,7 @@ async function syncFounderSubscription(args: {
     providerCustomerId,
     nowMs: args.providerEventCreatedAt,
   });
+  const planTier = resolveFounderPlanTierFromPriceId(providerPriceId);
   let subscription: FounderSubscriptionRow;
   if (existing) {
     await args.ctx.db.patch(existing._id as any, {
@@ -576,6 +588,7 @@ async function syncFounderSubscription(args: {
         : existing.attachedAt,
       providerCustomerId,
       providerPriceId,
+      planTier,
       status,
       currentPeriodStartAt: cycleStartAt,
       currentPeriodEndAt: cycleEndAt,
@@ -594,6 +607,7 @@ async function syncFounderSubscription(args: {
         : existing.attachedAt,
       providerCustomerId,
       providerPriceId,
+      planTier,
       status,
       currentPeriodStartAt: cycleStartAt,
       currentPeriodEndAt: cycleEndAt,
@@ -614,6 +628,7 @@ async function syncFounderSubscription(args: {
       providerCustomerId,
       providerSubscriptionId,
       providerPriceId,
+      planTier,
       status,
       currentPeriodStartAt: cycleStartAt,
       currentPeriodEndAt: cycleEndAt,
@@ -634,7 +649,10 @@ async function syncFounderSubscription(args: {
         subscription,
         cycleStartAt,
         cycleEndAt,
-        pricing: requireFounderInferencePricingFromEnv(),
+        pricing: resolveFounderInferencePricingForTier(
+          planTier,
+          requireFounderInferencePricingFromEnv(),
+        ),
         nowMs: args.providerEventCreatedAt,
       })
     : null;

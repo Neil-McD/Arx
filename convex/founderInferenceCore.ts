@@ -6,7 +6,9 @@ import {
 } from "../shared/founderInference";
 import {
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+  founderPlanTierHasProactiveAgent,
   founderSubscriptionStatusGrantsAccess,
+  normalizeFounderPlanTier,
 } from "../shared/founderPlan";
 import {
   getFounderSubscriptionByCommunity,
@@ -199,6 +201,7 @@ export async function resolveCommunityInferenceFundingAdmission(
       mode: "platform_operator_grant",
       transitional: false,
       payerUserId: community.ownerId,
+      planTier: "chief_of_staff",
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
     };
   }
@@ -236,11 +239,24 @@ export async function resolveCommunityInferenceFundingAdmission(
       transitional: false,
       payerUserId: community.ownerId,
       subscriptionId: attachedSubscription._id,
+      planTier: normalizeFounderPlanTier(attachedSubscription.planTier),
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
     };
   }
 
   return { ok: false, code: "founder_plan_required" };
+}
+
+// Single authoritative server gate for Chief of Staff proactive capabilities
+// (Daily Founder Briefs, Member & Builder Check-Ins, and Unanswered-Question
+// Auto-Replies). Guide ($20/mo) and Free ($0/mo) communities fail closed here.
+export async function communityHasProactiveAgentTier(
+  ctx: any,
+  communityId: any,
+  nowMs: number = Date.now(),
+): Promise<boolean> {
+  const admission = await resolveCommunityInferenceFundingAdmission(ctx, communityId, nowMs);
+  return admission.ok && founderPlanTierHasProactiveAgent(admission.planTier);
 }
 
 export type AdditionalManagedCommunityAdmission =

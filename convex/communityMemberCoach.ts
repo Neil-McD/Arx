@@ -44,7 +44,12 @@ import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { DEFAULT_PERSONAL_SOUL_MD, cleanAgentSoulText } from "../shared/agentSoul";
 import { renderPersonalMemory } from "../shared/personalMemory";
 import { utcMonthWindow } from "../shared/founderInference";
-import { POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS } from "../shared/founderPlan";
+import {
+  POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
+  founderPlanTierAllowsUsageBoosts,
+  normalizeFounderPlanTier,
+} from "../shared/founderPlan";
+import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import {
   countReengagedMembersFromSentChecks,
   summarizeCommunityAiSpend,
@@ -420,7 +425,12 @@ export const claimCommunityMemberCoachScanInternal = internalMutation({
     if (typeof settings.nextScanAt === "number" && settings.nextScanAt > args.nowMs + 60_000) return null;
 
     const community = await ctx.db.get(settings.communityId);
-    if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, settings.communityId))) {
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, settings.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, settings.communityId, args.nowMs))
+    ) {
       await ctx.db.patch(settings._id, {
         nextScanAt: args.nowMs + MEMBER_COACH_SCAN_INTERVAL_MS,
         leaseUntil: undefined,
@@ -1539,6 +1549,9 @@ async function buildCoachSettingsView(
   const activeSubscription = activeFounderCycle
     ? await ctx.db.get(activeFounderCycle.founderSubscriptionId)
     : null;
+  const planTier = activeSubscription
+    ? normalizeFounderPlanTier((activeSubscription as any).planTier)
+    : "chief_of_staff";
   const firstCycleCapActive =
     activeFounderCycle && activeSubscription
       ? isSubscriptionInFirstBillingCycle({
@@ -1553,13 +1566,15 @@ async function buildCoachSettingsView(
       activeSubscription.status === "active" &&
       activeSubscription.riskAccessState !== "revoked",
   );
-  const boostAdmission = subscriptionEligibleForBoost
-    ? canGrantAdditionalUsageBoost({
-        requestedCapCents: usageBoostCapCents,
-        isFirstCycle: firstCycleCapActive,
-        paidBoostCountThisCycle: Number((activeFounderCycle as any).paidBoostCount ?? 0),
-      })
-    : { allowed: false as const, code: "founder_subscription_required", effectiveCapCents: 0 };
+  const boostAdmission = !subscriptionEligibleForBoost
+    ? { allowed: false as const, code: "founder_subscription_required", effectiveCapCents: 0 }
+    : !founderPlanTierAllowsUsageBoosts(planTier)
+      ? { allowed: false as const, code: "founder_usage_boost_tier_required", effectiveCapCents: 0 }
+      : canGrantAdditionalUsageBoost({
+          requestedCapCents: usageBoostCapCents,
+          isFirstCycle: firstCycleCapActive,
+          paidBoostCountThisCycle: Number((activeFounderCycle as any).paidBoostCount ?? 0),
+        });
 
   const rawCycleReceipts = await ctx.db
     .query("communityInferenceReceipts")
@@ -1663,6 +1678,7 @@ async function buildCoachSettingsView(
       sampled_at: typeof row?.temperatureSnapshot?.sampledAt === "number" ? row.temperatureSnapshot.sampledAt : null,
     },
     impact: {
+      plan_tier: planTier,
       total_micros: authoritativeTotalMicros,
       live_chat_micros: spend.liveChatMicros,
       proactive_micros: spend.proactiveMicros,

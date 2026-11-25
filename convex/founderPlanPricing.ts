@@ -3,6 +3,10 @@ import type { FounderProviderRequestUsage } from "../shared/founderInference";
 import {
   POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+  founderPlanTierIncludedCostMicros,
+  founderPlanTierMaxRunReservationMicros,
+  normalizeFounderPlanTier,
+  type FounderPlanTier,
 } from "../shared/founderPlan";
 
 export type FounderInferencePricing = {
@@ -23,9 +27,67 @@ function readEnv(name: string): string {
 }
 
 export function requireFounderStripePriceIdFromEnv(): string {
-  const priceId = readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID");
+  const priceId =
+    readEnv("POLYNET_FOUNDER_CHIEF_OF_STAFF_STRIPE_PRICE_ID") ||
+    readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID");
   if (!priceId) throw new Error("founder_stripe_price_id_missing");
   return priceId;
+}
+
+export function readFounderStripePriceIdForTierFromEnv(tier: FounderPlanTier): string | null {
+  if (tier === "guide") {
+    return readEnv("POLYNET_FOUNDER_GUIDE_STRIPE_PRICE_ID") || null;
+  }
+  return (
+    readEnv("POLYNET_FOUNDER_CHIEF_OF_STAFF_STRIPE_PRICE_ID") ||
+    readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID") ||
+    null
+  );
+}
+
+export function isConfiguredFounderTierPriceId(providerPriceId: unknown): boolean {
+  const normalized = String(providerPriceId ?? "").trim();
+  if (!normalized) return false;
+  const allowed = [
+    readEnv("POLYNET_FOUNDER_GUIDE_STRIPE_PRICE_ID"),
+    readEnv("POLYNET_FOUNDER_CHIEF_OF_STAFF_STRIPE_PRICE_ID"),
+    readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID"),
+  ].filter(Boolean);
+  return allowed.includes(normalized);
+}
+
+// Resolves a Stripe price ID to its canonical founder plan tier.
+// Only an explicit match against `POLYNET_FOUNDER_GUIDE_STRIPE_PRICE_ID` resolves
+// to `guide`; Chief of Staff and grandfathered legacy $79 price IDs resolve to
+// `chief_of_staff` so existing paid communities never lose proactive access.
+export function resolveFounderPlanTierFromPriceId(
+  providerPriceId: unknown,
+  envOverrides?: { guidePriceId?: string | null },
+): FounderPlanTier {
+  const normalizedPriceId = String(providerPriceId ?? "").trim();
+  const guidePriceId = String(
+    envOverrides?.guidePriceId ?? readEnv("POLYNET_FOUNDER_GUIDE_STRIPE_PRICE_ID"),
+  ).trim();
+  if (guidePriceId && normalizedPriceId === guidePriceId) {
+    return "guide";
+  }
+  return "chief_of_staff";
+}
+
+export function resolveFounderInferencePricingForTier(
+  tier: unknown,
+  basePricing: FounderInferencePricing,
+): FounderInferencePricing {
+  const normalizedTier = normalizeFounderPlanTier(tier);
+  const includedCostMicros = founderPlanTierIncludedCostMicros(normalizedTier);
+  return {
+    ...basePricing,
+    includedCostMicros,
+    maxRunReservationCostMicros: founderPlanTierMaxRunReservationMicros(
+      normalizedTier,
+      basePricing.maxRunReservationCostMicros,
+    ),
+  };
 }
 
 function positiveSafeInteger(raw: unknown): number | null {

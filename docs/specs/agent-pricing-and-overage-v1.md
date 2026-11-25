@@ -1,26 +1,44 @@
-# Agent Pricing & Optional Usage Boosts (v1 Spec)
+# Agent Pricing, Tiers & Optional Usage Boosts (v2 Spec)
 
-Status: approved by Neil on 2026-11-24. Supersedes the Oct 27 tentative "$49/mo"
-pricing note; keeps the live `$0 Free + $79/mo Agent Workspace` pricing anchor
-and defines optional prepaid community usage boosts for high-volume communities.
+Status: approved by Neil on 2026-11-24. Establishes Polynet's three-tier
+pricing ladder (`$0 Free · $20 Guide · $100 Chief of Staff`, no free trial)
+plus optional prepaid community usage boosts on Chief of Staff, while cleanly
+grandfathering legacy `$79/month` subscriptions as `chief_of_staff`.
 
-## 1) Product & Market Positioning
+## 1) Product & Market Positioning (3 Tiers, No Free Trial)
 
-- **Free Workspace ($0/month):** Full community (channels, courses, pods, events,
-  custom community site, official Polynet MCP, paid member commerce with a 2.9%
-  Polynet application fee, and zero-AI weekly digests). No Polynet-hosted AI agent.
-  Unfunded communities remain bounded at 10 live per owner.
-- **Agent Workspace ($79/month per community, month-to-month):** Unlocks the
-  community's always-on Persistent Agent (shared Identity, living Community/Member/Builder
-  Soul & Memory, private 1:1 chats, public @mentions & active thread follow-ups,
-  Daily Founder Brief, activity-tapered Member & Builder Heartbeats, and cited
-  unanswered-question replies) with a **$20.00/month included AI allowance**
-  aligned to each Stripe billing cycle, plus the same 2.9% commerce fee.
+- **Free ($0/month):** *Build your community.* Full community (channels,
+  courses, pods, events, DMs, custom links, Discover, official Polynet MCP,
+  paid member commerce with a 2.9% Polynet application fee, and zero-AI weekly
+  digests). Unlimited members. No Polynet-hosted AI agent. Unfunded communities
+  remain bounded at 10 live per owner.
+- **Guide ($20/month per community, month-to-month):** *The community that
+  remembers.* Everything in Free, plus the reactive AI Guide: private 1:1 chats,
+  public @mentions, smart thread follow-ups, living Community & Personal Soul
+  and Memory, and nightly community learning, with **$3.00/month included AI
+  allowance** (`3_000_000` micros; single-run reservation cap `$0.50` /
+  `500_000` micros).
+- **Chief of Staff ($100/month per community, month-to-month):** *The agent
+  that helps run your community.* Everything in Guide, plus the full proactive
+  Chief of Staff suite — Daily Founder Briefs, activity-tapered Member
+  Check-Ins & win-backs (+ 24h email nudges), Builder's Own Proactive
+  Check-Ins, unanswered-question auto-replies & drafts, and optional prepaid
+  usage boosts — with **$20.00/month included AI allowance** (`20_000_000`
+  micros), plus the same 2.9% commerce fee.
+- **Member vs. Founder Naming:** Members continue to experience their personal
+  community companion as **Guide**; founders upgrade to **Chief of Staff** for
+  the proactive community-running agent.
+- **Grandfathering & Operator Grant:** Existing legacy `$79/month` founder
+  subscriptions (`POLYNET_FOUNDER_STRIPE_PRICE_ID`) and operator-comped
+  communities resolve automatically to `chief_of_staff` (`$20.00/month`
+  allowance + full proactive suite) with zero disruption.
 
-## 2) Optional Prepaid Community Usage Boosts (Past $20/Month)
+## 2) Optional Prepaid Community Usage Boosts (Chief of Staff Only)
 
-To let fast-growing communities scale smoothly past $20/month without post-paid
-bad-debt risk or modifying existing $79 Stripe subscriptions:
+To let fast-growing Chief of Staff communities scale smoothly past $20/month
+without post-paid bad-debt risk or modifying active subscriptions (Guide
+communities upgrade to Chief of Staff first for nearly 7× the allowance plus
+the full proactive suite):
 
 - **Default posture:** **Off (pause at $20.00/month).** No founder is ever
   charged past $79/month unless they explicitly opt in and pay.
@@ -52,16 +70,22 @@ bad-debt risk or modifying existing $79 Stripe subscriptions:
 
 ## 3) Rollout Plan (Protected Lane)
 
-- **Step 1 (Spec + Ledger + Safety Cap Settings — this slice):**
-  - Lock this spec and shared contract (`shared/founderUsageBoosts.ts`).
-  - Add additive `paidBoostCostMicros` and `paidBoostCount` fields on
-    `founderUsageCycles`, and `usageBoostCapCents` on `communityMemberCoachSettings`.
-  - Update `founderPlanCore.ts` ledger reservation/settlement assertions and
-    allowance guardrails/Settings projection to honor `included + paidBoost`
-    and display the founder's monthly safety cap cleanly (no Stripe charges yet).
-- **Step 2 (Stripe Checkout / Settlement & Webhook Granting — implemented):**
-  - Idempotent `founderUsageBoostReceipts` table, Stripe one-time Checkout (`mode: "payment"`)
-    for a $30 boost tied strictly to `(communityId, founderSubscriptionId, usageCycleId, cycleKey)`,
-    pending-session reuse to prevent concurrent cap bypass, platform webhook verification
-    granting `paidBoostCostMicros` (with cycle-rollover protection and alert re-arming),
-    and safe refund/dispute clawback + subscription risk hold on disputes.
+- **Boost Foundation (Steps 1–2, shipped in PRs #821–#822):**
+  - Shared boost ledger (`paidBoostCostMicros`, `paidBoostCount`, `usageBoostCapCents`),
+    idempotent `founderUsageBoostReceipts`, Stripe one-time Checkout (`mode: "payment"`),
+    webhook-authoritative granting, refund/dispute clawback, and return confirmation.
+- **3-Tier Rollout — Step 1 (Tier Contract, Allowance Sizing & Proactive Gating):**
+  - Lock `FounderPlanTier = "guide" | "chief_of_staff"` in `shared/founderPlan.ts`
+    (`guide`: $20/mo, $3 AI, $0.50 max run reservation; `chief_of_staff`: $100/mo,
+    $20 AI, full proactive suite + boosts; legacy $79 and operator grants map to
+    `chief_of_staff`).
+  - Add additive `planTier` on `founderSubscriptions` and `founderBillingCheckouts`,
+    support tier-aware cycle allowances (including safe mid-cycle upgrades/downgrades),
+    and gate the 4 proactive engines + boost purchases to `chief_of_staff`.
+- **3-Tier Rollout — Step 2 (Two-Tier Stripe Checkout & Mid-Cycle Upgrade/Downgrade Sync — Protected Lane):**
+  - Configure `POLYNET_FOUNDER_GUIDE_STRIPE_PRICE_ID` ($20/mo) and
+    `POLYNET_FOUNDER_CHIEF_OF_STAFF_STRIPE_PRICE_ID` ($100/mo), enable selecting
+    either tier at checkout, and sync mid-cycle upgrades/downgrades via Stripe webhooks.
+- **3-Tier Rollout — Step 3 (Plan Picker, Settings Upgrade Prompts & Homepage Refresh — Fast Lane):**
+  - Show Free / Guide ($20) / Chief of Staff ($100) across checkout, Settings,
+    tier-aware 80%/100% alerts, and the public homepage.

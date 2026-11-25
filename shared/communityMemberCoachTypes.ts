@@ -63,7 +63,10 @@ export type MemberCoachHeartbeatSummary = {
   sampled_at: number | null;
 };
 
+import type { FounderPlanTier } from "./founderPlan";
+
 export type MemberCoachImpactSummary = {
+  plan_tier?: FounderPlanTier;
   total_micros: number;
   live_chat_micros: number;
   proactive_micros: number;
