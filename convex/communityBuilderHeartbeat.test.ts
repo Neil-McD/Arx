@@ -355,6 +355,26 @@ describe("Builder's Own Proactive Heartbeat", () => {
       builderRole: "owner",
     });
 
+    // 6b. If Owner removes that commitment in Settings while the judge is in flight,
+    //     delivery fails closed ("commitment_removed") and never resurrects the forgotten goal.
+    const asOwner = t.withIdentity({ subject: "owner-bh" });
+    await asOwner.mutation(api.memberMemory.saveMyGuideMemory, {
+      communityId: w.communityId,
+      operation: { action: "clear" },
+    });
+    const blockedAfterClear: any = await t.mutation(
+      internal.communityBuilderHeartbeat.recordBuilderHeartbeatOutcomeInternal,
+      {
+        communityId: w.communityId,
+        builderUserId: w.ownerId,
+        dedupeKey: afterBriefBuffer.dedupeKey,
+        decision: "send",
+        text: "Still working on Lesson 4?",
+        nowMs: NOW + 4 * HOUR_MS,
+      },
+    );
+    expect(blockedAfterClear).toEqual({ ok: false, code: "commitment_removed" });
+
     // 7. 24h unseen email nudge sends a strictly neutral privacy-safe preview (no commitment leakage)
     //    and stays idempotent on repeat sweeps.
     const firstEmailSweep = await t.mutation(

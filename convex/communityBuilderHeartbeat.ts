@@ -56,6 +56,14 @@ function daysBetween(olderMs: number, newerMs: number): number {
   return Math.max(1, Math.floor((newerMs - olderMs) / DAY_MS));
 }
 
+function builderCommitmentDedupeKey(
+  entry: { at?: unknown; text?: unknown },
+  fallbackNowMs: number,
+): string {
+  const commitAt = Number(entry?.at ?? fallbackNowMs);
+  return `builder_commitment:${Math.floor(commitAt / (7 * DAY_MS))}:${String(entry?.text ?? "").slice(0, 32).toLowerCase()}`;
+}
+
 async function resolveActiveBuilder(
   ctx: any,
   community: any,
@@ -360,7 +368,7 @@ export const readNextBuilderHeartbeatCandidateInternal = internalQuery({
       // commitment never shadows another eligible commitment for the same builder.
       for (const commitmentEntry of qualifyingCommitments) {
         const commitAt = Number(commitmentEntry.at ?? args.nowMs);
-        const dedupeKey = `builder_commitment:${Math.floor(commitAt / (7 * DAY_MS))}:${String(commitmentEntry.text ?? "").slice(0, 32).toLowerCase()}`;
+        const dedupeKey = builderCommitmentDedupeKey(commitmentEntry, args.nowMs);
         const gate = evaluateBuilderHeartbeatGate({
           nowMs: args.nowMs,
           builderMuted: false,
@@ -447,6 +455,19 @@ export const recordBuilderHeartbeatOutcomeInternal = internalMutation({
           )
           .unique(),
       ]);
+
+    if (args.decision === "send") {
+      // Fail closed if the builder removed or cleared this commitment in Settings
+      // while the model request was in flight, so forgotten goals are never resurrected.
+      const commitmentStillPresent = (memRow?.entries ?? []).some(
+        (entry: any) =>
+          entry?.category === "commitment" &&
+          builderCommitmentDedupeKey(entry, args.nowMs) === args.dedupeKey,
+      );
+      if (!commitmentStillPresent) {
+        return { ok: false as const, code: "commitment_removed" };
+      }
+    }
 
     const latestCommitmentAt = (memRow?.entries ?? [])
       .filter((entry: any) => entry?.category === "commitment")
