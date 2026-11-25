@@ -12,6 +12,8 @@ The visual rules stay exactly the mock's. Only three mechanical changes:
   4. The kit renders real buttons and inputs where the mock used labels and
      spans, so a reset with zero specificity (`:where()`) strips the browser's
      button styles. It can never outrank a rule from the mock.
+  5. Rules for screens the app does not have are left out: a mock rule whose
+     every selector needs a class no app source names (see drop_unused).
 
 Run: python3 scripts/design/build_v1_kit_css.py  (--stdout prints instead of writing)
 Source: docs/design/hifi-mock/style.css  Output: apps/web/src/v1/kit.module.css
@@ -87,6 +89,97 @@ css = css.replace("--serif:'Newsreader',Georgia,serif", "--serif:'Newsreader Var
 css = css.replace("font-family:'Geist','Inter',sans-serif", "font-family:'Geist Variable','Geist','Inter',sans-serif")
 # The mock's sample course cover is a file beside the mock; the app has it in public/.
 css = css.replace("url(./polynet-earth.webp)", "url(/design-lab/polynet-earth.webp)")
+
+# 5. The mock draws screens the app does not have. A rule from the mock is
+#    left out when every one of its selectors needs a class that no app source
+#    names (apps/web/src and shared/, tests aside); a selector list keeps only
+#    the selectors the app can match. A class counts as named when its exact
+#    word appears anywhere in that source, or the source builds it from a
+#    prefix (`on-v-${view}`, `v${props.index}`). Classes inside :not(),
+#    :is(), :where() and :has() never count against a selector. When the app
+#    starts using one of the mock's classes, run this script again: the rule
+#    comes back.
+def app_words() -> tuple[set[str], tuple[str, ...]]:
+    words: set[str] = set()
+    prefixes: set[str] = set()
+    files = [ROOT / "apps/web/index.html", ROOT / "apps/web/publicPages.ts"]
+    for base in (ROOT / "apps/web/src", ROOT / "shared"):
+        files += sorted(
+            p for p in base.rglob("*")
+            if p.is_file() and p.suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".json", ".html"}
+            and ".test." not in p.name and "node_modules" not in p.parts
+        )
+    for p in files:
+        text = p.read_text(errors="ignore")
+        for w in re.findall(r"[A-Za-z_][\w-]*", text):
+            words.add(w)
+            if w.endswith("-") and len(w) > 1:
+                prefixes.add(w)
+        prefixes.update(re.findall(r"([\w-]+)\$\{", text))
+    return words, tuple(sorted(prefixes))
+
+APP_WORDS, APP_PREFIXES = app_words()
+
+def built_by_app(c: str) -> bool:
+    # `on-v-${view}` builds any on-v-*; `v${props.index}` builds v0, v1 or rT.
+    return any(
+        c.startswith(p) and (p.endswith("-") or (len(c) > len(p) and (c[len(p)].isdigit() or c[len(p)].isupper())))
+        for p in APP_PREFIXES
+    )
+
+def selector_needs_unused_class(sel: str) -> bool:
+    s = re.sub(r"\"[^\"]*\"|'[^']*'|\[[^\]]*\]", "", sel)
+    while True:
+        m = re.search(r":(?:not|is|where|has)\(", s)
+        if not m:
+            break
+        depth, j = 0, m.end() - 1
+        while j < len(s):
+            depth += s[j] == "("
+            depth -= s[j] == ")"
+            if depth == 0:
+                break
+            j += 1
+        s = s[: m.start()] + s[j + 1 :]
+    return any(
+        c not in APP_WORDS and not built_by_app(c)
+        for c in re.findall(r"\.(-?[A-Za-z_][\w-]*)", s)
+    )
+
+def drop_unused(text: str) -> str:
+    out, i = [], 0
+    while i < len(text):
+        brace = text.find("{", i)
+        if brace == -1:
+            out.append(text[i:]); break
+        head = text[i:brace]
+        depth, j = 0, brace
+        while True:
+            if text[j] == "{": depth += 1
+            elif text[j] == "}":
+                depth -= 1
+                if depth == 0: break
+            j += 1
+        body = text[brace + 1:j]
+        h = head.strip()
+        if h.startswith("@media") or h.startswith("@supports"):
+            inner = drop_unused(body)
+            if inner.strip():
+                out.append(head + "{" + inner + "}")
+        elif h.startswith("@"):
+            out.append(head + "{" + body + "}")
+        else:
+            parts = split_top(h)
+            sels = [x.strip() for x in parts if not selector_needs_unused_class(x)]
+            if len(sels) == len(parts):
+                out.append(head + "{" + body + "}")
+            elif sels:
+                lead = head[: len(head) - len(head.lstrip())]
+                out.append(lead + ",".join(sels) + "{" + body + "}")
+        i = j + 1
+    return "".join(out)
+
+css = drop_unused(css)
 css += """
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
@@ -120,8 +213,6 @@ css += """
 /* Kit addition: the live Members table (the mock draws it still). */
 .app button.trow{width:100%;text-align:left;cursor:pointer}
 .app button.trow:disabled{cursor:default}
-.app .th-sort{display:flex;align-items:center;gap:4px;color:inherit;font:inherit}
-.app .th-sort .ic{width:12px;height:12px;opacity:.7}
 .app .find input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font:inherit;font-size:13px}
 .app .find input::placeholder{color:var(--ink3)}
 .app .note-add{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
@@ -134,12 +225,10 @@ css += """
 /* Knowledge in the app (the classroom): the mock's cards and rows as real
    buttons, the ask field as a button that opens the guide, the done circle's
    on state, and the note forms in the right column. */
-.app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
+.app button.kcourse,.app button.kl,.app button.src{width:100%;text-align:left}
 .app button.src{width:calc(100% + 20px)}
-.app button.kcont{display:block}
 .app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:14px}
 .app .kask-btn span{flex:1;text-align:left}
-.app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
 .app .kl.d .ic{color:var(--ink2)}
 .app .kcover{background-color:var(--s2)}
 .app .kn-note-title{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.015em}
@@ -154,11 +243,6 @@ css += """
    bar with Cancel and Save. */
 .app .kl-row{display:flex;align-items:center;gap:4px}
 .app .kl-row>.kl{flex:1;min-width:0}
-.app .kl-move{display:flex;gap:2px;opacity:0;transition:opacity .15s var(--ease)}
-.app .kl-row:hover .kl-move,.app .kl-move:focus-within{opacity:1}
-.app .kl-move button{width:22px;height:22px;border-radius:6px;color:var(--ink3);font-size:12px;cursor:pointer}
-.app .kl-move button:hover:not(:disabled){background:var(--s2);color:var(--ink)}
-.app .kl-move button:disabled{opacity:.3;cursor:default}
 .app .kedit-title{display:block;width:100%;box-sizing:border-box;margin:6px 0 0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
 .app .kedit-title::placeholder{color:var(--ink3)}
 .app .kedit-video{display:flex;align-items:center;gap:12px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;margin-top:18px;padding:12px;border-radius:14px;border:1px dashed var(--line2);background:var(--s1)}
@@ -166,10 +250,6 @@ css += """
 .app .kedit-video>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .app .kedit-video input{width:100%;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px}
 .app .kedit-video input::placeholder{color:var(--ink3)}
-.app .kedit-thumb{flex:none;width:96px;height:54px;border-radius:8px;background:var(--s2) center/cover no-repeat}
-.app .kedit-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px 0;border-top:1px solid var(--line);background:var(--bg)}
-.app .kedit-bar .btn:disabled{opacity:.4;cursor:default;box-shadow:none}
-.app .kedit-pub{margin-right:8px;font-size:13px;color:var(--ink3)}
 
 /* The command palette in the app: the mock's veil and card over the whole
    window, a real input in its query row, results that scroll, and rows that
@@ -344,7 +424,6 @@ css += """
 .app .brain-hub{font-size:14px;font-weight:600;fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
 .app .brain-hub.dim{fill:rgba(var(--w),.4)}.app .brain-hub.gap{fill:#e0a84f}.app .brain-hub.closed{font-weight:400;fill:var(--ink3)}
 .app .brain-gapnote{font-size:11.5px;fill:#e0a84f}
-.app .brain-num{font-size:11px;fill:var(--ink3)}.app .brain-num.dim{fill:rgba(var(--w),.25)}
 .app .brain-name{font-size:12.5px;fill:rgba(var(--w),.78)}
 .app .brain-name.dim{fill:rgba(var(--w),.28)}.app .brain-name.on{fill:#fff;font-weight:600}
 /* The brain as a page in Knowledge: its counts and readings, then the map filling the rest. */
@@ -422,8 +501,6 @@ css += """
 .app .brainzoom button{min-width:30px;height:30px;padding:0 9px;border-radius:8px;border:1px solid var(--line2);background:var(--bg);color:var(--ink2);font-size:13px;cursor:pointer}
 .app .brainzoom button:hover{color:var(--ink)}
 .app .brainzoom button:disabled{opacity:.4;cursor:default}
-.app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
-.app .kmini+.kline{margin-top:10px}
 
 /* Pods (docs/specs/pods-v0.md): one page of pod cards, and the new-pod form. */
 .app .podgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:20px}
@@ -454,14 +531,10 @@ css += """
 .app .podpage{display:flex;flex-direction:column;gap:14px;max-width:620px;margin-top:20px}
 .app .podpage .podname{font-size:20px}
 .app .podget{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--ink)}
-.app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .app .podnote-body{margin:8px 0 6px;font-size:13px;line-height:1.55;color:var(--ink2)}
 .app .podnote-body p{margin:0 0 8px}
 .app .podform select{padding:7px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink);font:inherit;font-size:13px}
-.app .podreq{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;color:var(--ink)}
-.app .podreq em{font-style:normal;color:var(--ink3)}
-.app .podreq-acts{display:flex;gap:4px}
 
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
@@ -478,9 +551,6 @@ css += """
 .app .krow .t b{font-size:13.5px;font-weight:550;color:var(--ink);margin-right:8px}
 .app .krow .from{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);white-space:nowrap}
 .app .krow.add .t{color:var(--ink2)}
-.app .kadd{margin-top:10px;border:1px solid var(--line2);background:var(--panel2);border-radius:10px;padding:12px 10px 10px 14px}
-.app .kadd textarea{display:block;width:100%;min-height:44px;padding:0;border:0;outline:0;resize:none;background:transparent;color:var(--ink);font:inherit;font-size:14.5px;line-height:1.5}
-.app .kadd textarea::placeholder{color:var(--ink3)}
 .app .khint{margin-top:8px;font-size:12.5px;color:var(--ink2)}
 .app .kwait{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px;border-radius:8px;border:1px solid rgba(var(--au),.22);background:rgba(var(--au),.05)}
 .app .kwait p{margin:0;font-size:13.5px;font-weight:500;line-height:1.4;color:var(--ink)}
@@ -571,11 +641,8 @@ css += """
 .app .evsw{flex:none;position:relative;width:34px;height:20px;margin-top:1px;border-radius:10px;border:0;background:var(--s2);transition:background .16s var(--ease)}
 .app .evsw i{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--ink2);transition:left .16s var(--ease),background .16s var(--ease)}
 .app .evsw.on{background:var(--go)}.app .evsw.on i{left:17px;background:#fff}
-:where(:root[data-layout="phone"]) .app .evparts{grid-template-columns:minmax(0,1fr)}:where(:root[data-layout="phone"]) .app .evaddrow span{display:none}:where(:root[data-layout="phone"]) .app .erow{row-gap:8px}
+:where(:root[data-layout="phone"]) .app .evparts{grid-template-columns:minmax(0,1fr)}
 
-/* Kit addition: the box a course's settings open in (KitCourseEdit), and a form's foot. */
-.app .kaddbox{margin-top:20px;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
-.app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
 /* The channel's panel (KitChannelRail): what it is for, and its pinned post as a card. */
 .app .chabout{margin:0;font-size:14px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
 .app .chpin{position:relative;display:flex;flex-direction:column;gap:6px;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--s1);text-align:left;cursor:pointer;transition:border-color .12s}
@@ -717,14 +784,7 @@ css += """
 .app button.kresrow:disabled{cursor:default}
 .app .kresrow.kfile-busy em{color:var(--ink2)}
 .app .kresadds{display:flex;flex-wrap:wrap;gap:0 14px}
-.app .kresadd{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px;margin-top:8px}
-.app .kresadd input{min-width:0;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:13.5px;outline:0}
-.app .kresadd input:focus{border-color:var(--line2)}
-.app .kresadd input::placeholder{color:var(--ink3)}
 .app .krow .from .btn.sm{height:24px;padding:0 8px;font-size:12px}
-.app .kedit-bar{flex-wrap:wrap;row-gap:8px}
-.app .kedit-pub{white-space:nowrap}
-:where(:root[data-layout="phone"]) .app .kresadd{grid-template-columns:minmax(0,1fr)}
 
 /* Kit addition: Home's middle column. The guide's brief under the greeting
    (.hbrief), then one list of what needs this person (KitNeedsYou): a row
@@ -823,15 +883,6 @@ css += """
 .app .kcourse.knew{display:grid;place-items:center;align-content:center;justify-items:center;gap:8px;min-height:180px;padding:14px;border-style:dashed;border-color:var(--line2);background:transparent;color:var(--ink2);font-size:14px;text-align:center}
 .app .kcourse.knew:hover:not(:disabled){background:var(--s1);color:var(--ink)}
 .app .kcourse.knew .ic{width:18px;height:18px}
-.app .kmoveto{height:28px;max-width:220px;padding:0 8px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--ink2);font:inherit;font-size:12.5px}
-
-/* Kit addition: changing a course in the page (KitCourseEdit): the cover on
-   the left, the words on the right. */
-.app .kcedit{margin-top:0;margin-bottom:22px}
-.app .kcgrid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;margin-top:12px}
-.app .kcthumb{height:112px;border-radius:8px;border:1px solid var(--line2);background:var(--s2) center/cover no-repeat;display:grid;place-items:center;color:var(--ink3)}
-.app .kcbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-:where(:root[data-layout="phone"]) .app .kcgrid{grid-template-columns:minmax(0,1fr)}
 
 /* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
    layer: a light veil and one small card. Center with auto margins rather than
@@ -916,7 +967,6 @@ css += """
 .app .kaddline .ic{width:16px;height:16px;color:var(--ink3);flex:none}
 .app .kaddline input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
 .app .kaddline input::placeholder{color:var(--ink3)}
-.app .kedit-videorow{display:flex;align-items:center;gap:6px}
 .app .kunsaved{position:sticky;bottom:16px;z-index:5;align-self:center;display:flex;align-items:center;gap:10px;max-width:100%;box-sizing:border-box;margin-top:24px;padding:8px 8px 8px 16px;border-radius:14px;background:var(--pop);border:1px solid var(--line2);box-shadow:0 24px 50px -18px rgba(0,0,0,.7);font-size:13.5px}
 .app .kunsaved i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
 .app .kunsaved span{margin-right:8px}
@@ -945,7 +995,7 @@ css += """
 .app .kcols{display:flex;gap:40px;max-width:860px;margin:22px auto 0;align-items:flex-start}
 .app .kcols.two{max-width:1216px}
 .app .kcols .kmainc{flex:1;min-width:0}
-.app .kcols .klesson,.app .kcols .kcrumb{max-width:none;margin:0}
+.app .kcols .klesson{max-width:none;margin:0}
 .app .klist{position:sticky;top:8px;flex:none;width:304px;max-height:calc(100vh - 150px);overflow-y:auto;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5)}
 .app .klist.solo{position:static;width:auto;max-width:420px;max-height:none;margin-bottom:14px;box-shadow:none}
 .app .klist-top{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;padding:14px 14px 12px}
@@ -988,8 +1038,6 @@ css += """
 .app .kfinish-next b{display:block;margin-top:1px;font-size:15.5px;font-weight:600;line-height:1.3}
 .app .kisdone{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--v1-accent-ink,var(--accent));cursor:pointer}
 .app .kisdone .ic{width:14px;height:14px}.app .kisdone:hover{background:var(--s2)}
-.app .kpct{height:auto;border-radius:0;background:none;overflow:visible}.app .kpct i{display:none}
-.app .kpct em{padding:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink3)}
 .app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2));font-size:14px;line-height:1.5;padding:9px 13px;max-width:min(300px,100%);border-radius:14px 14px 4px 14px}
 .app .bub{font-size:14px;line-height:1.5;padding:9px 13px;max-width:min(300px,100%);border-radius:14px 14px 14px 4px}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .mine:not(.re){background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--ink)}

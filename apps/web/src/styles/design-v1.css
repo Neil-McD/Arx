@@ -228,28 +228,6 @@
   filter: none;
 }
 
-/* Your own messages sit on a quiet raised surface, not the action colour. */
-:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
-  border-color: transparent;
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble a:not(:where(dialog a)) {
-  color: var(--text-link);
-  text-decoration-color: color-mix(in srgb, var(--text-link) 42%, transparent);
-}
-
-:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble .chat-inline-code {
-  border-color: var(--border-strong);
-  background: var(--surface-subtle);
-}
-
-:root[data-design="v1"] .community-dm-panel-message.is-own.is-media-only .community-dm-panel-message-bubble,
-:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble:has(> .community-dm-media-grid:only-child) {
-  background: transparent;
-}
-
 /*
  * Design system v1: type and the agent's voice (spec sections 2 and 3).
  * The agent speaks in Newsreader, people and the interface in Geist. Labels are
@@ -794,12 +772,6 @@
   color: var(--icon-default);
 }
 
-:root[data-design="v1"] .community-switcher-separator {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--border-default);
-}
-
 /* The list scrolls; the search above and Discover / Start below stay put. */
 :root[data-design="v1"] .community-switcher-list {
   display: grid;
@@ -1205,97 +1177,6 @@
   overflow-y: auto;
 }
 
-:root[data-design="v1"] .channel-rail-section {
-  display: grid;
-  justify-items: start;
-  gap: 10px;
-  min-width: 0;
-  padding-bottom: 22px;
-  margin-bottom: 22px;
-  border-bottom: 1px solid var(--border-default);
-}
-
-:root[data-design="v1"] .channel-rail-section:last-child {
-  margin-bottom: 0;
-  border-bottom: 0;
-}
-
-:root[data-design="v1"] .channel-rail-section > * {
-  min-width: 0;
-  max-width: 100%;
-}
-
-:root[data-design="v1"] .channel-rail-label {
-  margin: 0;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-:root[data-design="v1"] .channel-rail-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: calc(100% + 16px);
-  max-width: none;
-  margin: -2px -8px;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-ink-secondary);
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-:root[data-design="v1"] .channel-rail-row svg {
-  flex: 0 0 auto;
-  color: var(--icon-default);
-}
-
-:root[data-design="v1"] .channel-rail-row span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:root[data-design="v1"] .channel-rail-row:hover,
-:root[data-design="v1"] .channel-rail-row:focus-visible {
-  outline: none;
-  background: var(--hover-overlay);
-  color: var(--text-ink-primary);
-}
-
-:root[data-design="v1"] .channel-rail-here {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-}
-
-:root[data-design="v1"] .channel-rail-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-:root[data-design="v1"] .channel-rail-link:hover,
-:root[data-design="v1"] .channel-rail-link:focus-visible {
-  outline: none;
-  color: var(--text-ink-primary);
-}
-
 /*
  * Design system v1: a thread (spec section 6). It takes the channel panel's
  * place at the same width, names itself in a header level with the channel's,
@@ -1565,12 +1446,6 @@
   margin: 0;
 }
 
-:root[data-design="v1"] .community-page-header-actions .community-events-new-btn {
-  min-height: 30px;
-  padding: 0 12px;
-  font-size: 13px;
-}
-
 :root[data-design="v1"] .community-page-header-actions .platform-switcher {
   width: auto;
   flex: 0 0 auto;
@@ -1626,12 +1501,6 @@
   flex: 0 0 var(--web-topbar-height, 48px);
 }
 
-:root[data-design="v1"] .channel-roster-panel.is-member-list > .members-directory-content {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding-top: 12px;
-}
-
 /*
  * Design system v1: the pages outside a community (Discover, your settings)
  * share the frame, with their own left column where the rail used to be.
@@ -1646,11 +1515,6 @@
 
 /* The left column's Back row replaces the floating back button. */
 :root[data-design="v1"] .app-root:has(.global-nav-v1) .app-topbar .topbar-left {
-  display: none;
-}
-
-/* With "New event" in the header line, the empty month does not repeat it. */
-:root[data-design="v1"] .community-page-body .community-events-state > button {
   display: none;
 }
 
@@ -1694,41 +1558,6 @@
   box-shadow: none;
 }
 
-/* The page's header line, like every other page's. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-header {
-  position: absolute;
-  top: 0;
-  right: var(--inbox-thread-width);
-  left: 0;
-  flex: none;
-  height: 52px;
-  margin: 0;
-  padding: 0 20px 0 var(--inbox-gutter);
-  align-items: center;
-  border-bottom: 0;
-  border-radius: 0;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-header > div:first-child {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
-  display: block;
-  margin: 0;
-  color: var(--text-faint);
-  font-size: 13px;
-}
-
 /* Finding someone is a small field in the header line, not a bar in the list. */
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search {
   position: absolute;
@@ -1750,13 +1579,8 @@
   font-size: 13px;
 }
 
-/* Smaller windows: the title keeps its room. The second line of the title
-   goes first, then the field narrows. */
+/* Smaller windows: the title keeps its room and the field narrows. */
 @media (max-width: 1240px) {
-  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
-    display: none;
-  }
-
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search {
     width: clamp(120px, 16vw, 200px);
   }
@@ -1786,88 +1610,6 @@
   box-shadow: none;
 }
 
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-list {
-  gap: 0;
-  margin: 0 -12px;
-  padding: 0 0 40px;
-  mask-image: none;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-label {
-  margin: 22px 12px 8px;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row {
-  flex: 0 0 auto;
-  min-height: 0;
-  gap: 14px;
-  padding: 14px 12px;
-  border: 0;
-  border-radius: 12px;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row:hover {
-  background: var(--hover-overlay);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row.is-selected {
-  background: var(--bg-card);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-avatar-wrap,
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-avatar {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-body {
-  gap: 2px;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-name-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-name {
-  color: var(--text-ink-primary);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-kind,
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row.is-person .community-dm-inbox-row-meta {
-  color: var(--text-faint);
-  font-size: 13px;
-  font-weight: 400;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-time {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-meta {
-  color: var(--text-ink-primary);
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-unread {
-  width: 7px;
-  height: 7px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: var(--text-ink-primary);
-  box-shadow: none;
-}
-
 /* The conversation column: 328px, padded 20px 24px 24px. */
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel:not(.community-dm-inbox-panel) {
   top: 0;
@@ -1884,111 +1626,6 @@
   border-radius: 0;
   background: var(--surface-raised);
   box-shadow: none;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-header {
-  gap: 12px;
-  padding-bottom: 18px;
-  /* The mock's .sep: its hairline, not the old stronger border. */
-  border-bottom: 1px solid var(--surface-raised-edge);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-avatar-wrap,
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-avatar {
-  width: 36px;
-  height: 36px;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-context {
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-}
-
-/* The mock's .bub: theirs on the left with a small corner, yours (the
-   mock's .mine) on the right, a shade brighter. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
-  max-width: 300px;
-  padding: 9px 13px;
-  border: 0;
-  border-radius: 14px 14px 14px 4px;
-  background: var(--bubble-theirs);
-  color: var(--text-ink-primary);
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
-  border-radius: 14px 14px 4px 14px;
-  background: var(--bubble-mine);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
-  background: rgba(13, 17, 23, 0.06);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
-  background: #0d1117;
-  color: #f6f7f9;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message-time {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-composer-float {
-  right: 24px;
-  bottom: 24px;
-  left: 24px;
-}
-
-/* The mock's reply box: a 46px .ask, a quiet send that turns blue while
-   you type in it. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer {
-  align-items: center;
-  min-height: 46px;
-  padding: 0 8px 0 12px;
-  border: 1px solid var(--field-edge);
-  border-radius: 14px;
-  background: var(--surface-field, rgba(10, 12, 16, 0.6));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
-  border-color: var(--accent-agent-edge);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-agent-halo);
-}
-
-/* The send button's colours come through the conversation tokens (the
-   older rule sets them with !important), so the mock's are set there. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer .community-dm-panel-send {
-  --conversation-primary-action-surface: rgba(255, 255, 255, 0.06);
-  --conversation-primary-action-hover-surface: rgba(255, 255, 255, 0.09);
-  --conversation-primary-action-foreground: rgba(238, 240, 244, 0.52);
-  flex-basis: 30px;
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
-  border-radius: 10px;
-  box-shadow: none;
-  opacity: 1;
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
-  --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
-  --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
-  --conversation-primary-action-foreground: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-}
-
-:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-composer {
-  border-color: rgba(13, 17, 23, 0.14);
-  background: #ffffff;
 }
 
 /* No conversation yet: the column is there, with one line in it. */
@@ -2558,14 +2195,12 @@
    without a bar: a bar would narrow the text under its mention layer and the
    two would wrap differently (Nov 14). */
 :root[data-design="v1"] textarea.chat-input,
-:root[data-design="v1"] .community-dm-panel-input,
 :root[data-design="v1"] .kit-ask-text {
   max-height: min(40vh, 240px);
   scrollbar-width: none;
 }
 
 :root[data-design="v1"] textarea.chat-input::-webkit-scrollbar,
-:root[data-design="v1"] .community-dm-panel-input::-webkit-scrollbar,
 :root[data-design="v1"] .kit-ask-text::-webkit-scrollbar {
   display: none;
 }
@@ -2860,15 +2495,7 @@
   color: var(--text-ink-primary);
 }
 
-/* The channel's top bar, as in the mock: the line about the channel after
-   its name, and "Search or ask" on the right. */
-:root[data-design="v1"] .community-channel-header h1 .community-channel-header-description {
-  margin-left: 8px;
-  color: var(--text-faint);
-  font-size: 13px;
-  font-weight: 400;
-}
-
+/* The channel's top bar, as in the mock: "Search or ask" on the right. */
 :root[data-design="v1"] .community-search-ask {
   display: flex;
   flex: none;
@@ -2999,18 +2626,6 @@
 /* Pages on the kit (Events, Knowledge): the kit's rail brings its own padding. */
 :root[data-design="v1"] .community-page-rail:has(.kit-page-rail) {
   padding: 0;
-}
-
-:root[data-design="v1"] .community-page-back {
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--surface-raised-edge);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-ink-secondary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
 }
 
 /* A lesson inside the classroom: the existing lesson reader at the kit's measure. */
@@ -3227,12 +2842,6 @@
 /* The pod's name stays beside the arrow (the header spreads its children). */
 :root[data-design="v1"] .community-channel-header-back + * { margin-left: 0; margin-right: auto; }
 
-/* One door: Your app in community settings. */
-:root[data-design="v1"] .community-app-secret { display: flex; flex-direction: column; gap: 6px; padding: 12px; margin: 10px 0; border: 1px solid var(--border-subtle, rgba(127,127,127,.25)); border-radius: 8px; }
-:root[data-design="v1"] .community-app-secret code{ font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; word-break: break-all; user-select: all; }
-:root[data-design="v1"] .community-app-setup { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle, rgba(127,127,127,.18)); }
-:root[data-design="v1"] .community-app-setup code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; word-break: break-all; }
-
 /* One door: the community's own app, a link styled as a nav row. */
 :root[data-design="v1"] a.nav-item-app {
   text-decoration: none;
@@ -3259,23 +2868,7 @@
   flex-direction: column;
   gap: 16px;
 }
-:root[data-design="v1"] .settings-page-v1 .settings-section {
-  margin: 0;
-  padding: 20px;
-  border: 1px solid var(--surface-raised-edge);
-  border-radius: 10px;
-  background: var(--surface-raised, transparent);
-}
-:root[data-design="v1"] .settings-page-v1 .community-settings-pane-content > .settings-section,
 :root[data-design="v1"] .settings-page-v1 .community-settings-pane-content > * + * {
-  margin-top: 16px;
-}
-:root[data-design="v1"] .settings-page-v1 .settings-section-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-:root[data-design="v1"] .settings-page-v1 .community-general-settings-save {
   margin-top: 16px;
 }
 /* The Settings sidebar: the way back sits apart from the sections. */
@@ -3292,13 +2885,6 @@
 :root[data-design="v1"] .settings-page-v1-personal {
   padding: 28px 24px 56px;
   box-sizing: border-box;
-}
-:root[data-design="v1"] .settings-page-v1-personal > .settings-section + .settings-section {
-  margin-top: 16px;
-}
-/* The page title names the section; the card's own repeat of it goes. */
-:root[data-design="v1"] .settings-page-v1-personal > .settings-section:first-of-type > .settings-section-title:first-child {
-  display: none;
 }
 
 /* One Settings page, rows (after Linear's settings): groups with a small label,
@@ -3632,8 +3218,7 @@
    A long word or link in a message wraps rather than widening its column,
    and media never grows past the thread's width. */
 :root[data-design="v1"] .community-dm-kit-thread,
-:root[data-design="v1"] .community-interaction-main,
-:root[data-design="v1"] .community-dm-panel-message-bubble {
+:root[data-design="v1"] .community-interaction-main {
   overflow-wrap: anywhere;
   min-width: 0;
 }
@@ -3712,7 +3297,6 @@
   /* Inbox: the list takes the page; an open conversation replaces it. */
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel { padding-right: var(--inbox-gutter); }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit { padding-right: 0; }
-  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-header { right: 0; }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search { right: var(--inbox-gutter); }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-empty-column { display: none; }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel { display: none; }
@@ -4451,8 +4035,6 @@
 :root[data-design="v1"] .kit-lesson .resource-viewer-prose :where(p, ul, ol, blockquote, h1, h2, h3, h4, .md-callout) {
   max-width: 680px;
 }
-/* A course's tools, in the header. */
-:root[data-design="v1"] .community-page-header-actions .kit-header-tools { display: contents; }
 
 /* The Knowledge shelf with nothing in its right column (a member, before
    the guide has learned anything) takes the whole room, not the reading
@@ -4559,27 +4141,6 @@
 }
 :root[data-design="v1"] .community-mention-trigger:hover .community-mention-chip.is-self {
   background: color-mix(in srgb, var(--v1-accent) 24%, transparent);
-}
-
-/* Direct messages: yours are tinted with the accent, theirs stay neutral. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message.is-own:not(.is-media-only) .community-dm-panel-message-bubble:not(:has(> .community-dm-media-grid:only-child)) {
-  background: color-mix(in srgb, var(--v1-accent) 26%, #141516);
-  color: var(--text-ink-primary);
-}
-:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own:not(.is-media-only) .community-dm-panel-message-bubble:not(:has(> .community-dm-media-grid:only-child)) {
-  background: color-mix(in srgb, var(--v1-accent) 14%, #ffffff);
-  color: var(--text-ink-primary);
-}
-
-/* The reply box: a quiet accent border on focus, no halo, in both modes. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
-  border-color: color-mix(in srgb, var(--v1-accent) 60%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
-  --conversation-primary-action-surface: var(--v1-accent);
-  --conversation-primary-action-hover-surface: var(--v1-accent);
-  box-shadow: none;
 }
 
 /* Reactions in the feed: everyone's are a quiet outline; yours take the

@@ -6,7 +6,6 @@
    from the app and community theme tokens. */
 
 .lesson-editor,
-.lesson-editor-save-state,
 .lesson-editor-menu {
   /* The app's danger red. */
   --lesson-editor-danger: var(--danger-text);
@@ -867,16 +866,6 @@ select.lesson-editor-field {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
-.lesson-editor-save-state {
-  color: var(--text-muted);
-  font-size: var(--pn-type-label, 12px);
-  white-space: nowrap;
-}
-
-.lesson-editor-save-state.is-blocked {
-  color: var(--lesson-editor-danger);
-}
-
 /* Narrow screens: no hover handle, and the block menu opens inline. */
 @media (max-width: 900px), (hover: none) {
   .lesson-editor-handle {
@@ -1014,108 +1003,11 @@ select.lesson-editor-field {
   color: var(--accent-primary, var(--accent));
 }
 
-/* "• Saved": the autosave state beside the editing actions. */
-.lesson-editor-save-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-secondary, var(--text-muted));
-  font-size: var(--pn-type-label, 12px);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.lesson-editor-save-pill::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--accent-success, var(--accent));
-}
-
-.lesson-editor-save-pill.is-pending::before {
-  background: color-mix(in srgb, var(--text-muted) 70%, transparent);
-}
-
-.lesson-editor-save-pill.is-blocked {
-  color: var(--lesson-editor-danger);
-}
-
-.lesson-editor-save-pill.is-blocked::before {
-  background: var(--lesson-editor-danger);
-}
-
-.lesson-editor-header-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border-default);
-  border-radius: calc(8px * var(--pn-radius-scale, 1));
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--pn-type-small, 13px);
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.lesson-editor-header-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.lesson-editor-header-button:hover:not(:disabled) {
-  background: var(--hover-overlay, color-mix(in srgb, var(--text-primary) 7%, transparent));
-}
-
-.lesson-editor-header-button.is-primary {
-  border-color: transparent;
-  background: var(--bg-button, var(--accent-primary, var(--accent)));
-  color: var(--bg-button-text, #fff);
-}
-
-.lesson-editor-header-button.is-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-button, var(--accent-primary, var(--accent))) 88%, #000);
-}
-
-.lesson-editor-header-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.lesson-editor-preview-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 18px;
-  padding: 10px 14px;
-  border-radius: calc(8px * var(--pn-radius-scale, 1));
-  background: color-mix(in srgb, var(--accent-primary, var(--accent)) 9%, transparent);
-  color: var(--text-secondary, var(--text-primary));
-  font-size: var(--pn-type-small, 13px);
-}
-
-.lesson-editor-preview-note svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-
 @media (max-width: 640px) {
   .lesson-editor-toolbar {
     top: 4px;
     justify-content: flex-start;
     padding: 0 var(--web-topbar-right-action-safe-inset, 66px) 0 0;
-  }
-
-  .lesson-editor-header-button .lesson-editor-header-label {
-    display: none;
   }
 
   /* While editing on a phone, the actions get their own line under the title. */
