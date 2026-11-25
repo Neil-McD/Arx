@@ -456,10 +456,11 @@ function dayFor(iso: string | null): string | null {
   return iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 }
 
-// The kit's avatar tones (a1 to a6), so faces match the rest of the app.
-const TONES = ["#5B6CF0", "#E0788C", "#3DAE8C", "#C58B3A", "#7A6FF0", "#3D8FD6"];
+// Faces everywhere look like the channel's: the kit's six muted tones (a1 to
+// a6; the gradient is laid over in the page styles) and one initial.
+const TONES = ["#39414F", "#4A4038", "#2F4446", "#463A4D", "#3E4636", "#4B3B3E"];
 const colour = (id: string) => TONES[Number(id.replace(/\D/g, "") || 0) % TONES.length];
-const initials = (name: string) => name.split(" ").map((part) => part[0]).join("").slice(0, 2);
+const initials = (name: string) => name.trim().charAt(0).toUpperCase();
 
 // ---------- pods ----------
 
