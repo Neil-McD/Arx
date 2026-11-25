@@ -286,4 +286,225 @@ describe("Agent pricing & prepaid usage boost ledger foundation (Step 1)", () =>
       ),
     ).rejects.toThrow(/founder_usage_cycle_ledger_invalid/);
   });
+
+  test("Step 2 checkout prep, webhook-authoritative boost grant, idempotent replay, alert re-arm, and safe refund/dispute clawback", async () => {
+    const t = convexTest(schema, modules);
+
+    const fx = await t.run(async (ctx: any) => {
+      const ownerId = await ctx.db.insert("users", {
+        authSubject: "owner-boost-2",
+        displayName: "Neil",
+        email: "neil2@example.com",
+        emailVerifiedAt: NOW - 60 * DAY_MS,
+        createdAt: NOW - 60 * DAY_MS,
+        updatedAt: NOW - 60 * DAY_MS,
+      });
+      const communityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "boost-stripe-club",
+        name: "Boost Stripe Club",
+        visibility: "published",
+        inferenceFundingPolicy: "managed_required",
+        entryPolicy: "open",
+        activeMemberCount: 5,
+        createdAt: NOW - 60 * DAY_MS,
+        updatedAt: NOW - 60 * DAY_MS,
+      });
+      const subId = await ctx.db.insert("founderSubscriptions", {
+        ownerUserId: ownerId,
+        communityId,
+        provider: "stripe",
+        providerCustomerId: "cus_boost_2",
+        providerSubscriptionId: "sub_boost_2",
+        providerPriceId: "price_boost_2",
+        status: "active",
+        currentPeriodStartAt: NOW - 10 * DAY_MS,
+        currentPeriodEndAt: NOW + 20 * DAY_MS,
+        cancelAtPeriodEnd: false,
+        lastProviderEventCreatedAt: NOW - 10 * DAY_MS,
+        // Renewed subscription (40d old) -> past first cycle!
+        createdAt: NOW - 40 * DAY_MS,
+        updatedAt: NOW - 10 * DAY_MS,
+      });
+      // Cycle currently at 95% ($19.00 / $20.00) with 80% alert already sent.
+      const cycleId = await ctx.db.insert("founderUsageCycles", {
+        founderSubscriptionId: subId,
+        communityId,
+        cycleKey: "sub_boost_2:c2",
+        cycleStartAt: NOW - 10 * DAY_MS,
+        cycleEndAt: NOW + 20 * DAY_MS,
+        includedCostMicros: 20_000_000,
+        reservedCostMicros: 0,
+        settledCostMicros: 19_000_000,
+        pricingVersion: "founder_plan_luna_v1",
+        inputCostMicrosPerMillionTokens: 100_000,
+        outputCostMicrosPerMillionTokens: 500_000,
+        maxRunReservationCostMicros: 1_000_000,
+        status: "open",
+        createdAt: NOW - 10 * DAY_MS,
+        updatedAt: NOW - HOUR_MS,
+      });
+      const settingsId = await ctx.db.insert("communityMemberCoachSettings", {
+        communityId,
+        enabled: true,
+        autoReasons: [],
+        allowanceAlertCycleKey: "sub_boost_2:c2",
+        allowanceAlertNotifiedPercent: 80,
+        usageBoostCapCents: 0,
+        createdAt: NOW - 10 * DAY_MS,
+        updatedAt: NOW - 10 * DAY_MS,
+      });
+      return { ownerId, communityId, subId, cycleId, settingsId };
+    });
+
+    // 1. Default cap=0 blocks checkout preparation (fail closed).
+    await expect(
+      t.mutation(internal.founderUsageBoosts.prepareFounderUsageBoostCheckoutInternal, {
+        receiptKey: "boost_blocked_0",
+        ownerUserId: fx.ownerId,
+        communityId: fx.communityId,
+        expiresAt: NOW + 2 * HOUR_MS,
+        nowMs: NOW,
+      }),
+    ).rejects.toThrow(/usage_boost_disabled/);
+
+    // 2. Owner enables $60/mo cap (2 boosts) -> Settings shows can_buy_usage_boost: true, remaining: 2.
+    const asOwner = t.withIdentity({ subject: "owner-boost-2" });
+    const afterCap = await asOwner.mutation(api.communityMemberCoach.setMemberCoachSettings, {
+      communityId: fx.communityId,
+      enabled: true,
+      autoReasons: [],
+      usageBoostCapCents: 6_000,
+    });
+    expect(afterCap.impact).toMatchObject({
+      can_buy_usage_boost: true,
+      usage_boost_remaining_this_cycle: 2,
+      usage_boost_block_reason: null,
+    });
+
+    // 3. Prepare checkout creates pending receipt; second concurrent prepare REUSES it (prevents cap bypass).
+    const prep1: any = await t.mutation(
+      internal.founderUsageBoosts.prepareFounderUsageBoostCheckoutInternal,
+      {
+        receiptKey: "boost_key_1",
+        ownerUserId: fx.ownerId,
+        communityId: fx.communityId,
+        expiresAt: NOW + 2 * HOUR_MS,
+        nowMs: NOW,
+      },
+    );
+    expect(prep1).toMatchObject({ receiptKey: "boost_key_1", reused: false });
+
+    const prep2: any = await t.mutation(
+      internal.founderUsageBoosts.prepareFounderUsageBoostCheckoutInternal,
+      {
+        receiptKey: "boost_key_2",
+        ownerUserId: fx.ownerId,
+        communityId: fx.communityId,
+        expiresAt: NOW + 2 * HOUR_MS,
+        nowMs: NOW + 1_000,
+      },
+    );
+    expect(prep2).toMatchObject({ receiptKey: "boost_key_1", reused: true });
+
+    await t.mutation(internal.founderUsageBoosts.attachFounderUsageBoostStripeSessionInternal, {
+      receiptKey: "boost_key_1",
+      providerCheckoutSessionId: "cs_boost_1",
+      providerCustomerId: "cus_boost_2",
+      nowMs: NOW + 2_000,
+    });
+
+    // 4. Amount mismatch is ignored (fail closed).
+    const wrongAmount: any = await t.mutation(
+      internal.founderUsageBoosts.grantFounderUsageBoostFromStripeInternal,
+      {
+        receiptKey: "boost_key_1",
+        providerCheckoutSessionId: "cs_boost_1",
+        providerCustomerId: "cus_boost_2",
+        providerPaymentIntentId: "pi_boost_1",
+        providerChargeId: null,
+        amountTotalCents: 1_000,
+        currency: "usd",
+        providerEventCreatedAt: NOW + 3_000,
+        nowMs: NOW + 3_000,
+      },
+    );
+    expect(wrongAmount).toMatchObject({ ignored: true, reason: "boost_amount_or_currency_mismatch" });
+
+    // 5. Verified webhook grant adds +$20 ($40 total), re-arms alerts (<80% at $19/$40 = 48%), and replays idempotently.
+    const granted: any = await t.mutation(
+      internal.founderUsageBoosts.grantFounderUsageBoostFromStripeInternal,
+      {
+        receiptKey: "boost_key_1",
+        providerCheckoutSessionId: "cs_boost_1",
+        providerCustomerId: "cus_boost_2",
+        providerPaymentIntentId: "pi_boost_1",
+        providerChargeId: "ch_boost_1",
+        amountTotalCents: 3_000,
+        currency: "usd",
+        providerEventCreatedAt: NOW + 4_000,
+        nowMs: NOW + 4_000,
+      },
+    );
+    expect(granted).toMatchObject({
+      ok: true,
+      ignored: false,
+      effectiveAllowanceMicros: 40_000_000,
+    });
+
+    const replay: any = await t.mutation(
+      internal.founderUsageBoosts.grantFounderUsageBoostFromStripeInternal,
+      {
+        receiptKey: "boost_key_1",
+        providerCheckoutSessionId: "cs_boost_1",
+        providerCustomerId: "cus_boost_2",
+        providerPaymentIntentId: "pi_boost_1",
+        providerChargeId: "ch_boost_1",
+        amountTotalCents: 3_000,
+        currency: "usd",
+        providerEventCreatedAt: NOW + 5_000,
+        nowMs: NOW + 5_000,
+      },
+    );
+    expect(replay).toMatchObject({ ignored: true, reason: "boost_receipt_already_processed" });
+
+    const [cycleAfterGrant, settingsAfterGrant] = await t.run(async (ctx: any) =>
+      Promise.all([ctx.db.get(fx.cycleId), ctx.db.get(fx.settingsId)]),
+    );
+    expect(cycleAfterGrant).toMatchObject({
+      paidBoostCostMicros: 20_000_000,
+      paidBoostCount: 1,
+    });
+    expect(settingsAfterGrant?.allowanceAlertNotifiedPercent).toBe(0);
+
+    // 6. Spend climbs to $25 (into the boost), then Stripe refunds pi_boost_1:
+    //    clawback clamps remaining headroom to $0 (paidBoostCostMicros = $5) so ledger invariants stay valid!
+    await t.run(async (ctx: any) => {
+      await ctx.db.patch(fx.cycleId, { settledCostMicros: 25_000_000 });
+    });
+    const revoked: any = await t.mutation(
+      internal.founderUsageBoosts.revokeFounderUsageBoostFromStripeInternal,
+      {
+        providerPaymentIntentId: "pi_boost_1",
+        receiptKey: null,
+        outcome: "refunded",
+        revokedReason: "boost_refunded",
+        providerEventCreatedAt: NOW + 10_000,
+        nowMs: NOW + 10_000,
+      },
+    );
+    expect(revoked).toMatchObject({ ok: true, ignored: false, outcome: "refunded" });
+
+    // Confirm ledger invariant stays valid AND zero extra headroom remains (next reserve returns exhausted).
+    const afterRefundReserve = await t.run(async (ctx: any) =>
+      await reserveFounderUsage({
+        ctx,
+        founderSubscriptionId: fx.subId,
+        communityId: fx.communityId,
+        nowMs: NOW + 11_000,
+        reservationCostMicros: 1_000_000,
+      }),
+    );
+    expect(afterRefundReserve).toEqual({ ok: false, code: "founder_usage_exhausted" });
+  });
 });

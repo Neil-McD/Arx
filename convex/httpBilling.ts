@@ -987,6 +987,43 @@ export function registerRuntimeBillingRoutes(
           event.type === "checkout.session.async_payment_succeeded"
         ) {
           const session = event.data.object as Stripe.Checkout.Session;
+          const boostReceiptKey = !providerAccountId
+            && readStripeMetadataString(session.metadata, "checkout_mode") === "founder_usage_boost"
+            ? readStripeMetadataString(session.metadata, "boost_receipt_key")
+            : null;
+          if (boostReceiptKey) {
+            if (!readStripePaymentReady(session.payment_status)) {
+              return processedResponse({
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "founder_usage_boost_payment_pending",
+              }, "ignored");
+            }
+            const boostResult = await (ctx as any).runMutation(
+              (internal as any).founderUsageBoosts.grantFounderUsageBoostFromStripeInternal,
+              {
+                receiptKey: boostReceiptKey,
+                providerCheckoutSessionId: session.id,
+                providerCustomerId:
+                  typeof session.customer === "string" ? session.customer : null,
+                providerPaymentIntentId:
+                  typeof session.payment_intent === "string" ? session.payment_intent : null,
+                providerChargeId: null,
+                amountTotalCents: Number(session.amount_total ?? 0),
+                currency: String(session.currency ?? ""),
+                providerEventCreatedAt: eventCreatedAt,
+                nowMs: Date.now(),
+              },
+            );
+            return processedResponse({
+              ok: true,
+              received: !boostResult?.ignored,
+              ignored: Boolean(boostResult?.ignored),
+              event: event.type,
+              result: boostResult,
+            }, boostResult?.ignored ? "ignored" : "succeeded");
+          }
           const localSessionId =
             readStripeLocalSessionIdFromCheckoutSession(session);
           if (localSessionId) {
@@ -1323,6 +1360,28 @@ export function registerRuntimeBillingRoutes(
             refundEvidence.sourceProviderChargeId,
             providerAccountId,
           );
+          if (!providerAccountId && charge) {
+            const boostRevoke = await (ctx as any).runMutation(
+              (internal as any).founderUsageBoosts.revokeFounderUsageBoostFromStripeInternal,
+              {
+                providerPaymentIntentId:
+                  typeof charge.payment_intent === "string" ? charge.payment_intent : null,
+                receiptKey: readStripeMetadataString((charge as any)?.metadata, "boost_receipt_key"),
+                outcome: "refunded",
+                revokedReason: "boost_refunded",
+                providerEventCreatedAt: eventCreatedAt,
+                nowMs: Date.now(),
+              },
+            );
+            if (!boostRevoke?.ignored) {
+              return processedResponse({
+                ok: true,
+                received: true,
+                event: event.type,
+                boostRevoke,
+              });
+            }
+          }
           const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
             refund,
             charge,
@@ -1344,6 +1403,28 @@ export function registerRuntimeBillingRoutes(
 
         if (event.type === "charge.refunded") {
           const charge = event.data.object as Stripe.Charge;
+          if (!providerAccountId) {
+            const boostRevoke = await (ctx as any).runMutation(
+              (internal as any).founderUsageBoosts.revokeFounderUsageBoostFromStripeInternal,
+              {
+                providerPaymentIntentId:
+                  typeof charge.payment_intent === "string" ? charge.payment_intent : null,
+                receiptKey: readStripeMetadataString((charge as any)?.metadata, "boost_receipt_key"),
+                outcome: "refunded",
+                revokedReason: "boost_charge_refunded",
+                providerEventCreatedAt: eventCreatedAt,
+                nowMs: Date.now(),
+              },
+            );
+            if (!boostRevoke?.ignored) {
+              return processedResponse({
+                ok: true,
+                received: true,
+                event: event.type,
+                boostRevoke,
+              });
+            }
+          }
           const chargeEvidence = readStripeChargeEvidence(charge);
           const refunds = Array.isArray((charge as any)?.refunds?.data)
             ? (charge as any).refunds.data as Stripe.Refund[]
@@ -1402,6 +1483,28 @@ export function registerRuntimeBillingRoutes(
             providerAccountId,
           );
           if (event.type === "charge.dispute.created") {
+            if (!providerAccountId && charge) {
+              const boostRevoke = await (ctx as any).runMutation(
+                (internal as any).founderUsageBoosts.revokeFounderUsageBoostFromStripeInternal,
+                {
+                  providerPaymentIntentId:
+                    typeof charge.payment_intent === "string" ? charge.payment_intent : null,
+                  receiptKey: readStripeMetadataString((charge as any)?.metadata, "boost_receipt_key"),
+                  outcome: "disputed",
+                  revokedReason: "boost_dispute_opened",
+                  providerEventCreatedAt: eventCreatedAt,
+                  nowMs: Date.now(),
+                },
+              );
+              if (!boostRevoke?.ignored) {
+                return processedResponse({
+                  ok: true,
+                  received: true,
+                  event: event.type,
+                  boostRevoke,
+                });
+              }
+            }
             const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
               charge,
               outcome: "opened",

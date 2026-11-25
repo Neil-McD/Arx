@@ -59,7 +59,9 @@ bad-debt risk or modifying existing $79 Stripe subscriptions:
   - Update `founderPlanCore.ts` ledger reservation/settlement assertions and
     allowance guardrails/Settings projection to honor `included + paidBoost`
     and display the founder's monthly safety cap cleanly (no Stripe charges yet).
-- **Step 2 (Stripe Checkout / Settlement & Webhook Granting — next slice):**
-  - Add idempotent `founderUsageBoostReceipts` table, Stripe one-time checkout
-    for a $30 boost tied strictly to `(communityId, founderSubscriptionId, cycleKey)`,
-    webhook verification granting `paidBoostCostMicros`, and refund revocation.
+- **Step 2 (Stripe Checkout / Settlement & Webhook Granting — implemented):**
+  - Idempotent `founderUsageBoostReceipts` table, Stripe one-time Checkout (`mode: "payment"`)
+    for a $30 boost tied strictly to `(communityId, founderSubscriptionId, usageCycleId, cycleKey)`,
+    pending-session reuse to prevent concurrent cap bypass, platform webhook verification
+    granting `paidBoostCostMicros` (with cycle-rollover protection and alert re-arming),
+    and safe refund/dispute clawback + subscription risk hold on disputes.

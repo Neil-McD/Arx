@@ -13,13 +13,14 @@ import {
 import {
   getCloudMemberCoachSettings,
   setCloudMemberCoachSettings,
+  startFounderUsageBoostCheckout,
 } from "../../../../shared/cloudCommunityMemberCoachGateway";
 import {
   FOUNDER_USAGE_BOOST_CAP_PRESETS_CENTS,
   FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS,
   FOUNDER_USAGE_BOOST_PRICE_CENTS,
 } from "../../../../shared/founderUsageBoosts";
-import { SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
+import { SettingsButton, SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
 export function CommunityMemberCoachSettingsSection(props: {
   communityId: string;
@@ -28,6 +29,7 @@ export function CommunityMemberCoachSettingsSection(props: {
 }) {
   const [settings, setSettings] = useState<MemberCoachSettingsView | null>(null);
   const [saving, setSaving] = useState(false);
+  const [buyingBoost, setBuyingBoost] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,6 +82,29 @@ export function CommunityMemberCoachSettingsSection(props: {
       setError("That didn't save. Try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBuyBoost = async () => {
+    if (buyingBoost || saving) return;
+    setBuyingBoost(true);
+    setError(null);
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) throw new Error("not_signed_in");
+      const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+      const result = await startFounderUsageBoostCheckout({
+        session,
+        communityId: props.communityId,
+        successUrl: returnUrl,
+        cancelUrl: returnUrl,
+      });
+      if (result?.checkout_url) {
+        window.location.assign(result.checkout_url);
+      }
+    } catch {
+      setError("Couldn't start boost checkout. Try again.");
+      setBuyingBoost(false);
     }
   };
 
@@ -217,6 +242,20 @@ export function CommunityMemberCoachSettingsSection(props: {
               );
             })}
           </SettingsSelect>
+        </SettingsRow>
+      ) : null}
+      {impact && usageBoostCapCents > 0 && impact.can_buy_usage_boost ? (
+        <SettingsRow
+          label="Add extra AI usage"
+          help={`Prepaid $30 boost adds +$20.00 AI allowance for this billing cycle (${impact.usage_boost_remaining_this_cycle ?? 0} remaining under your safety cap).`}
+        >
+          <SettingsButton
+            variant="primary"
+            disabled={buyingBoost || saving}
+            onClick={() => void handleBuyBoost()}
+          >
+            {buyingBoost ? "Opening checkout…" : "Add $30 boost (+$20 AI)"}
+          </SettingsButton>
         </SettingsRow>
       ) : null}
       <SettingsRow

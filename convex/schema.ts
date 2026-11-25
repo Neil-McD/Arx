@@ -238,6 +238,45 @@ export default defineSchema({
     .index("by_cycle_key", ["cycleKey"])
     .index("by_community_status", ["communityId", "status"]),
 
+  // Prepaid Community Usage Boost receipts (docs/specs/agent-pricing-and-overage-v1.md,
+  // Step 2): one row per $30 boost checkout, strictly bound to an active Stripe
+  // founder subscription and billing cycle. Granted only by verified Stripe webhooks.
+  founderUsageBoostReceipts: defineTable({
+    receiptKey: v.string(),
+    communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
+    ownerUserId: v.id("users"),
+    founderSubscriptionId: v.id("founderSubscriptions"),
+    usageCycleId: v.id("founderUsageCycles"),
+    cycleKey: v.string(),
+    priceCents: v.number(),
+    currency: v.string(),
+    grantedAllowanceMicros: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("granted"),
+      v.literal("expired"),
+      v.literal("refunded"),
+      v.literal("disputed"),
+    ),
+    providerCheckoutSessionId: v.optional(v.string()),
+    providerCustomerId: v.optional(v.string()),
+    providerPaymentIntentId: v.optional(v.string()),
+    providerChargeId: v.optional(v.string()),
+    providerEventCreatedAt: v.optional(v.number()),
+    revokedReason: v.optional(v.string()),
+    expiresAt: v.number(),
+    grantedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_receipt_key", ["receiptKey"])
+    .index("by_provider_checkout_session", ["providerCheckoutSessionId"])
+    .index("by_provider_payment_intent", ["providerPaymentIntentId"])
+    .index("by_cycle_status", ["usageCycleId", "status"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
   // Monthly (UTC) spend ledger for operator-funded communities. The operator
   // grant waives payment but keeps the same bounded allowance as Builder.
   operatorGrantUsageCycles: defineTable({
