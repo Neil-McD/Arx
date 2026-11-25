@@ -151,7 +151,7 @@ function HomeScreen(props: { state: PreviewState; dispatch: (action: PreviewActi
       <strong className="shot-hello big pv-line">Good morning.</strong>
       <p className="shot-text pv-line">
         Two people finished Start here.{" "}
-        <a href="#general" className="pv-link" onClick={(event) => { event.preventDefault(); track("brief_see_answer"); dispatch({ type: "open", screen: "general" }); }}>
+        <a href="/#how" className="pv-link" onClick={(event) => { event.preventDefault(); track("brief_see_answer"); dispatch({ type: "open", screen: "general" }); }}>
           Dev asked about pricing overnight
         </a>{" "}
         and got an answer. {state.joshCheckedIn ? "You're all caught up." : "One person needs you."}
