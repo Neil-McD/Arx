@@ -45,8 +45,11 @@ test("the brain scene is the preview's own community, and only claims what's tru
   // Same map as the preview at the top.
   expect(map.points.map((point) => point.id)).toEqual(buildClubBrain(now).points.map((point) => point.id));
   const html = renderToStaticMarkup(React.createElement(BrainScene)).replace(/&#x27;/g, "'");
-  expect(html).toContain("What your community knows");
-  expect(html).toContain("you can correct any of it");
+  // It starts with the community itself picked, the first of the tour's steps.
+  expect(html).toContain("Everything your community knows, in one place");
+  expect(html).toContain("1 of 7");
+  // The map is the panel's: no words on it.
+  expect(html).not.toMatch(/<text[^>]*>/);
   // The guide learns from posts; courses are where notes are filed.
   expect(html).not.toMatch(/learn(s|ed)? from (your )?courses/i);
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");

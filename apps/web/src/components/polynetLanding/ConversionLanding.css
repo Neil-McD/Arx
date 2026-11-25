@@ -419,24 +419,27 @@
 .pn-landing .gsc-typing i:nth-child(2) { animation-delay: .15s; } .pn-landing .gsc-typing i:nth-child(3) { animation-delay: .3s; }
 /* The community brain's scene (BrainScene.tsx): the app's own map straight on
    the page, running off the right and fading, with the card beside it. */
-.pn-landing .scene.live:has(.bsc) { height: 650px; }
+.pn-landing .scene.live:has(.bsc) { height: 560px; }
 .pn-landing .bsc { position: relative; height: 100%; }
-.pn-landing .bsc-map {
-  position: absolute; top: -40px; left: 24%; width: 1180px; height: 680px;
-  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 42% 50%, #000 55%, transparent 100%);
-  mask-image: radial-gradient(ellipse 62% 58% at 42% 50%, #000 55%, transparent 100%);
-}
-.pn-landing .bsc-map > [class*="app"] { height: 100%; background: transparent !important; }
-.pn-landing .bsc-map [class*="brainzoom"] { display: none; }
+/* The panel map, larger: clusters and glow, no words; the dots picked over it. */
+.pn-landing .bsc-map { position: absolute; top: 0; right: 2%; width: min(580px, 52%); aspect-ratio: 240 / 200; }
+.pn-landing .bsc-map > [class*="app"] { position: absolute; inset: 0; background: transparent !important; }
+.pn-landing .bsc-map > [class*="app"] svg, .pn-landing .bsc-hits { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pn-landing .bsc-hit { fill: transparent; cursor: pointer; outline: none; }
+.pn-landing .bsc-hit:hover, .pn-landing .bsc-hit:focus-visible { stroke: rgba(238, 240, 244, .45); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pn-landing .bsc-on { fill: none; stroke: #c4b5fd; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.pn-landing .bsc-next { fill: none; stroke: #a78bfa; stroke-width: 1.4; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; animation: pn-nextdot 1.8s ease-out infinite; pointer-events: none; }
+@keyframes pn-nextdot { 0% { opacity: .9; transform: scale(.8); } 100% { opacity: 0; transform: scale(2.2); } }
+.pn-landing .bsc-nav { display: flex; align-items: center; gap: 7px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pn-landing .bsc-nav > button:not(.bsc-nextbtn) { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: #3a3d44; cursor: pointer; }
+.pn-landing .bsc-nav > button.on { background: #a78bfa; box-shadow: 0 0 8px rgba(167, 139, 250, .7); }
+.pn-landing .bsc-nextbtn { margin-left: auto; padding: 0; border: 0; background: none; color: #c4b5fd; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+.pn-landing .bsc-nextbtn:hover { color: #fff; }
+.pn-landing .bsc-link { padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pn-landing .bsc-link:hover { color: #c4b5fd; }
+@media (prefers-reduced-motion: reduce) { .pn-landing .bsc-next { animation: none; opacity: .8; } }
 .pn-landing .bsc-card { position: absolute; z-index: 2; top: 28px; left: 0; width: min(480px, 100%); gap: 0; }
 .pn-landing .bsc-card .sc-eyebrow { margin-bottom: 6px; }
-.pn-landing .bsc-row { width: 100%; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 0; }
-.pn-landing .bsc-row:hover b { color: #fff; }
-.pn-landing .bsc-row:hover > i:not(.new) { background: #9aa0aa; }
-.pn-landing .sc-learned span { color: var(--quiet); font-size: 13.5px; }
-.pn-landing .bsc-foot { padding-top: 12px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 13px; }
-.pn-landing .bsc-back-link { align-self: flex-start; margin: 0 0 14px; padding: 0; border: 0; background: none; color: var(--quiet); font: inherit; font-size: 13px; cursor: pointer; }
-.pn-landing .bsc-back-link:hover { color: var(--text); }
 .pn-landing .bsc-title { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
 .pn-landing .bsc-text { margin: 8px 0 14px; color: var(--secondary); font-size: 14.5px; line-height: 1.55; }
 .pn-landing .bsc-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
@@ -487,7 +490,7 @@
   .pn-landing .scene.live:has(.bsc) { height: auto; }
   .pn-landing .bsc { display: flex; flex-direction: column; }
   .pn-landing .bsc-card { position: relative; top: auto; width: 100%; }
-  .pn-landing .bsc-map { position: relative; top: auto; left: auto; width: 640px; height: 420px; margin: -12px 0 0 -24%; }
+  .pn-landing .bsc-map { position: relative; top: auto; right: auto; width: 100%; margin: 0 0 8px; }
 }
 
 /* Inside a scene: a floating panel, and a table or map behind it. */
