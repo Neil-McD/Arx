@@ -1,25 +1,34 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Search, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Award, CheckCircle2, Plus, Search, SlidersHorizontal, Sparkles, Trash2, X } from "lucide-react";
 import {
+  BUILTIN_JOURNEY_CHECKPOINTS,
   DEFAULT_JOURNEY_STAGES,
   JOURNEY_CARD_STATUSES,
   JOURNEY_CARD_STATUS_LABELS,
   JOURNEY_CARD_STATUS_SORT_RANK,
+  MAX_CHECKPOINT_LABEL_CHARS,
   MAX_JOURNEY_STAGES,
+  MAX_STAGE_CHECKPOINTS,
   MAX_STAGE_GOAL_CHARS,
   MAX_STAGE_NAME_CHARS,
   MIN_JOURNEY_STAGES,
+  slugifyJourneyStageKey,
   type JourneyCardStatus,
+  type JourneyStageCheckpoint,
 } from "../../../../shared/communityMemberJourney";
 import type {
   CloudMemberJourneyBoard,
-  CloudMemberJourneyCard,
 } from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import { Btn, cx } from "./kit";
 import { Face } from "./KitMembersTable";
 import "./KitMembersBoard.css";
 
-type StageDraft = { key?: string; name: string; goal: string };
+type StageDraft = {
+  key?: string;
+  name: string;
+  goal: string;
+  checkpoints: JourneyStageCheckpoint[];
+};
 
 export function KitMembersBoard(props: {
   board: CloudMemberJourneyBoard | null;
@@ -39,6 +48,7 @@ export function KitMembersBoard(props: {
   const [statusFilter, setStatusFilter] = useState<JourneyCardStatus | "all">("all");
   const [editingStages, setEditingStages] = useState(false);
   const [stageDrafts, setStageDrafts] = useState<StageDraft[]>([]);
+  const [customMilestoneInputs, setCustomMilestoneInputs] = useState<Record<number, string>>({});
   const [savingStages, setSavingStages] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -52,7 +62,15 @@ export function KitMembersBoard(props: {
   const searchedCards = useMemo(() => {
     if (!searchLower) return allCards;
     return allCards.filter((card) =>
-      [card.name, card.handle, card.working_on, card.activity_summary, card.founder_instruction, card.plan_label]
+      [
+        card.name,
+        card.handle,
+        card.working_on,
+        card.activity_summary,
+        card.latest_outcome?.text,
+        card.founder_instruction,
+        card.plan_label,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -80,8 +98,6 @@ export function KitMembersBoard(props: {
     [searchedCards, statusFilter],
   );
 
-  // Activation rate: share of members who have reached stage 3+ (Active/Graduated)
-  // when there are 3+ stages, or stage 2+ when there are 2 stages.
   const activatedPercent = useMemo(() => {
     if (allCards.length === 0 || stages.length < 2) return 0;
     const activatedStageKeys = new Set(
@@ -91,16 +107,77 @@ export function KitMembersBoard(props: {
     return Math.round((count / allCards.length) * 100);
   }, [allCards, stages]);
 
+  const totalLoggedWins = useMemo(
+    () => allCards.reduce((sum, card) => sum + (card.outcomes?.length ?? 0), 0),
+    [allCards],
+  );
+
   const openStageEditor = () => {
     setStageDrafts(
       (stages.length ? stages : DEFAULT_JOURNEY_STAGES).map((stage) => ({
         key: stage.key,
         name: stage.name,
         goal: stage.goal,
+        checkpoints: (stage.checkpoints ?? []).map((cp) => ({ ...cp })),
       })),
     );
+    setCustomMilestoneInputs({});
     setStageError(null);
     setEditingStages(true);
+  };
+
+  const toggleBuiltinCheckpoint = (
+    stageIndex: number,
+    builtin: (typeof BUILTIN_JOURNEY_CHECKPOINTS)[number],
+  ) => {
+    setStageDrafts((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== stageIndex) return item;
+        const exists = item.checkpoints.some((cp) => cp.key === builtin.key);
+        if (exists) {
+          return {
+            ...item,
+            checkpoints: item.checkpoints.filter((cp) => cp.key !== builtin.key),
+          };
+        }
+        if (item.checkpoints.length >= MAX_STAGE_CHECKPOINTS) return item;
+        return {
+          ...item,
+          checkpoints: [
+            ...item.checkpoints,
+            { key: builtin.key, label: builtin.label, kind: builtin.kind },
+          ],
+        };
+      }),
+    );
+  };
+
+  const addCustomCheckpoint = (stageIndex: number) => {
+    const raw = (customMilestoneInputs[stageIndex] ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS);
+    if (!raw) return;
+    const key = slugifyJourneyStageKey(raw, stageIndex);
+    setStageDrafts((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== stageIndex) return item;
+        if (item.checkpoints.length >= MAX_STAGE_CHECKPOINTS) return item;
+        if (item.checkpoints.some((cp) => cp.key === key)) return item;
+        return {
+          ...item,
+          checkpoints: [...item.checkpoints, { key, label: raw, kind: "custom" }],
+        };
+      }),
+    );
+    setCustomMilestoneInputs((prev) => ({ ...prev, [stageIndex]: "" }));
+  };
+
+  const removeCheckpoint = (stageIndex: number, checkpointKey: string) => {
+    setStageDrafts((prev) =>
+      prev.map((item, idx) =>
+        idx === stageIndex
+          ? { ...item, checkpoints: item.checkpoints.filter((cp) => cp.key !== checkpointKey) }
+          : item,
+      ),
+    );
   };
 
   const handleSaveStages = async () => {
@@ -117,6 +194,7 @@ export function KitMembersBoard(props: {
           ...(entry.key ? { key: entry.key } : {}),
           name: entry.name.trim(),
           goal: entry.goal.trim(),
+          checkpoints: entry.checkpoints,
         })),
       );
       setEditingStages(false);
@@ -200,6 +278,7 @@ export function KitMembersBoard(props: {
         <div className="members-board-toolbar-right">
           <span className="members-board-pulse" aria-label="Board summary">
             <strong>{activatedPercent}%</strong> activated
+            {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
           </span>
           <button
             type="button"
@@ -216,9 +295,9 @@ export function KitMembersBoard(props: {
         <div className="members-board-stage-editor" aria-label="Edit journey stages">
           <div className="members-board-stage-editor-head">
             <div>
-              <strong style={{ fontSize: 13.5 }}>Journey stages</strong>
+              <strong style={{ fontSize: 13.5 }}>Journey stages & activation checkpoints</strong>
               <p className={cx("sub")} style={{ margin: "2px 0 0", fontSize: 12 }}>
-                Write each stage's goal in plain words. Your Guide uses these goals during check-ins and chats.
+                Set each stage's goal and optional checkpoints. Built-in signals check off automatically; custom milestones can be checked off on any member card.
               </p>
             </div>
             <button
@@ -230,6 +309,7 @@ export function KitMembersBoard(props: {
                     key: stage.key,
                     name: stage.name,
                     goal: stage.goal,
+                    checkpoints: stage.checkpoints.map((cp) => ({ ...cp })),
                   })),
                 )
               }
@@ -238,65 +318,127 @@ export function KitMembersBoard(props: {
             </button>
           </div>
 
-          {stageDrafts.map((stage, index) => (
-            <div key={stage.key ?? `new-${index}`} className="members-board-stage-editor-row">
-              <input
-                value={stage.name}
-                maxLength={MAX_STAGE_NAME_CHARS}
-                placeholder="Stage name"
-                aria-label={`Stage ${index + 1} name`}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setStageDrafts((prev) =>
-                    prev.map((item, idx) => (idx === index ? { ...item, name: value } : item)),
-                  );
-                }}
-              />
-              <input
-                value={stage.goal}
-                maxLength={MAX_STAGE_GOAL_CHARS}
-                placeholder="Goal for this stage (optional)"
-                aria-label={`Stage ${index + 1} goal`}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setStageDrafts((prev) =>
-                    prev.map((item, idx) => (idx === index ? { ...item, goal: value } : item)),
-                  );
-                }}
-              />
-              <div className="members-board-stage-editor-actions">
-                <button
-                  type="button"
-                  className={cx("btn sm")}
-                  disabled={index === 0}
-                  aria-label={`Move ${stage.name || `stage ${index + 1}`} earlier`}
-                  onClick={() => moveDraft(index, -1)}
-                >
-                  <ArrowUp size={13} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={cx("btn sm")}
-                  disabled={index === stageDrafts.length - 1}
-                  aria-label={`Move ${stage.name || `stage ${index + 1}`} later`}
-                  onClick={() => moveDraft(index, 1)}
-                >
-                  <ArrowDown size={13} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={cx("btn sm")}
-                  disabled={stageDrafts.length <= MIN_JOURNEY_STAGES}
-                  aria-label={`Remove ${stage.name || `stage ${index + 1}`}`}
-                  onClick={() =>
-                    setStageDrafts((prev) => prev.filter((_, idx) => idx !== index))
-                  }
-                >
-                  <Trash2 size={13} aria-hidden="true" />
-                </button>
+          {stageDrafts.map((stage, index) => {
+            const customCheckpoints = stage.checkpoints.filter((cp) => cp.kind === "custom");
+            return (
+              <div key={stage.key ?? `new-${index}`} className="members-board-stage-editor-block">
+                <div className="members-board-stage-editor-row">
+                  <input
+                    value={stage.name}
+                    maxLength={MAX_STAGE_NAME_CHARS}
+                    placeholder="Stage name"
+                    aria-label={`Stage ${index + 1} name`}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setStageDrafts((prev) =>
+                        prev.map((item, idx) => (idx === index ? { ...item, name: value } : item)),
+                      );
+                    }}
+                  />
+                  <input
+                    value={stage.goal}
+                    maxLength={MAX_STAGE_GOAL_CHARS}
+                    placeholder="Goal for this stage (optional)"
+                    aria-label={`Stage ${index + 1} goal`}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setStageDrafts((prev) =>
+                        prev.map((item, idx) => (idx === index ? { ...item, goal: value } : item)),
+                      );
+                    }}
+                  />
+                  <div className="members-board-stage-editor-actions">
+                    <button
+                      type="button"
+                      className={cx("btn sm")}
+                      disabled={index === 0}
+                      aria-label={`Move ${stage.name || `stage ${index + 1}`} earlier`}
+                      onClick={() => moveDraft(index, -1)}
+                    >
+                      <ArrowUp size={13} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={cx("btn sm")}
+                      disabled={index === stageDrafts.length - 1}
+                      aria-label={`Move ${stage.name || `stage ${index + 1}`} later`}
+                      onClick={() => moveDraft(index, 1)}
+                    >
+                      <ArrowDown size={13} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={cx("btn sm")}
+                      disabled={stageDrafts.length <= MIN_JOURNEY_STAGES}
+                      aria-label={`Remove ${stage.name || `stage ${index + 1}`}`}
+                      onClick={() =>
+                        setStageDrafts((prev) => prev.filter((_, idx) => idx !== index))
+                      }
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="members-board-stage-checkpoints">
+                  <span className="members-board-stage-cp-label">Checkpoints:</span>
+                  {BUILTIN_JOURNEY_CHECKPOINTS.map((builtin) => {
+                    const active = stage.checkpoints.some((cp) => cp.key === builtin.key);
+                    return (
+                      <button
+                        key={builtin.key}
+                        type="button"
+                        className={`members-board-cp-pill${active ? " is-on" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => toggleBuiltinCheckpoint(index, builtin)}
+                      >
+                        {active ? "✓ " : "+ "}
+                        {builtin.label}
+                      </button>
+                    );
+                  })}
+                  {customCheckpoints.map((cp) => (
+                    <span key={cp.key} className="members-board-cp-pill is-on is-custom">
+                      {cp.label}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${cp.label}`}
+                        onClick={() => removeCheckpoint(index, cp.key)}
+                      >
+                        <X size={11} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
+                  {stage.checkpoints.length < MAX_STAGE_CHECKPOINTS ? (
+                    <span className="members-board-cp-add">
+                      <input
+                        value={customMilestoneInputs[index] ?? ""}
+                        maxLength={MAX_CHECKPOINT_LABEL_CHARS}
+                        placeholder="Add custom milestone…"
+                        aria-label={`Add custom milestone for ${stage.name || `stage ${index + 1}`}`}
+                        onChange={(event) =>
+                          setCustomMilestoneInputs((prev) => ({ ...prev, [index]: event.target.value }))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addCustomCheckpoint(index);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="members-board-cp-pill"
+                        onClick={() => addCustomCheckpoint(index)}
+                      >
+                        Add
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {stageError ? (
             <p className={cx("bad")} role="alert" style={{ margin: 0, fontSize: 12.5 }}>
@@ -310,7 +452,7 @@ export function KitMembersBoard(props: {
               className={cx("btn sm")}
               disabled={stageDrafts.length >= MAX_JOURNEY_STAGES}
               onClick={() =>
-                setStageDrafts((prev) => [...prev, { name: "", goal: "" }])
+                setStageDrafts((prev) => [...prev, { name: "", goal: "", checkpoints: [] }])
               }
             >
               <Plus size={13} aria-hidden="true" />Add stage
@@ -371,6 +513,8 @@ export function KitMembersBoard(props: {
                   stageCards.map((card) => {
                     const selected = props.openKey === card.membership_id;
                     const dragging = draggingId === card.membership_id || movingId === card.membership_id;
+                    const allCheckpointsDone =
+                      card.checkpoints_total > 0 && card.checkpoints_done >= card.checkpoints_total;
                     return (
                       <button
                         key={card.membership_id}
@@ -414,6 +558,23 @@ export function KitMembersBoard(props: {
                             {JOURNEY_CARD_STATUS_LABELS[card.status]}
                           </span>
                         </div>
+
+                        {card.checkpoints_total > 0 ? (
+                          <div className={`members-board-card-progress${allCheckpointsDone ? " is-ready" : ""}`}>
+                            <CheckCircle2 size={11} aria-hidden="true" />
+                            <span>
+                              {card.checkpoints_done}/{card.checkpoints_total}{" "}
+                              {allCheckpointsDone ? "ready to advance" : card.checkpoints_total === 1 ? "checkpoint" : "checkpoints"}
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {card.latest_outcome ? (
+                          <div className="members-board-card-win">
+                            <Award size={11} aria-hidden="true" />
+                            <span>{card.latest_outcome.text}</span>
+                          </div>
+                        ) : null}
 
                         {card.working_on ? (
                           <p className="members-board-card-note">{card.working_on}</p>

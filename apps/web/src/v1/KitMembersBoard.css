@@ -146,6 +146,194 @@
   padding-top: 4px;
 }
 
+.members-board-stage-editor-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 50%, transparent);
+}
+
+.members-board-stage-checkpoints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.members-board-stage-cp-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.members-board-cp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.members-board-cp-pill.is-on {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-primary, #8b5cf6) 55%, var(--border-default));
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.members-board-cp-pill.is-custom button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.members-board-cp-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.members-board-cp-add input {
+  width: 150px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-family: inherit;
+}
+
+.members-board-card-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.members-board-card-progress.is-ready {
+  color: #86efac;
+}
+
+.members-board-card-win {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #fde68a;
+}
+
+.members-board-card-win span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.members-journey-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.members-journey-check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 70%, transparent);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.members-journey-check-item:disabled {
+  cursor: default;
+}
+
+.members-journey-check-item.is-done {
+  color: var(--text-primary);
+  border-color: rgba(34, 197, 94, 0.25);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.members-journey-check-item em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.members-journey-outcomes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.members-journey-outcome-form {
+  display: flex;
+  gap: 6px;
+}
+
+.members-journey-outcome-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.members-journey-outcome-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.members-journey-outcome-row span {
+  flex: 1;
+  min-width: 0;
+}
+
+.members-journey-outcome-row em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.members-journey-outcome-row button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 13px;
+}
+
 .members-board-columns {
   flex: 1;
   min-height: 0;
