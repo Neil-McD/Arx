@@ -9,9 +9,9 @@
   --line-default: #232427;
   --line-strong: #34373f;
   --text: #f7f8f8;
-  --secondary: #c9ccd3;
-  --muted: #9aa0aa;
-  --quiet: #8a8f98;
+  --secondary: #d4d7dd;
+  --muted: #a9aeb8;
+  --quiet: #8f949e;
   --action: #f7f8f8;
   --action-text: #08090a;
   --ai: #c4b5fd;
@@ -183,7 +183,7 @@
 .pn-landing .hero-text > :nth-child(4) { animation-delay: .45s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pn-landing :is(.orbit-arc, .orbit-node, .orbit-hub, .orbit-star),
+  .pn-landing :is(.orbit-arc, .orbit-node, .orbit-ring, .orbit-hub, .orbit-star),
   .pn-landing .hero-text > * { animation: none; opacity: 1; stroke-dashoffset: 0; }
 }
 
@@ -242,12 +242,14 @@
 
 /* The three things the AI does, each tagged with the plan it comes with. */
 .pn-landing .features { display: flex; flex-direction: column; gap: 72px; }
+.pn-landing .orbit-node { stroke: #05060a; stroke-width: 2.5; }
+.pn-landing .orbit-ring { fill: none; stroke: rgba(196, 181, 253, .45); stroke-width: 1.2; opacity: 0; animation: pn-in .6s ease-out forwards; }
 .pn-landing .feature { display: flex; align-items: center; gap: 32px 64px; }
 .pn-landing .feature.flip { flex-direction: row-reverse; }
 .pn-landing .feature-text { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .pn-landing .feature-text h3 { font-size: clamp(24px, 2.4vw, 30px); line-height: 1.2; letter-spacing: -0.02em; }
-.pn-landing .feature-text p { max-width: 440px; color: #b4b9c2; font-size: 16px; }
-.pn-landing .plan-tag { color: var(--ai); font-size: 13px; font-weight: 500; }
+.pn-landing .feature-text p { max-width: 440px; color: #c3c7cf; font-size: 16.5px; }
+.pn-landing .plan-tag { align-self: flex-start; padding: 3px 10px; border: 1px solid rgba(var(--ai-rgb), .35); border-radius: 999px; background: rgba(var(--ai-rgb), .08); color: var(--ai); font-size: 12.5px; font-weight: 500; }
 .pn-landing .panel { flex: 0 1 500px; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .pn-landing .panel-label { font-size: 12.5px; color: var(--quiet); }
 .pn-landing .learned { display: flex; align-items: center; gap: 9px; font-size: 14px; }
@@ -263,6 +265,23 @@
 .pn-landing .msg.guide span:not(.face) { color: var(--text); }
 .pn-landing .msg.guide .face { background: rgba(var(--ai-rgb), .18); border: 1px solid rgba(var(--ai-rgb), .4); color: var(--ai); }
 .pn-landing .msg em { align-self: flex-start; margin-top: 4px; padding: 3px 8px; border: 1px solid rgba(var(--ai-rgb), .35); border-radius: 6px; font-style: normal; font-size: 12.5px; color: var(--ai); }
+
+/* The one wide moment below the hero: what the community knows, in violet light. */
+.pn-landing main section.brain-band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 40px 72px;
+  margin: 0 calc(50% - 50vw) 96px;
+  padding: 88px max(24px, calc(50vw - 560px));
+  border-block: 1px solid var(--line);
+  background: radial-gradient(60% 90% at 70% 50%, rgba(124, 92, 240, .22), rgba(124, 92, 240, .04) 60%, transparent 80%), #07080b;
+}
+.pn-landing .brain-band-text { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.pn-landing .brain-band-text h2 { font-size: clamp(28px, 3vw, 40px); letter-spacing: -0.03em; }
+.pn-landing .brain-band-text p { max-width: 440px; color: #c3c7cf; font-size: 17px; }
+.pn-landing .brain-band-map { flex: 1.25 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.pn-landing .brain-band-map .brain { filter: drop-shadow(0 0 30px rgba(124, 92, 240, .25)); }
 
 /* Everything else: six plain items in one ruled grid. */
 .pn-landing .grid-six { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
@@ -288,6 +307,7 @@
 .pn-landing .plan .price strong { margin-right: 2px; color: var(--text); font-size: 38px; font-weight: 500; letter-spacing: -0.03em; }
 .pn-landing .plan ul { display: flex; flex-direction: column; gap: 9px; margin: 0; padding: 0; list-style: none; color: var(--secondary); font-size: 14.5px; line-height: 1.45; }
 .pn-landing .plan li.ai { color: var(--muted); }
+.pn-landing .plan-note { color: var(--ai); font-size: 13.5px; }
 .pn-landing .plan :is(.cta, .cta-secondary) { margin-top: auto; min-height: 46px; }
 .pn-landing .plan.lit { border-color: rgba(196, 181, 253, .5); background: linear-gradient(180deg, rgba(var(--ai-rgb), .11), rgba(var(--ai-rgb), .02)); box-shadow: 0 0 60px rgba(124, 92, 240, .16); }
 .pn-landing .plan.lit header p { color: var(--ai); }
@@ -334,7 +354,9 @@
   .pn-landing .showcase-grid { grid-template-columns: 1fr; }
   .pn-landing .grid-six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pn-landing .feature,
-  .pn-landing .feature.flip { flex-direction: column; align-items: stretch; }
+  .pn-landing .feature.flip,
+  .pn-landing main section.brain-band { flex-direction: column; align-items: stretch; }
+  .pn-landing main section.brain-band { padding-block: 64px; }
   .pn-landing .panel { flex-basis: auto; }
   .pn-landing .topbar-links { display: none; }
   .pn-landing .shot-side,

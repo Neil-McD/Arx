@@ -7,7 +7,9 @@ import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityT
 import {
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
   POLYNET_FOUNDER_TIER_CATALOG,
+  type FounderPlanTier,
 } from "../../../../../shared/founderPlan";
+import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
@@ -22,28 +24,25 @@ export const LANDING_OFFER_LINE =
   `Free to build · Guide ${dollars(GUIDE.monthlyPriceBaseUnits)}/mo · Chief of Staff ${dollars(CHIEF.monthlyPriceBaseUnits)}/mo`;
 const FEE = `${POLYNET_COMMUNITY_PLATFORM_FEE_BPS / 100}%`;
 
-type Plan = { name: string; line: string; price: string; per: string; points: string[]; ai: string | null; lit?: boolean };
+type Plan = { tier: FounderPlanTier | null; name: string; line: string; price: string; per: string; points: string[]; ai: string | null; note?: string; button: string; lit?: boolean };
 export const LANDING_PLANS: Plan[] = [
   {
-    name: "Free", line: "Run your community", price: "$0", per: "/ month", ai: null,
+    tier: null, name: "Free", line: "Run your community", price: "$0", per: "/ month", ai: null, button: "Start free",
     points: ["Unlimited members", "Channels, messages, courses, events and pods", "Paid memberships and weekly digest emails", "Connect your own Claude or ChatGPT"],
   },
   {
-    name: GUIDE.label, line: "It answers and remembers", price: dollars(GUIDE.monthlyPriceBaseUnits), per: "/ month per community",
+    tier: "guide", name: GUIDE.label, line: "It answers and remembers", price: dollars(GUIDE.monthlyPriceBaseUnits), per: "/ month per community",
+    button: `Start with ${GUIDE.label}`,
     ai: `${aiDollars(GUIDE.includedCostMicros)} of AI included each month`,
     points: ["Everything in Free", "A private guide for every member", "Replies when tagged in channels", "A community brain that keeps what's learned"],
   },
   {
-    name: CHIEF.label, line: "It helps run the place", price: dollars(CHIEF.monthlyPriceBaseUnits), per: "/ month per community", lit: true,
+    tier: "chief_of_staff", name: CHIEF.label, line: "It helps run the place", price: dollars(CHIEF.monthlyPriceBaseUnits), per: "/ month per community", lit: true,
+    button: `Start with ${CHIEF.label}`,
+    note: "Less than a few hours of a community manager's time, every month.",
     ai: `${aiDollars(CHIEF.includedCostMicros)} of AI included each month; add more if you need it`,
     points: ["Everything in Guide", "A morning brief for you", "Member check-ins and win-backs", "Reply drafts for unanswered questions"],
   },
-];
-
-const PROBLEMS = [
-  ["Repeat questions", "You answer the same onboarding and course questions every week."],
-  ["Quiet members", "People drift away and cancel before you notice they went quiet."],
-  ["Buried answers", "Your best advice disappears into the chat a day after you write it."],
 ];
 
 const INCLUDED = [
@@ -62,10 +61,13 @@ const QUESTIONS = [
   ["Can I change plans later?", "Yes. Plans are month to month per community. Start free and move up or down whenever you like."],
 ];
 
-// Funnel step: which door a visitor used, and from where on the page.
-export function trackStart(placement: string, onJoin: () => void) {
+// Funnel step: which door a visitor used, and from where on the page. A plan
+// button also remembers the plan, so it is offered first once the community
+// exists; every other door starts free.
+export function trackStart(placement: string, onJoin: () => void, tier: FounderPlanTier | null = null) {
   return () => {
-    captureProductAnalyticsEvent("start_community_clicked", { placement });
+    captureProductAnalyticsEvent("start_community_clicked", { placement, ...(tier ? { plan_tier: tier } : {}) });
+    rememberLandingPlanChoice(tier);
     onJoin();
   };
 }
@@ -73,6 +75,9 @@ export function trackStart(placement: string, onJoin: () => void) {
 function trackFind(placement: string) {
   return () => captureProductAnalyticsEvent("find_community_clicked", { placement });
 }
+
+// "See it live": Polynet's own community, open to look around before signing up.
+const LIVE_COMMUNITY_PATH = "/c/polynet";
 
 // Visitors only see communities that look finished: a banner and a one-liner.
 const SHOWCASE_LIMIT = 6;
@@ -157,8 +162,14 @@ function OrbitScene() {
       <g fill="none" stroke="#C4B5FD" strokeWidth="1.5" strokeLinecap="round">
         {ARCS.map(([d, delay], index) => <path key={index} className="orbit-arc" pathLength={1} style={{ animationDelay: `${delay}s` }} d={d} />)}
       </g>
+      {/* Where each line lands is a person: a face-sized dot in a faint ring. */}
       <g fill="#EDE5FF">
-        {ARCS.map(([, delay, cx, cy, r], index) => <circle key={index} className="orbit-node" style={{ animationDelay: `${delay + 1.3}s` }} cx={cx} cy={cy} r={r} />)}
+        {ARCS.map(([, delay, cx, cy, r], index) => (
+          <Fragment key={index}>
+            <circle className="orbit-ring" style={{ animationDelay: `${delay + 1.3}s` }} cx={cx} cy={cy} r={r * 2.6} />
+            <circle className="orbit-node" style={{ animationDelay: `${delay + 1.3}s` }} cx={cx} cy={cy} r={r * 1.5} />
+          </Fragment>
+        ))}
       </g>
       <circle className="orbit-hub" cx="720" cy="690" r="86" fill="url(#pnHub)" />
       <circle cx="720" cy="690" r="7.5" fill="#FFFFFF" />
@@ -367,7 +378,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <p className="subhead">Give your people a home with its own AI. It answers them, remembers them, and helps you run the place.</p>
             <div className="doors">
               <button className="cta" type="button" onClick={trackStart("hero", onJoin)}>Start a community</button>
-              <a className="cta-quiet" href="/discover" onClick={trackFind("hero")}>Find a community</a>
+              <a className="cta-quiet" href={LIVE_COMMUNITY_PATH} onClick={() => captureProductAnalyticsEvent("see_it_live_clicked", { placement: "hero" })}>See it live</a>
             </div>
             <p className="microcopy">{LANDING_OFFER_LINE}</p>
           </div>
@@ -378,19 +389,12 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <p className="caption">One workspace for your members, your courses, your events and your community's memory.</p>
         </section>
 
-        <section className="problem" aria-labelledby="problem-title" data-rv>
-          <h2 id="problem-title">Communities take more work than they should.</h2>
-          <div className="cards three">
-            {PROBLEMS.map(([title, text]) => <article className="card" key={title}><h3>{title}</h3><p>{text}</p></article>)}
-          </div>
-        </section>
-
-        <section className="features" aria-label="What the AI does">
+        <section className="features" aria-label="What the guide does">
           <div className="feature" data-rv>
             <div className="feature-text">
               <span className="plan-tag">Guide</span>
-              <h3>It answers members any hour of the day.</h3>
-              <p>Every member gets a private guide that answers from your courses, notes and past discussions. Tag it in any channel when a question comes up again.</p>
+              <h3>Stop answering the same question twice.</h3>
+              <p>Every member gets a private guide that answers from your courses, notes and past discussions, at 2am, without you. Tag it in any channel when a question comes up again.</p>
             </div>
             <div className="panel" aria-hidden="true">
               <div className="msg"><span className="face">DO</span><div><b>Dev <i>2:07 am</i></b><span>How should I price my first cohort?</span></div></div>
@@ -398,23 +402,25 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             </div>
           </div>
 
-          <div className="feature flip" data-rv>
-            <div className="feature-text">
-              <span className="plan-tag">Guide · Community brain</span>
-              <h3>It remembers what your community learns.</h3>
-              <p>Courses, notes and helpful answers connect into one memory. When one member solves a problem, everyone who joins next benefits.</p>
-            </div>
-            <div className="panel">
-              <span className="panel-label">The community brain</span>
-              <BrainPicture />
-              <span className="learned"><i />Learned this week: monthly billing keeps cohorts together</span>
-            </div>
-          </div>
+        </section>
 
+        <section className="brain-band" aria-labelledby="brain-title" data-rv>
+          <div className="brain-band-text">
+            <span className="plan-tag">Guide · Community brain</span>
+            <h2 id="brain-title">Your best answers stop disappearing.</h2>
+            <p>Courses, notes and helpful answers connect into one memory you can see. When one member solves a problem, everyone who joins next benefits.</p>
+          </div>
+          <div className="brain-band-map">
+            <BrainPicture />
+            <span className="learned"><i />Learned this week: monthly billing keeps cohorts together</span>
+          </div>
+        </section>
+
+        <section className="features" aria-label="What the chief of staff does">
           <div className="feature" data-rv>
             <div className="feature-text">
               <span className="plan-tag">Chief of Staff</span>
-              <h3>It helps you run the community every day.</h3>
+              <h3>Know who's slipping before they cancel.</h3>
               <p>A morning brief shows what matters, who went quiet and which questions need you. It checks in on slipping members and drafts replies for you to approve.</p>
             </div>
             <div className="panel" aria-hidden="true">
@@ -422,6 +428,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             </div>
           </div>
         </section>
+
 
         <section className="included" aria-labelledby="included-title" data-rv>
           <h2 id="included-title">Everything else your community needs.</h2>
@@ -447,7 +454,8 @@ export function ConversionLanding({ onJoin }: JoinProps) {
                   {plan.points.map((point) => <li key={point}>{point}</li>)}
                   {plan.ai ? <li className="ai">{plan.ai}</li> : null}
                 </ul>
-                <button className={plan.lit ? "cta" : "cta-secondary"} type="button" onClick={trackStart(`pricing_${plan.name.toLowerCase().replace(/\s+/g, "_")}`, onJoin)}>Get started</button>
+                {plan.note ? <p className="plan-note">{plan.note}</p> : null}
+                <button className={plan.lit ? "cta" : "cta-secondary"} type="button" onClick={trackStart(`pricing_${plan.name.toLowerCase().replace(/\s+/g, "_")}`, onJoin, plan.tier)}>{plan.button}</button>
               </article>
             ))}
           </div>
