@@ -44,3 +44,22 @@ test("the page sells the product in plain words, with one door in", () => {
   // Every button into the product is the same door.
   expect(html.match(/Start a community|Start free|Start with/g)?.length).toBeGreaterThanOrEqual(6);
 });
+
+test("every link on the page goes somewhere that exists", () => {
+  const html = renderToStaticMarkup(React.createElement(ConversionLanding, { onJoin: () => undefined }));
+  const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]));
+  const hrefs = [...new Set([...html.matchAll(/ href="([^"]+)"/g)].map((match) => match[1]))];
+  const pages = new Set(["/", "/ai", "/discover", "/login", "/terms", "/privacy", "/c/polynet"]);
+  for (const href of hrefs) {
+    if (href.startsWith("mailto:")) continue;
+    if (href.startsWith("/#")) expect(ids.has(href.slice(2)), href).toBe(true);
+    else expect(pages.has(href), href).toBe(true);
+  }
+  // The three things the AI does each have a place to land on.
+  for (const id of ["guide", "brain", "chief-of-staff", "included", "pricing", "questions"]) expect(ids.has(id), id).toBe(true);
+  // The site's frame: a Product menu, the statement with its figures, a full footer.
+  expect(html).toContain('aria-controls="product-menu"');
+  expect(html).toContain("A community with an AI at its centre.");
+  for (const label of ["FIG 0.1", "FIG 0.2", "FIG 0.3", "It answers", "It remembers", "It runs"]) expect(html).toContain(label);
+  expect(html).toContain("Operated by EXECUTIVEINTELLIGENCE LLC.");
+});

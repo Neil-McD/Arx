@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { Sparkles } from "lucide-react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
 import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
@@ -11,6 +10,7 @@ import {
 } from "../../../../../shared/founderPlan";
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
+import { brainScene, chiefScene, FeatureSection, guideScene, StatementFigures } from "./LandingScenes";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -284,15 +284,96 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
   );
 }
 
-// Header and footer shared by every public page. `links`: the page's own
-// places to jump to (the landing page's sections).
-export function PublicFrame(props: { onJoin: () => void; links?: ReactNode; children: ReactNode }) {
+// The top bar's Product menu: what Polynet is made of, each entry a place on
+// the home page (or a public page) that exists today.
+const PRODUCT_MENU: Array<Array<[string, string, string]>> = [
+  [
+    ["The guide", "Answers your members from your courses and past posts", "/#guide"],
+    ["Community brain", "What your community learns, kept and connected", "/#brain"],
+    ["Chief of Staff", "Morning briefs, member check-ins and reply drafts", "/#chief-of-staff"],
+  ],
+  [
+    ["Community home", "Channels, messages, courses, events and pods", "/#included"],
+    ["Paid memberships", "Charge for access, with payouts straight to you", "/#included"],
+    ["Your own AI", "Bring Claude or ChatGPT into your community", "/ai"],
+  ],
+];
+const PRODUCT_MENU_LINKS: Array<[string, string]> = [
+  ["See it live", "/c/polynet"],
+  ["Find a community", "/discover"],
+  ["Questions", "/#questions"],
+];
+
+function ProductMenu() {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && wrap.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
+  const close = () => setOpen(false);
+  return (
+    <div
+      className="menu"
+      ref={wrap}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={close}
+      // Tabbing out of the menu closes it.
+      onBlur={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) close(); }}
+    >
+      {/* Hovering has already opened it by the time a click lands, so a click
+          only ever opens; Escape, moving away or tabbing out closes. */}
+      <button type="button" className={open ? "menu-button open" : "menu-button"} aria-expanded={open} aria-controls="product-menu" onClick={() => setOpen(true)}>Product</button>
+      {open ? (
+        <div className="menu-panel" id="product-menu">
+          <div className="menu-grid">
+            {PRODUCT_MENU.map((column, index) => (
+              <div key={index}>
+                {column.map(([title, text, href]) => (
+                  <a key={title} href={href} onClick={close}><b>{title}</b><span>{text}</span></a>
+                ))}
+              </div>
+            ))}
+            <div className="menu-plain">
+              {PRODUCT_MENU_LINKS.map(([title, href]) => <a key={title} href={href} onClick={close}>{title}</a>)}
+            </div>
+          </div>
+          <div className="menu-foot">
+            <span><b>New</b> Three plans: Free, Guide and Chief of Staff</span>
+            <a href="/#pricing" onClick={close}>See pricing →</a>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Named in the Terms and on the server-rendered public pages (apps/web/publicPages.ts).
+const OPERATOR_NAME = "EXECUTIVEINTELLIGENCE LLC";
+const SUPPORT_EMAIL = "support@polynet.ai";
+
+// Header and footer shared by every public page.
+export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) {
   return (
     <div className="pn-landing">
       <div className="page">
         <header className="topbar">
           <Brand />
-          {props.links ? <nav className="topbar-links" aria-label="On this page">{props.links}</nav> : null}
+          <nav className="topbar-links" aria-label="Site">
+            <ProductMenu />
+            <a href="/discover" onClick={trackFind("header")}>Communities</a>
+            <a href="/#pricing">Pricing</a>
+          </nav>
           <nav aria-label="Account">
             <a href="/login">Sign in</a>
             <button className="cta cta-small" type="button" onClick={trackStart("header", props.onJoin)}>Start a community</button>
@@ -302,15 +383,37 @@ export function PublicFrame(props: { onJoin: () => void; links?: ReactNode; chil
         <main>{props.children}</main>
 
         <footer className="footer">
-          <div className="footer-identity">
-            <span>© 2026 Polynet</span>
+          <div className="footer-cols">
+            <div className="footer-identity">
+              <Brand />
+              <span>Communities that think.</span>
+            </div>
+            <nav aria-label="Product">
+              <b>Product</b>
+              {PRODUCT_MENU.flat().map(([title, , href]) => <a key={title} href={href}>{title}</a>)}
+            </nav>
+            <nav aria-label="Polynet">
+              <b>Polynet</b>
+              <a href="/#pricing">Pricing</a>
+              <a href="/discover" onClick={trackFind("footer")}>Find a community</a>
+              <a href="/c/polynet">See it live</a>
+              <a href="/login">Sign in</a>
+            </nav>
+            <nav aria-label="Help">
+              <b>Help</b>
+              <a href="/#questions">Questions</a>
+              <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
+            </nav>
+            <nav aria-label="Legal">
+              <b>Legal</b>
+              <a href="/terms">Terms</a>
+              <a href="/privacy">Privacy</a>
+            </nav>
           </div>
-          <nav className="footer-links" aria-label="Footer navigation">
-            <a href="/discover" onClick={trackFind("footer")}>Find a community</a>
-            <a href="/login">Sign in</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Terms</a>
-          </nav>
+          <div className="footer-base">
+            <span>© 2026 Polynet. Operated by {OPERATOR_NAME}.</span>
+            <button type="button" onClick={trackStart("footer", props.onJoin)}>Start a community →</button>
+          </div>
         </footer>
       </div>
     </div>
@@ -345,6 +448,9 @@ function useReveal() {
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
   const reveal = useReveal();
+  const guide = guideScene();
+  const brain = brainScene();
+  const chief = chiefScene();
 
   useEffect(() => {
     captureProductAnalyticsEvent("home_viewed");
@@ -366,10 +472,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
   }, []);
 
   return (
-    <PublicFrame
-      onJoin={onJoin}
-      links={<><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="/discover" onClick={trackFind("header")}>Find a community</a></>}
-    >
+    <PublicFrame onJoin={onJoin}>
       <div ref={reveal} className="landing-body">
         <section className="hero" aria-labelledby="hero-title">
           <OrbitScene />
@@ -389,48 +492,24 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <p className="caption">One workspace for your members, your courses, your events and your community's memory.</p>
         </section>
 
-        <section className="features" aria-label="What the guide does">
-          <div className="feature" data-rv>
-            <div className="feature-text">
-              <span className="plan-tag">Guide</span>
-              <h3>Stop answering the same question twice.</h3>
-              <p>Every member gets a private guide that answers from your courses, notes and past discussions, at 2am, without you. Tag it in any channel when a question comes up again.</p>
-            </div>
-            <div className="panel" aria-hidden="true">
-              <div className="msg"><span className="face">DO</span><div><b>Dev <i>2:07 am</i></b><span>How should I price my first cohort?</span></div></div>
-              <div className="msg guide"><span className="face"><Sparkles size={15} aria-hidden="true" /></span><div><b>Your guide</b><span>Maya ran two cohorts here. Monthly billing kept more people to the end. Lesson 4 walks through it.</span><em>Lesson 4 · Pricing</em></div></div>
-            </div>
-          </div>
+        <StatementFigures />
 
-        </section>
+        <FeatureSection id="guide" plan="Guide" title={["Answers", "for every member"]} sceneLabel="A member asks the guide a question at night and gets an answer that points to a lesson" {...guide}
+          features={["Private guide for each member", "Replies when tagged in channels", "Answers with their source", "Follow-ups in active threads"]}>
+          Stop answering the same question twice. Every member gets a private guide that answers from your courses, notes and past discussions, at 2am, without you.
+        </FeatureSection>
 
-        <section className="brain-band" aria-labelledby="brain-title" data-rv>
-          <div className="brain-band-text">
-            <span className="plan-tag">Guide · Community brain</span>
-            <h2 id="brain-title">Your best answers stop disappearing.</h2>
-            <p>Courses, notes and helpful answers connect into one memory you can see. When one member solves a problem, everyone who joins next benefits.</p>
-          </div>
-          <div className="brain-band-map">
-            <BrainPicture />
-            <span className="learned"><i />Learned this week: monthly billing keeps cohorts together</span>
-          </div>
-        </section>
+        <FeatureSection id="brain" plan="Guide · Community brain" title={["A memory", "that builds"]} sceneLabel="A map of what the community knows, beside a list of what it learned this week" {...brain}
+          features={["Community brain map", "Learned from courses and posts", "Memory for each member", "Yours to read and correct"]}>
+          Your best answers stop disappearing. Courses, notes and helpful answers connect into one memory you can see, so what one member solves, the next one finds.
+        </FeatureSection>
 
-        <section className="features" aria-label="What the chief of staff does">
-          <div className="feature" data-rv>
-            <div className="feature-text">
-              <span className="plan-tag">Chief of Staff</span>
-              <h3>Know who's slipping before they cancel.</h3>
-              <p>A morning brief shows what matters, who went quiet and which questions need you. It checks in on slipping members and drafts replies for you to approve.</p>
-            </div>
-            <div className="panel" aria-hidden="true">
-              <BriefCard line="Two people finished Start here. One question went unanswered overnight; a reply is drafted." action={<><i>Approve</i><span>Edit</span><span>Skip</span></>} />
-            </div>
-          </div>
-        </section>
+        <FeatureSection id="chief-of-staff" plan="Chief of Staff" title={["Morning briefs", "and check-ins"]} sceneLabel="The morning brief, with a drafted check-in for a quiet member who is lit in the members list behind it" {...chief}
+          features={["Morning brief", "Member check-ins", "Win-backs", "Reply drafts", "Approve, edit or skip", "Usage and limits"]}>
+          Know who's slipping before they cancel. Your chief of staff checks in on quiet members and drafts replies to unanswered questions, then waits for your yes.
+        </FeatureSection>
 
-
-        <section className="included" aria-labelledby="included-title" data-rv>
+        <section className="included" id="included" aria-labelledby="included-title" data-rv>
           <h2 id="included-title">Everything else your community needs.</h2>
           <div className="grid-six">
             {INCLUDED.map(([title, text]) => <article key={title}><h3>{title}</h3><p>{text}</p></article>)}
@@ -462,7 +541,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <p className="microcopy">Month to month, cancel anytime. Selling memberships carries a {FEE} fee plus Stripe's processing. No surprise AI bills.</p>
         </section>
 
-        <section className="questions" aria-labelledby="questions-title" data-rv>
+        <section className="questions" id="questions" aria-labelledby="questions-title" data-rv>
           <h2 id="questions-title">Questions</h2>
           <dl>
             {QUESTIONS.map(([question, answer]) => <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>)}
