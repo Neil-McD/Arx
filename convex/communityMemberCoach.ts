@@ -844,6 +844,7 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
       readMemberJourneyGuidanceForCoach(ctx, {
         communityId: args.communityId,
         memberUserId: chosen.memberUserId,
+        nowMs: args.nowMs,
       }),
     ]);
     if (!person) return { candidate: null, nextScanCursorCreatedAt, temperatureCounts };

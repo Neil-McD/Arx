@@ -70,12 +70,102 @@ async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
   };
 }
 
+async function resolveDerivedStageKeyForMember(
+  ctx: any,
+  args: {
+    communityId: any;
+    userId: any;
+    stages: JourneyStageDefinition[];
+    membership?: any | null;
+    user?: any | null;
+    presence?: any | null;
+    nowMs: number;
+  },
+): Promise<string> {
+  const [membership, user, presence] = await Promise.all([
+    args.membership !== undefined
+      ? Promise.resolve(args.membership)
+      : ctx.db
+          .query("communityMemberships")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", args.userId),
+          )
+          .unique(),
+    args.user !== undefined ? Promise.resolve(args.user) : ctx.db.get(args.userId),
+    args.presence !== undefined
+      ? Promise.resolve(args.presence)
+      : ctx.db
+          .query("communityPresence")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", args.userId),
+          )
+          .unique(),
+  ]);
+  const joinedAtMs = typeof membership?.createdAt === "number" ? membership.createdAt : null;
+  const lastActiveAtMs =
+    typeof presence?.lastSeenAt === "number"
+      ? presence.lastSeenAt
+      : typeof user?.lastActiveAt === "number"
+        ? user.lastActiveAt
+        : null;
+  return defaultStageKeyForMember({
+    stages: args.stages,
+    joinedAtMs,
+    lastActiveAtMs,
+    nowMs: args.nowMs,
+  });
+}
+
+// Reads ONLY the timestamp of the member's most recent message in their private
+// Guide thread (never reads or returns message text) so reply receipts stay
+// accurate even after the 24h email nudge reaches a terminal state.
+async function readLastMemberGuideReplyAt(
+  ctx: any,
+  args: {
+    communityId: any;
+    userId: any;
+    draftThreadIds: string[];
+  },
+): Promise<number | null> {
+  const threadIds = new Set<string>(args.draftThreadIds.filter((id) => Boolean(id)));
+  const channel = await ctx.db
+    .query("memberAgentChannels")
+    .withIndex("by_owner_scope_community", (q: any) =>
+      q.eq("ownerId", args.userId).eq("scopeKey", "community").eq("communityId", args.communityId),
+    )
+    .unique();
+  if (channel?.activeEpisodeId) {
+    const episode = await ctx.db.get(channel.activeEpisodeId);
+    if (episode?.threadId) threadIds.add(String(episode.threadId));
+  }
+  if (threadIds.size === 0) return null;
+
+  let latestUserReplyAt: number | null = null;
+  const batches = await Promise.all(
+    [...threadIds].map((threadId) =>
+      ctx.db
+        .query("cloudMessages")
+        .withIndex("by_thread_seq", (q: any) => q.eq("threadId", threadId))
+        .order("desc")
+        .take(12),
+    ),
+  );
+  for (const recent of batches) {
+    const lastUser = recent.find((msg: any) => msg.role === "user");
+    const createdAt = typeof lastUser?.createdAt === "number" ? lastUser.createdAt : null;
+    if (createdAt !== null && (latestUserReplyAt === null || createdAt > latestUserReplyAt)) {
+      latestUserReplyAt = createdAt;
+    }
+  }
+  return latestUserReplyAt;
+}
+
 // Used by convex/communityMemberCoach.ts when preparing a proactive check-in
 // candidate so the Chief of Staff honours the member's stage goal and any
 // founder instruction left on their Journey card.
 export async function readMemberJourneyGuidanceForCoach(
   ctx: any,
-  args: { communityId: any; memberUserId: any },
+  args: { communityId: any; memberUserId: any; nowMs?: number },
 ): Promise<{
   stageName: string;
   stageGoal: string;
@@ -90,10 +180,18 @@ export async function readMemberJourneyGuidanceForCoach(
       )
       .unique(),
   ]);
+  const validStageKeys = new Set(config.stages.map((entry) => entry.key));
+  const effectiveStageKey =
+    card && validStageKeys.has(card.stageKey)
+      ? String(card.stageKey)
+      : await resolveDerivedStageKeyForMember(ctx, {
+          communityId: args.communityId,
+          userId: args.memberUserId,
+          stages: config.stages,
+          nowMs: args.nowMs ?? Date.now(),
+        });
   const stage =
-    (card ? config.stages.find((entry) => entry.key === card.stageKey) : null) ??
-    config.stages[0] ??
-    null;
+    config.stages.find((entry) => entry.key === effectiveStageKey) ?? config.stages[0] ?? null;
   const founderInstruction = normalizeFounderInstruction(card?.founderInstruction);
   if (!stage && !founderInstruction) return null;
   return {
@@ -128,11 +226,16 @@ export async function recordMemberJourneyCoachOutcome(
     });
     return;
   }
-  const defaultStageKey = config.stages[0]?.key ?? DEFAULT_JOURNEY_STAGES[0]!.key;
+  const derivedStageKey = await resolveDerivedStageKeyForMember(ctx, {
+    communityId: args.communityId,
+    userId: args.memberUserId,
+    stages: config.stages,
+    nowMs: args.nowMs,
+  });
   await ctx.db.insert("communityMemberJourneyCards", {
     communityId: args.communityId,
     userId: args.memberUserId,
-    stageKey: defaultStageKey,
+    stageKey: derivedStageKey,
     agentOutcomeNote: note,
     agentOutcomeAt: args.nowMs,
     createdAt: args.nowMs,
@@ -156,18 +259,18 @@ export const getCommunityMemberJourneyBoard = query({
       userId: actorUserId,
     });
     const nowMs = Date.now();
-    const [{ stages, autoAdvanceEnabled }, memberships, cardRows, pricePoints, goalFacts, waitingCoachDrafts, sentCoachDrafts] =
+    const [{ stages, autoAdvanceEnabled }, activeRosterRows, pricePoints, goalFacts, waitingCoachDrafts, sentCoachDrafts] =
       await Promise.all([
         readStagesForCommunity(ctx, args.communityId),
+        // Filter to active memberships via index BEFORE applying the board cap so
+        // historical churned rows never push active members off the board.
         ctx.db
           .query("communityMemberships")
-          .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+          .withIndex("by_community_state_createdAt", (q: any) =>
+            q.eq("communityId", args.communityId).eq("state", "active"),
+          )
           .order("desc")
-          .take(BOARD_MEMBER_CAP + 40),
-        ctx.db
-          .query("communityMemberJourneyCards")
-          .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId))
-          .take(BOARD_MEMBER_CAP + 100),
+          .take(BOARD_MEMBER_CAP + 2),
         ctx.db
           .query("communityPricePoints")
           .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
@@ -195,15 +298,13 @@ export const getCommunityMemberJourneyBoard = query({
       ]);
 
     const ownerId = String(community.ownerId);
-    const activeMemberships = memberships
-      .filter((row: any) => communityMembershipRowIsActive(row) && String(row.userId) !== ownerId)
-      .slice(0, BOARD_MEMBER_CAP);
+    const nonOwnerActive = activeRosterRows.filter(
+      (row: any) => communityMembershipRowIsActive(row) && String(row.userId) !== ownerId,
+    );
+    const capped = nonOwnerActive.length > BOARD_MEMBER_CAP;
+    const activeMemberships = nonOwnerActive.slice(0, BOARD_MEMBER_CAP);
 
     const validStageKeys = new Set(stages.map((stage) => stage.key));
-    const cardByUserId = new Map<string, any>();
-    for (const row of cardRows) {
-      cardByUserId.set(String(row.userId), row);
-    }
 
     const priceById = new Map<string, any>();
     for (const point of pricePoints) {
@@ -229,36 +330,32 @@ export const getCommunityMemberJourneyBoard = query({
       }
     }
 
-    const latestCoachByUserId = new Map<string, { summary: string; at: number; unanswered: number }>();
+    const coachDraftsByUserId = new Map<string, any[]>();
     for (const check of [...waitingCoachDrafts, ...sentCoachDrafts]) {
       const key = String(check.memberUserId);
-      const at = Number(check.sentAt ?? check.createdAt ?? 0);
-      const replied = check.unseenEmailState === "seen";
-      const prev = latestCoachByUserId.get(key);
-      const unansweredInc = check.status === "sent" && !replied ? 1 : 0;
-      if (!prev || at > prev.at) {
-        latestCoachByUserId.set(key, {
-          summary: formatCoachOutcomeSummary({
-            status: check.status,
-            reason: check.reason,
-            sentAt: check.sentAt ?? null,
-            createdAt: check.createdAt,
-            replied,
-          }),
-          at,
-          unanswered: (prev?.unanswered ?? 0) + unansweredInc,
-        });
-      } else if (unansweredInc > 0) {
-        prev.unanswered += unansweredInc;
-      }
+      const list = coachDraftsByUserId.get(key);
+      if (list) list.push(check);
+      else coachDraftsByUserId.set(key, [check]);
     }
 
     const cards = await Promise.all(
       activeMemberships.map(async (membership: any) => {
         const userIdStr = String(membership.userId);
-        const [userRaw, profile, subRows, presence] = await Promise.all([
+        const memberDrafts = coachDraftsByUserId.get(userIdStr) ?? [];
+        const sentDrafts = memberDrafts.filter((check: any) => check.status === "sent");
+        const sentThreadIds = sentDrafts
+          .map((check: any) => (typeof check.threadId === "string" ? check.threadId : ""))
+          .filter(Boolean);
+
+        const [userRaw, profile, storedCard, subRows, presence, lastGuideReplyAt] = await Promise.all([
           ctx.db.get(membership.userId),
           resolveUserProfileDisplayProjection(ctx, membership.userId),
+          ctx.db
+            .query("communityMemberJourneyCards")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", args.communityId).eq("userId", membership.userId),
+            )
+            .unique(),
           ctx.db
             .query("communitySubscriptions")
             .withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id))
@@ -269,6 +366,13 @@ export const getCommunityMemberJourneyBoard = query({
               q.eq("communityId", args.communityId).eq("userId", membership.userId),
             )
             .unique(),
+          sentDrafts.length > 0
+            ? readLastMemberGuideReplyAt(ctx, {
+                communityId: args.communityId,
+                userId: membership.userId,
+                draftThreadIds: sentThreadIds,
+              })
+            : Promise.resolve(null),
         ]);
         const user: any = userRaw;
 
@@ -287,13 +391,38 @@ export const getCommunityMemberJourneyBoard = query({
               ? user.lastActiveAt
               : null;
 
-        const storedCard = cardByUserId.get(userIdStr) ?? null;
         const stageKey =
           storedCard && validStageKeys.has(storedCard.stageKey)
             ? String(storedCard.stageKey)
             : defaultStageKeyForMember({ stages, joinedAtMs, lastActiveAtMs, nowMs });
 
-        const coachInfo = latestCoachByUserId.get(userIdStr) ?? null;
+        let latestCoachSummary: { summary: string; at: number } | null = null;
+        let unansweredCoachCount = 0;
+        for (const check of memberDrafts) {
+          const at = Number(check.sentAt ?? check.createdAt ?? 0);
+          const sentAt = Number(check.sentAt ?? check.createdAt ?? 0);
+          const replied =
+            check.status === "sent" &&
+            typeof lastGuideReplyAt === "number" &&
+            sentAt > 0 &&
+            lastGuideReplyAt >= sentAt;
+          if (check.status === "sent" && !replied) {
+            unansweredCoachCount += 1;
+          }
+          if (!latestCoachSummary || at > latestCoachSummary.at) {
+            latestCoachSummary = {
+              summary: formatCoachOutcomeSummary({
+                status: check.status,
+                reason: check.reason,
+                sentAt: check.sentAt ?? null,
+                createdAt: check.createdAt,
+                replied,
+              }),
+              at,
+            };
+          }
+        }
+
         const statusOverride = (storedCard?.statusOverride ?? null) as JourneyCardStatus | null;
         const status = deriveMemberJourneyStatus({
           statusOverride,
@@ -302,16 +431,18 @@ export const getCommunityMemberJourneyBoard = query({
           moneyKind,
           lastActiveAtMs,
           joinedAtMs,
-          unansweredCoachCount: coachInfo?.unanswered ?? 0,
+          unansweredCoachCount,
           nowMs,
         });
 
         const storedOutcomeAt = typeof storedCard?.agentOutcomeAt === "number" ? storedCard.agentOutcomeAt : 0;
-        const coachAt = coachInfo?.at ?? 0;
+        const coachAt = latestCoachSummary?.at ?? 0;
         const agentOutcome =
-          storedCard?.agentOutcomeNote && storedOutcomeAt >= coachAt
-            ? String(storedCard.agentOutcomeNote)
-            : coachInfo?.summary ?? null;
+          latestCoachSummary && coachAt >= storedOutcomeAt
+            ? latestCoachSummary.summary
+            : storedCard?.agentOutcomeNote
+              ? String(storedCard.agentOutcomeNote)
+              : latestCoachSummary?.summary ?? null;
         const agentOutcomeAt = Math.max(storedOutcomeAt, coachAt) || null;
 
         return {
@@ -350,7 +481,7 @@ export const getCommunityMemberJourneyBoard = query({
       auto_advance_enabled: autoAdvanceEnabled,
       cards,
       total_active_members: totalActiveMembers,
-      capped: memberships.length > BOARD_MEMBER_CAP,
+      capped,
     };
   },
 });
@@ -478,7 +609,15 @@ export const updateMemberJourneyCard = mutation({
 
     const nextStageKey =
       args.stageKey ??
-      (existing && validKeys.has(existing.stageKey) ? existing.stageKey : stages[0]!.key);
+      (existing && validKeys.has(existing.stageKey)
+        ? existing.stageKey
+        : await resolveDerivedStageKeyForMember(ctx, {
+            communityId: args.communityId,
+            userId: membership.userId,
+            stages,
+            membership,
+            nowMs,
+          }));
     const nextStatusOverride: JourneyCardStatus | undefined =
       args.statusOverride === undefined
         ? existing?.statusOverride

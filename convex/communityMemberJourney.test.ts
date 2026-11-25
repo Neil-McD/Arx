@@ -234,4 +234,176 @@ describe("member journey board", () => {
       "Pause nudges until next Monday; Sam is on vacation.",
     );
   });
+
+  it("derives check-in replies from thread activity even after the 24h email nudge is enqueued", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await seedJourneyFixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "journey-owner" });
+
+    await t.run(async (ctx) => {
+      const threadId = await ctx.db.insert("threads", {
+        ownerId: f.memberId,
+        titleSource: "auto",
+        communityId: String(f.communityId),
+        createdAt: nowMs - 5 * DAY_MS,
+        updatedAt: nowMs - 12 * 60 * 60 * 1000,
+      } as any);
+      // Two sent check-ins whose unseenEmailState already reached terminal "enqueued".
+      await ctx.db.insert("communityMemberCoachDrafts", {
+        communityId: f.communityId,
+        memberUserId: f.memberId,
+        reason: "quiet_newcomer",
+        dedupeKey: "quiet_newcomer:1",
+        signalSummary: "Joined 3 days ago",
+        status: "sent",
+        deliveryMode: "auto",
+        sentText: "Welcome! What are you building?",
+        threadId: String(threadId),
+        unseenEmailState: "enqueued",
+        sentAt: nowMs - 4 * DAY_MS,
+        createdAt: nowMs - 4 * DAY_MS,
+        updatedAt: nowMs - 3 * DAY_MS,
+      } as any);
+      await ctx.db.insert("communityMemberCoachDrafts", {
+        communityId: f.communityId,
+        memberUserId: f.memberId,
+        reason: "course_stall",
+        dedupeKey: "course_stall:1",
+        signalSummary: "Paused on lesson 2",
+        status: "sent",
+        deliveryMode: "auto",
+        sentText: "Need a hand with lesson 2?",
+        threadId: String(threadId),
+        unseenEmailState: "enqueued",
+        sentAt: nowMs - 2 * DAY_MS,
+        createdAt: nowMs - 2 * DAY_MS,
+        updatedAt: nowMs - DAY_MS,
+      } as any);
+
+      // Member replied in the Guide thread AFTER both check-ins were sent.
+      await ctx.db.insert("cloudMessages", {
+        ownerId: f.memberId,
+        threadId,
+        messageKey: "msg-1",
+        seq: 1,
+        role: "assistant",
+        contentJson: { text: "Need a hand with lesson 2?" },
+        createdAt: nowMs - 2 * DAY_MS,
+      } as any);
+      await ctx.db.insert("cloudMessages", {
+        ownerId: f.memberId,
+        threadId,
+        messageKey: "msg-2",
+        seq: 2,
+        role: "user",
+        contentJson: { text: "Just finished it, thanks!" },
+        createdAt: nowMs - 12 * 60 * 60 * 1000,
+      } as any);
+    });
+
+    const board = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const sam = board.cards.find((c) => c.membership_id === String(f.memberMembershipId))!;
+    expect(sam.status).toBe("on_track");
+    expect(sam.agent_outcome).toContain("replied");
+  });
+
+  it("preserves the derived stage when first saving a founder instruction without changing stage", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await seedJourneyFixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "journey-owner" });
+
+    // Seed a member who joined 12 days ago and was active yesterday -> derives "getting_started".
+    const veteranMembershipId = await t.run(async (ctx) => {
+      const veteranId = await ctx.db.insert("users", {
+        authSubject: "journey-veteran",
+        displayName: "Riley",
+        handle: "riley",
+        normalizedHandle: "riley",
+        email: "riley@example.com",
+        emailVerifiedAt: nowMs,
+        createdAt: nowMs - 15 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+      const memId = await ctx.db.insert("communityMemberships", {
+        communityId: f.communityId,
+        userId: veteranId,
+        role: "member",
+        accessSource: "free_grant",
+        state: "active",
+        createdAt: nowMs - 12 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+      await ctx.db.insert("communityPresence", {
+        communityId: f.communityId,
+        userId: veteranId,
+        lastSeenAt: nowMs - DAY_MS,
+        createdAt: nowMs - 12 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+      return memId;
+    });
+
+    const before = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const rileyBefore = before.cards.find((c) => c.membership_id === String(veteranMembershipId))!;
+    expect(rileyBefore.stage_key).toBe("getting_started");
+
+    // Save ONLY a founder instruction (no explicit stageKey). Must stay in "getting_started".
+    await asOwner.mutation(api.communityMemberJourney.updateMemberJourneyCard, {
+      communityId: f.communityId,
+      membershipId: veteranMembershipId,
+      founderInstruction: "Check if they want to demo on Friday.",
+    });
+
+    const after = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const rileyAfter = after.cards.find((c) => c.membership_id === String(veteranMembershipId))!;
+    expect(rileyAfter.stage_key).toBe("getting_started");
+    expect(rileyAfter.founder_instruction).toBe("Check if they want to demo on Friday.");
+  });
+
+  it("filters active memberships before applying the board cap so churned rows never hide active members", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await seedJourneyFixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "journey-owner" });
+
+    // Insert 215 newer "left" memberships so a pre-filter cap would have dropped Sam and Alex.
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 215; i += 1) {
+        const churnedUserId = await ctx.db.insert("users", {
+          authSubject: `churned-${i}`,
+          displayName: `Churned ${i}`,
+          handle: `churned_${i}`,
+          normalizedHandle: `churned_${i}`,
+          email: `churned${i}@example.com`,
+          emailVerifiedAt: nowMs,
+          createdAt: nowMs - 60_000 + i,
+          updatedAt: nowMs,
+        } as any);
+        await ctx.db.insert("communityMemberships", {
+          communityId: f.communityId,
+          userId: churnedUserId,
+          role: "member",
+          accessSource: "free_grant",
+          state: "left",
+          createdAt: nowMs - 60_000 + i,
+          updatedAt: nowMs,
+        } as any);
+      }
+    });
+
+    const board = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    expect(board.capped).toBe(false);
+    expect(board.cards.some((c) => c.membership_id === String(f.memberMembershipId))).toBe(true);
+    expect(board.cards.some((c) => c.membership_id === String(f.quietMembershipId))).toBe(true);
+  });
 });
