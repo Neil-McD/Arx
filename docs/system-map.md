@@ -215,7 +215,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** community notes: short markdown notes that are the guide's memory.
   The community agent reads them under `memory/` to answer; owners and admins
-  read, edit and delete them (Knowledge → What your guide knows). Since Nov 14
+  read, edit and delete them (Knowledge → Community brain → Notes & files). Since Nov 14
   a member is never handed them: not in the app, not through their own AI
   (MCP), not in search, Home or a channel. Members get them through answers. No member or connected AI writes
   them (Nov 5: closed a private-room leak and an injection path). Since Nov 15

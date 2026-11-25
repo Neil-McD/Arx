@@ -371,6 +371,7 @@ type PageProps = {
   canManage: boolean;
   content?: BrainContent;
   onOpenCourse: (courseId: string) => void;
+  onOpenGuideMemory?: () => void;
 };
 
 export function KitBrainPage(props: PageProps) {
@@ -419,7 +420,12 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap; version?: n
   if (!brainCanDrawMap(map)) {
     return (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        <p className={cx("sub")} style={{ marginTop: 0 }}>{counts}</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <p className={cx("sub")} style={{ margin: 0 }}>{counts}</p>
+          {props.canManage && props.onOpenGuideMemory ? (
+            <Btn small onClick={props.onOpenGuideMemory}>Notes &amp; files</Btn>
+          ) : null}
+        </div>
         {map.courses.length ? (
           <PanelPart label="Courses" fact={String(map.courses.length)}>
             {map.courses.map((entry) => (
@@ -445,10 +451,15 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap; version?: n
       {/* The readings stay in reach beside an open panel. */}
       <div className={cx("brainbar")} style={picked && wide ? { paddingRight: SIDE_WIDTH + 24 } : undefined}>
         <span className={cx("sub")}>{counts}</span>
-        <div className={cx("seg")} role="tablist" aria-label="Reading">
-          {readings.map(([value, label]) => (
-            <button key={value} type="button" role="tab" aria-selected={reading === value} className={cx(reading === value ? "on" : "")} onClick={() => setReading(value)}>{label}</button>
-          ))}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {props.canManage && props.onOpenGuideMemory ? (
+            <button type="button" className={cx("btn sm")} onClick={props.onOpenGuideMemory}>Notes &amp; files</button>
+          ) : null}
+          <div className={cx("seg")} role="tablist" aria-label="Reading">
+            {readings.map(([value, label]) => (
+              <button key={value} type="button" role="tab" aria-selected={reading === value} className={cx(reading === value ? "on" : "")} onClick={() => setReading(value)}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
       {detail ? (

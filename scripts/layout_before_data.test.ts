@@ -60,10 +60,10 @@ test("a channel's header row is held until its record arrives", () => {
     .toMatch(/\) : \([\s\S]{0,220}<header className="community-channel-header" aria-hidden="true" \/>/);
 });
 
-test("Knowledge holds its builder row and draws its right column as one piece", () => {
+test("Knowledge draws its right column as one piece and keeps the top shelf free of async builder buttons", () => {
   const classroom = read("apps/web/src/v1/KitClassroom.tsx");
   expect(classroom).toMatch(/usePanelSettled\(briefSettled && brainSettled && progressLoaded\)/);
-  expect(classroom).toMatch(/props\.onOpenGuideMemory && \(canWriteNotes \|\| \(props\.canManage && !notesAnswered\)\)/);
+  expect(classroom).not.toContain("onOpenGuideMemory?.(true)");
 });
 
 test("a pod's panel and landing page draw their parts once they have answered", () => {

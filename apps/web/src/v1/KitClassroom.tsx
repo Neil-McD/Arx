@@ -981,23 +981,18 @@ export function KitClassroom(props: {
           </button>
         ) : null}
 
-        {/* Builders: the way into what the guide answers from, where notes,
-            links and files are added. Shown at every width; Community brain
-            sits beside it (and for members on narrow windows with no rail). */}
-        {/* A builder's row holds its place from the first draw (the count
-            fills in), so the courses under it don't move when notes arrive. */}
+        {/* On narrow screens with no right rail, keep the Community brain button reachable.
+            Builders' notes & files ("What your guide knows") lives inside the Community brain page. */}
         {(() => {
-          const showGuideMemory = Boolean(props.onOpenGuideMemory && (canWriteNotes || (props.canManage && !notesAnswered)));
-          const showBrain = Boolean(props.onOpenBrain && (brainHasContent(brain) || (!wide && liveCourses.some((entry) => entry.lessons.length > 0))) && (!wide || showGuideMemory));
-          if (!showGuideMemory && !showBrain) return null;
+          const showBrain = Boolean(
+            props.onOpenBrain &&
+            !wide &&
+            (brainHasContent(brain) || liveCourses.some((entry) => entry.lessons.length > 0) || props.canManage),
+          );
+          if (!showBrain) return null;
           return (
             <div className={cx("kbtns")}><div className={cx("kbtns-row")}>
-              {showGuideMemory ? (
-                <button type="button" className={cx("btn sm")} disabled={!canWriteNotes} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows{canWriteNotes ? ` · ${notes.length + guideSources.length}` : ""}</button>
-              ) : null}
-              {showBrain ? (
-                <button type="button" className={cx("btn sm")} onClick={() => props.onOpenBrain?.()}>Community brain</button>
-              ) : null}
+              <button type="button" className={cx("btn sm")} onClick={() => props.onOpenBrain?.()}>Community brain</button>
             </div></div>
           );
         })()}
