@@ -565,5 +565,33 @@ describe("Builder Member Board tools across Official Polynet MCP & Studio Guide 
     const finalJules = finalBoard.cards.find((c: any) => c.handle === "jules");
     expect(finalSam?.stage_key).toBe("graduated");
     expect(finalJules?.stage_key).toBe("graduated");
+
+    // 8. Removing a stage ("new") that holds derived members with NO stored card rows
+    // (admin & mod) also materializes and moves them to the chosen move_to_stage ("alumni").
+    const removeNewPending = await execNamedTool(t, f.owner, "mcp", "polynet_remove_journey_stage", {
+      community: f.slug,
+      stage: "new",
+      move_to_stage: "alumni",
+      idempotency_key: "rm-stage-new-1",
+    });
+    expect(removeNewPending.ok).toBe(true);
+    expect((removeNewPending as any).value.status).toBe("waiting_for_person");
+    expect((removeNewPending as any).value.question).toContain('2 members on it will move to "Alumni"');
+
+    const newQuestions = await asOwner.query(api.communityGuideQuestions.listGuideQuestions, {
+      communityId: f.communityId,
+    });
+    expect(newQuestions).toHaveLength(1);
+    const removeNewAnswer = await asOwner.action(api.communityGuideQuestions.answerGuideQuestion, {
+      communityId: f.communityId,
+      questionId: newQuestions[0]!.id as any,
+      answer: "yes",
+    });
+    expect(removeNewAnswer.status).toBe("done");
+    const boardAfterNewRemoved = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    expect(boardAfterNewRemoved.cards.find((c: any) => c.handle === "maya")?.stage_key).toBe("alumni");
+    expect(boardAfterNewRemoved.cards.find((c: any) => c.handle === "avery")?.stage_key).toBe("alumni");
   });
 });

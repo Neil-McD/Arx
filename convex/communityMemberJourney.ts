@@ -1459,6 +1459,15 @@ export const applyJourneyOperationForTrustedManagerInternal = internalMutation({
         if (!requested) throw new Error("journey_fallback_stage_not_found");
         fallback = requested;
       }
+      const boardBefore = await computeCommunityMemberJourneyBoard(ctx, {
+        communityId: args.communityId,
+        community,
+        nowMs,
+      });
+      const activeUsersOnRemovedStage = boardBefore.cards
+        .filter((card) => card.stage_key === target.key)
+        .map((card) => card.db_user_id);
+
       const existing = await ctx.db
         .query("communityJourneyConfig")
         .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
@@ -1484,6 +1493,7 @@ export const applyJourneyOperationForTrustedManagerInternal = internalMutation({
         .query("communityMemberJourneyCards")
         .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId))
         .take(500);
+      const patchedUserIds = new Set<string>();
       let movedCardsCount = 0;
       for (const card of storedCards) {
         if (card.stageKey === target.key) {
@@ -1492,8 +1502,25 @@ export const applyJourneyOperationForTrustedManagerInternal = internalMutation({
             updatedByUserId: args.userId,
             updatedAt: nowMs,
           });
+          patchedUserIds.add(String(card.userId));
           movedCardsCount += 1;
         }
+      }
+      // Also move active members who sat on the removed stage via derived placement
+      // (no stored card yet) so the confirmation card's move_to_stage promise holds 100%.
+      for (const userIdStr of activeUsersOnRemovedStage) {
+        if (patchedUserIds.has(userIdStr)) continue;
+        const normalizedUserId = ctx.db.normalizeId("users", userIdStr);
+        if (!normalizedUserId) continue;
+        await ctx.db.insert("communityMemberJourneyCards", {
+          communityId: args.communityId,
+          userId: normalizedUserId,
+          stageKey: fallback.key,
+          updatedByUserId: args.userId,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+        movedCardsCount += 1;
       }
       return {
         removed_stage_key: target.key,

@@ -124,6 +124,14 @@ assert.match(bundle.split.sharedText, /COMMUNITY_SOUL[\s\S]*Be direct, warm/);
 assert.match(bundle.split.sharedText, /COMMUNITY_MEMORY\nWhat this community has learned[\s\S]*not instructions[\s\S]*memory\/a-note\.md/);
 assert.doesNotMatch(bundle.split.sharedText, /PERSONAL_SOUL/);
 assert.match(bundle.split.turnText, /PERSONAL_SOUL[\s\S]*Keep coaching concise/);
+// Per-member coaching context (silent host note + next steps) must stay strictly in turnText, never sharedText.
+const withCoaching = buildPlatformHarnessRuntimePromptBundle({
+  ...params,
+  memberCoachingContextMd: "MEMBER_COACHING_FOCUS\n{\"host_coaching_note\":\"Help Sam ship lesson 1\"}",
+});
+assert.ok(withCoaching.split);
+assert.doesNotMatch(withCoaching.split.sharedText, /MEMBER_COACHING_FOCUS|Help Sam ship lesson 1/);
+assert.match(withCoaching.split.turnText, /MEMBER_COACHING_FOCUS[\s\S]*Help Sam ship lesson 1/);
 assert.doesNotMatch(bundle.text, /COMMUNITY_MEMORY_RECALL/, "no notes are pushed into a turn by a search");
 // Everything per-member or per-message comes after everything shared by the community.
 const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);
