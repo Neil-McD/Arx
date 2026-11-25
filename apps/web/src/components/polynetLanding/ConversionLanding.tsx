@@ -594,7 +594,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         <FeatureSection id="chief-of-staff" title={["Members drift away", "before you notice."]} sceneLabel="Try the Chief of Staff: read the 8am brief, then send, edit or skip the check-in for a quiet member and the reply drafted for an unanswered question"
           live={<Suspense fallback={<div className="gsc-wait" />}><ChiefScene /></Suspense>}
           features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "A monthly AI allowance you control"]}>
-          Your chief of staff watches the whole community for you. Every morning it tells you what happened, who's gone quiet and which questions nobody answered, then drafts what to say. You send it, change it, or skip it.
+          In most communities you only find out someone's gone when they cancel. Polynet sees it early: the new member who never said hello, the one stuck halfway through a course, the regular who's gone quiet. Your chief of staff drafts the right nudge for each, and you send it, change it or skip it.
         </FeatureSection>
 
         <Showcase communities={communities} />
