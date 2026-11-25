@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { BarChart2, Boxes, CalendarDays, ChevronDown, Hash, House, Inbox, Library, Plus, Search, UserPlus, Users } from "lucide-react";
+import { BarChart2, Boxes, CalendarDays, CalendarPlus, ChevronDown, ChevronRight, Hash, House, Inbox, Library, MapPin, Plus, Repeat, Search, UserPlus, Users, Video, X } from "lucide-react";
 
 import type { BrainAttach, BrainMap, BrainPoint } from "../../../../../shared/communityBrain";
 import { brainFact, latestLearned } from "../../../../../shared/communityBrain";
@@ -8,6 +8,7 @@ import { memberKey } from "../../../../../shared/communityMembersTable";
 import type { ReplyDraftView } from "../../../../../shared/communityReplyDrafts";
 import type { MemberCoachDraftView } from "../../../../../shared/communityMemberCoachTypes";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
+import { eventDateBlock, eventDayWord } from "../communityEventsList";
 import {
   Btn, Chips, Cover, Dock, Eyebrow, Hello, HomeBody, Icon, KitApp, Main, Mine, Rail, Scroll, Talk, TextLink, Theirs, cx,
 } from "../../v1/kit";
@@ -39,6 +40,9 @@ export type PreviewState = {
   picked: string | null;
   /** The pod open on the pod page. */
   pod: string;
+  /** The event picked on Events (its details fill the right column). */
+  event: string | null;
+  pastOpen: boolean;
 };
 
 export type DraftState = "waiting" | "sent" | "skipped";
@@ -56,17 +60,19 @@ export type PreviewAction =
   | { type: "talk"; chip: string | null }
   | { type: "member"; key: string | null }
   | { type: "pick"; id: string | null }
-  | { type: "pod"; pod: string };
+  | { type: "pod"; pod: string }
+  | { type: "event"; id: string | null }
+  | { type: "past" };
 
 export const INITIAL_PREVIEW: PreviewState = {
   page: "home", waiting: ["r1", "r2"], replyDraft: "waiting", checkIn: "waiting", asked: false, answered: false,
-  talk: null, member: null, picked: null, pod: "launch",
+  talk: null, member: null, picked: null, pod: "launch", event: null, pastOpen: false,
 };
 
 export function previewReducer(state: PreviewState, action: PreviewAction): PreviewState {
   switch (action.type) {
     case "open":
-      return { ...state, page: action.page, talk: null, member: action.page === "members" ? state.member : null,
+      return { ...state, page: action.page, talk: null, member: action.page === "members" ? state.member : null, event: null,
         picked: action.picked !== undefined ? action.picked : action.page === "brain" ? state.picked : null };
     case "approve":
     case "decline":
@@ -91,6 +97,10 @@ export function previewReducer(state: PreviewState, action: PreviewAction): Prev
       return { ...state, picked: action.id };
     case "pod":
       return { ...state, page: "pod", pod: action.pod, talk: null, member: null, picked: null };
+    case "event":
+      return { ...state, event: state.event === action.id ? null : action.id };
+    case "past":
+      return { ...state, pastOpen: !state.pastOpen };
   }
 }
 
@@ -146,17 +156,28 @@ type Message = {
 
 const GENERAL: Array<Message | string> = [
   "Yesterday",
+  { who: "Tom", tone: "a1", time: "4:02 pm", text: "Does anyone record their calls for people in other time zones? Half my group is in Australia." },
+  { who: "Sara", tone: "a6", time: "4:15 pm", text: "I do. Recording goes in the course as its own lesson, so it's searchable later.", reactions: ["🙏 3"] },
+  { who: "Guide", tone: "guide", guide: true, time: "4:16 pm", text: "Members here usually post the recording under the course and pin a two-line summary. \"Where call recordings live\" in Knowledge has the steps.",
+    note: { title: "Where call recordings live", id: "note:record" } },
   { who: "Lena", tone: "a3", time: "6:10 pm", text: "Hi all, I'm Lena. I teach Excel to small business owners and I want to turn it into a paid course.", reactions: ["👋 6"] },
   { who: "Maya", tone: "a4", time: "6:24 pm", text: "Welcome Lena! Start here is the best first stop. Lesson 2 is all about picking your first offer." },
+  { who: "Lena", tone: "a3", time: "6:31 pm", text: "Thank you! Starting it tonight." },
   "Today",
   { who: "Dev", tone: "a1", time: "2:14 am", text: <><span className={cx("at")}>@guide</span> how should I price my first offer?</> },
   { who: "Guide", tone: "guide", guide: true, time: "2:14 am", text: "Start with one clear result and one price. Lesson 3 walks through it, with three examples from members here.",
     note: { title: "Pricing your first offer", id: "resource:price" } },
   { who: "Dev", tone: "a1", time: "8:02 am", text: "That's exactly what I needed. Going with $49.", reactions: ["🙌 4"] },
+  { who: "Jon", tone: "a1", time: "8:20 am", text: "Good call Dev. Mine started at $39 and I raised it after the first ten.", reactions: ["💯 2"] },
+  { who: "Hana", tone: "a3", time: "8:33 am", text: "Is there a template for the sales page? Mine reads like a CV." },
+  { who: "Maya", tone: "a4", time: "8:36 am", text: "Launch week, lesson 1. Result first, then who it's for, then the price." },
   { who: "Priya", tone: "a5", time: "8:40 am", text: "Anyone tried a founding-member price? Thinking 30 seats at half price.", replies: "3 replies · last 20 min ago" },
 ];
 
 const WINS: Array<Message | string> = [
+  "Monday",
+  { who: "Hana", tone: "a3", time: "11:20 am", text: "Sold my first template bundle. Only $19 but it's a start.", reactions: ["🎉 11"] },
+  { who: "Omar", tone: "a5", time: "2:45 pm", text: "Ten people on my waitlist after one post. Doing the ten DMs thing tomorrow.", reactions: ["🔥 4"] },
   "Yesterday",
   { who: "Rashid", tone: "a5", time: "4:18 pm", text: "First paid member came in today. Forty-nine dollars never felt so good.", reactions: ["🎉 9"] },
   { who: "Sara", tone: "a6", time: "6:02 pm", text: "Ran my first live call with eleven people. Nobody left early, which I'm counting as a win." },
@@ -166,6 +187,7 @@ const WINS: Array<Message | string> = [
   { who: "Guide", tone: "guide", guide: true, time: "8:53 am", text: "I've saved Jon's invitation to Knowledge, with his numbers. Two members asked for exactly this last week.",
     note: { title: "Invitations that work", id: "note:invite" } },
   { who: "Maya", tone: "a4", time: "9:12 am", text: "Sending my first ten today. Wish me luck.", reactions: ["🚀 3"] },
+  { who: "Dev", tone: "a1", time: "9:40 am", text: "First $49 sale this morning. The pricing answer from last night did it.", reactions: ["🎉 7", "🙌 3"] },
 ];
 
 function Feed(props: { items: Array<Message | string>; onNote: (id: string) => void }) {
@@ -333,12 +355,16 @@ function learnedWhen(iso: string, now: number): string {
 }
 
 // The panels' brain part, as the app draws it: the small map, the count, the latest names, Open.
-function BrainPart(props: { map: BrainMap; now: number; onOpen: () => void }) {
+function BrainPart(props: { map: BrainMap; now: number; onOpen?: () => void; label?: string }) {
   return (
-    <PanelPart label="The community brain" action={<PanelAction onClick={props.onOpen}>Open</PanelAction>}>
-      <button type="button" className={cx("brainmini")} onClick={props.onOpen} aria-label="Open the community brain">
-        <KitBrainMap map={props.map} size="panel" now={props.now} />
-      </button>
+    <PanelPart label={props.label ?? "The community brain"} action={props.onOpen ? <PanelAction onClick={props.onOpen}>Open</PanelAction> : null}>
+      {props.onOpen ? (
+        <button type="button" className={cx("brainmini")} onClick={props.onOpen} aria-label="Open the community brain">
+          <KitBrainMap map={props.map} size="panel" now={props.now} />
+        </button>
+      ) : (
+        <div className={cx("brainmini")}><KitBrainMap map={props.map} size="panel" now={props.now} /></div>
+      )}
       {brainFact(props.map) ? <span className={cx("braincap")}>{brainFact(props.map)}</span> : null}
       {latestLearned(props.map, 2).map((note) => <PanelLearned key={note.id} title={note.title} when={learnedWhen(note.at, props.now)} />)}
     </PanelPart>
@@ -355,6 +381,44 @@ function pickedWords(map: BrainMap, id: string | null): { title: string; where: 
   if (!point) return null;
   const where = point.at.kind === "subject" ? point.at.name : point.at.kind === "pod" ? "Launch pod" : "Learned from a lesson";
   return { title: point.title ?? "Learned", where: `Learned · ${where}`, say: "Saved from a conversation in the community. Members can find it, and the guide uses it in answers." };
+}
+
+// ---------- events ----------
+
+type PreviewEvent = { id: string; title: string; at: string; clock: string; place: string; online: boolean; weekly?: boolean; pod?: string; past?: boolean; say?: string };
+
+function at(now: number, days: number, hour: number): string {
+  const date = new Date(now + days * DAY);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
+}
+
+function clockOf(hour: number): string {
+  return hour === 12 ? "12:00 pm" : hour > 12 ? `${hour - 12}:00 pm` : `${hour}:00 am`;
+}
+
+export function EVENTS(now: number): { next: PreviewEvent; later: PreviewEvent[]; past: PreviewEvent[]; all: PreviewEvent[] } {
+  const next: PreviewEvent = { id: "e1", title: "Friday build call", at: at(now, 2, 10), clock: clockOf(10), place: "Zoom", online: true, weekly: true,
+    say: "Jon is sharing the invitation that took him past 100 members. Bring one thing you're stuck on." };
+  const later: PreviewEvent[] = [
+    { id: "e2", title: "Office hours", at: at(now, 4, 16), clock: clockOf(16), place: "Zoom", online: true, weekly: true, say: "Bring one question. Fifteen minutes each, first come first served." },
+    { id: "e3", title: "Launch pod call", at: at(now, 5, 18), clock: clockOf(18), place: "Zoom", online: true, weekly: true, pod: "Launch pod", say: "Checklist steps 4 to 6, and page reviews." },
+    { id: "e4", title: "Launch week kickoff", at: at(now, 9, 18), clock: clockOf(18), place: "The Build Club studio, London", online: false, say: "In person. Drinks, then everyone shares what they're launching." },
+  ];
+  const past: PreviewEvent[] = [
+    { id: "p1", title: "Friday build call", at: at(now, -5, 10), clock: clockOf(10), place: "Zoom", online: true, weekly: true, past: true },
+    { id: "p2", title: "Pricing teardown", at: at(now, -9, 17), clock: clockOf(17), place: "Zoom", online: true, past: true },
+  ];
+  return { next, later, past, all: [next, ...later, ...past] };
+}
+
+function eventTags(event: PreviewEvent): ReactNode {
+  return (
+    <>
+      {event.weekly ? <span className={cx("evtag")}><Repeat size={11} aria-hidden="true" />Every {new Date(event.at).toLocaleDateString("en-US", { weekday: "long" })}</span> : null}
+      {event.pod ? <span className={cx("evtag pod")}>{event.pod}</span> : null}
+    </>
+  );
 }
 
 // ---------- members ----------
@@ -399,12 +463,19 @@ const initials = (name: string) => name.split(" ").map((part) => part[0]).join("
 
 // ---------- pods ----------
 
-type Pod = { key: string; name: string; purpose: string; when: string; next: string; unread?: boolean; people: string[]; knows: Array<[string, string]>; feed: Array<Message | string> };
+type Pod = { key: string; name: string; purpose: string; when: string; next: string; unread?: boolean; people: string[];
+  knows: Array<[string, string]>;
+  // What the pod has learned, grouped by subject, for its own knowledge map.
+  learned: Array<[string, string, number]>;
+  feed: Array<Message | string> };
 export const PODS: Pod[] = [
   { key: "launch", name: "Launch pod", unread: true, when: "6 weeks", next: "Thu 6:00 pm",
     purpose: "Six builders launching their first paid offer by December, with a weekly call and a launch checklist.",
     people: ["Maya Chen", "Dev Patel", "Priya Shah", "Tom Alvarez", "Hana Sato", "Alex Rivera"],
     knows: [["Launch pod's weekly plan", "2 days ago"], ["Launch post headlines that worked", "3 days ago"]],
+    learned: [["Launch pod's weekly plan", "Plan", 2], ["The launch checklist", "Plan", 9], ["Who reviews whose page", "Plan", 1],
+      ["Launch post headlines that worked", "Launch post", 3], ["Result first, then who it's for", "Launch post", 0], ["Post on a Tuesday morning", "Launch post", 12],
+      ["What goes on a one-page offer", "Offer page", 5], ["One price on the page", "Offer page", 4]],
     feed: [
       "Today",
       { who: "Maya", tone: "a4", time: "8:15 am", text: "Checklist done up to step 4. Landing page is live, writing the launch post tonight." , reactions: ["🔥 3"] },
@@ -412,19 +483,48 @@ export const PODS: Pod[] = [
       { who: "Guide", tone: "guide", guide: true, time: "8:32 am", text: "Three headlines that worked for members here are saved in the pod's notes. The pattern: the result, then who it's for.",
         note: { title: "Launch post headlines that worked", id: "note:headline" } },
       { who: "Dev", tone: "a1", time: "9:02 am", text: "Booked Thursday's call. Bringing my numbers." },
+      { who: "Hana", tone: "a3", time: "9:20 am", text: "Can someone look at my one-page offer before Thursday?" },
+      { who: "Maya", tone: "a4", time: "9:24 am", text: "Send it over. I'll leave notes tonight." },
+      { who: "Guide", tone: "guide", guide: true, time: "9:25 am", text: "Hana, step 3 of the pod's checklist covers this. Three people here had theirs reviewed last week, and the notes are saved in the pod.",
+        note: { title: "What goes on a one-page offer", id: "note:onepage" } },
+      { who: "Tom", tone: "a1", time: "9:41 am", text: "Headline done: \"Get your first ten clients in 30 days, for freelance designers.\" Thoughts?", reactions: ["👍 4"] },
+      { who: "Priya", tone: "a5", time: "9:50 am", text: "Clear result and who it's for. Ship it." },
     ] },
   { key: "pricing", name: "Pricing circle", when: "ongoing", next: "Tue 7:00 pm",
     purpose: "A small group that reviews each other's prices before they go live.",
     people: ["Priya Shah", "Jon Park", "Sara Lind", "Alex Rivera"],
     knows: [["Founding-member pricing", "yesterday"], ["One price beats three tiers at the start", "12 days ago"]],
+    learned: [["Founding-member pricing", "Pricing", 1], ["One price beats three tiers at the start", "Pricing", 12], ["Lead with the yearly price", "Pricing", 0],
+      ["Raise it after the first ten", "Raising prices", 6], ["Tell members before a rise", "Raising prices", 20], ["How the circle reviews a price", "The circle", 30]],
     feed: [
       "Yesterday",
       { who: "Priya", tone: "a5", time: "5:40 pm", text: "Thinking $490 a year with 30 founding seats at half. Too low?" },
       { who: "Jon", tone: "a1", time: "6:05 pm", text: "Not too low for founders. Raise it once the seats are gone, like I did." , reactions: ["🙌 2"] },
-      { who: "Guide", tone: "guide", guide: true, time: "6:06 am", text: "Saved as \"Founding-member pricing\" for the circle, with Jon's numbers.",
+      { who: "Guide", tone: "guide", guide: true, time: "6:06 pm", text: "Saved as \"Founding-member pricing\" for the circle, with Jon's numbers.",
         note: { title: "Founding-member pricing", id: "note:founding" } },
+      "Today",
+      { who: "Sara", tone: "a6", time: "7:30 am", text: "My turn. $29 a month or $290 a year for a weekly feedback call?" },
+      { who: "Jon", tone: "a1", time: "7:44 am", text: "Lead with the year. Most people in my group took it once it was the default." },
+      { who: "Priya", tone: "a5", time: "7:52 am", text: "Agree. And keep one price on the page, not both side by side." },
+      { who: "Sara", tone: "a6", time: "8:05 am", text: "Done. Going live with $290 a year at Tuesday's call.", reactions: ["🙌 3"] },
     ] },
 ];
+
+// A pod's own knowledge, as its panel draws it: the pod at the centre, what
+// it learned around it in subjects.
+export function podBrain(pod: Pod, now: number): BrainMap {
+  const points: BrainPoint[] = pod.learned.map(([title, subject, daysAgo], index) => ({
+    id: `note:${pod.key}-${index}`, title, kind: "learned", at: { kind: "subject", name: subject },
+    learned_at: new Date(now - daysAgo * DAY).toISOString(), fresh: daysAgo <= 7, use: 0, mine: false,
+  }));
+  const subjects = [...new Set(pod.learned.map(([, subject]) => subject))].map((name) => ({
+    name, first_at: new Date(now - 30 * DAY).toISOString(), size: pod.learned.filter(([, subject]) => subject === name).length,
+  }));
+  return {
+    center: { name: pod.name, kind: "pod" }, can_manage: true, courses: [], pods: [], arcs: [], hidden: {}, subjects, points,
+    counts: { courses: 0, lessons: 0, learned: points.length, this_week: points.filter((point) => point.fresh).length },
+  };
+}
 
 // ---------- the frame ----------
 
@@ -547,9 +647,7 @@ export function RealAppPreview() {
           <PanelPart label="Next call" fact="every week">
             <PanelNext title={pod.next} sub={`${pod.name} call`} />
           </PanelPart>
-          <PanelPart label="What this pod knows" fact={String(pod.knows.length)}>
-            {pod.knows.map(([title, when]) => <PanelLearned key={title} title={title} when={when} />)}
-          </PanelPart>
+          <BrainPart label="What this pod knows" map={podBrain(pod, now)} now={now} />
           <PanelPart label="In this pod" fact={String(pod.people.length)}>
             <PanelPeople names={pod.people} max={4} />
           </PanelPart>
@@ -582,12 +680,30 @@ export function RealAppPreview() {
       );
     }
     if (page === "events") {
+      const picked = EVENTS(now).all.find((event) => event.id === state.event);
+      if (!picked) return null;
       return (
-        <KitApp view="events" part="rail"><Rail index={4} label="This event">
-          <PanelPart label="Friday build call" fact="weekly">
-            <PanelLine>Fridays, 10:00 am</PanelLine>
-            <PanelLine dim>Jon is sharing the invitation that took him past 100 members. What's learned is saved to Knowledge afterwards.</PanelLine>
-          </PanelPart>
+        <KitApp view="events" host part="rail" className="kit-page-rail"><Rail index={4} label="This event">
+          <div className={cx("evp")}>
+            <button type="button" className={cx("evp-x")} aria-label="Close" onClick={() => dispatch({ type: "event", id: null })}><X size={16} strokeWidth={1.8} aria-hidden="true" /></button>
+            <header>
+              <span className={cx("lab")}>{picked.past ? "Past" : eventDayWord(picked.at, now)}</span>
+              <h2>{picked.title}</h2>
+              <p className={cx("evp-when")}>{eventDayWord(picked.at, now)} · {picked.clock} your time</p>
+              <div className={cx("evp-tags")}>{eventTags(picked)}</div>
+            </header>
+            <PanelPart label="Where"><div className={cx("ln")}>{picked.online ? <Video size={14} aria-hidden="true" /> : <MapPin size={14} aria-hidden="true" />}<span className={cx("t")}>{picked.place}</span></div></PanelPart>
+            {picked.say ? <PanelPart label="What to know"><p className={cx("evp-say")}>{picked.say}</p></PanelPart> : null}
+            <PanelPart label="Who sees it"><div className={cx("ln")}><span className={cx("t")}>{picked.pod ? `Only people in ${picked.pod}` : `Everyone in ${PREVIEW_COMMUNITY}`}</span></div></PanelPart>
+            {picked.past ? null : (
+              <div className={cx("evp-foot")}>
+                {picked.online ? <span className={cx("btn go")}>Join when it starts</span> : null}
+                <span className={cx(picked.online ? "btn" : "btn go")}><CalendarPlus size={15} aria-hidden="true" />Add to calendar</span>
+                <div className={cx("two")}><span className={cx("btn")}>Edit</span><span className={cx("btn no")}>Cancel event</span></div>
+                <span className={cx("evp-note")}>A reminder email goes out the day before.</span>
+              </div>
+            )}
+          </div>
         </Rail></KitApp>
       );
     }
@@ -693,7 +809,7 @@ export function RealAppPreview() {
         const pod = PODS.find((entry) => entry.key === state.pod) ?? PODS[0];
         return (
           <div className="rpw-channel">
-            <div className="rpw-feed">
+            <div className="rpw-feed" ref={(node) => { if (node) node.scrollTop = node.scrollHeight; }} key={pod.key}>
               <KitApp view="wins" part="flow"><Feed items={pod.feed} onNote={(id) => go("brain", id)} /></KitApp>
             </div>
             <div className="rpw-dock"><Composer value="" placeholder={`Message ${pod.name}`} sent={false} /></div>
@@ -731,24 +847,64 @@ export function RealAppPreview() {
             </KitApp>
           </div>
         );
-      case "events":
+      case "events": {
+        const { next, later, past } = EVENTS(now);
+        const block = eventDateBlock(next.at, false);
+        const row = (event: PreviewEvent) => {
+          const day = eventDateBlock(event.at, Boolean(event.past));
+          return (
+            <button key={event.id} type="button" className={cx("evrow", state.event === event.id && "on")} aria-pressed={state.event === event.id}
+              onClick={() => { track("event_pick"); dispatch({ type: "event", id: event.id }); }}>
+              <span className={cx(event.past ? "evday sm past" : "evday sm")}><b>{day.number}</b><span>{day.word}</span></span>
+              <span className={cx("evrow-t")}>
+                <b>{event.title}{eventTags(event)}</b>
+                <small>{[event.past ? null : eventDayWord(event.at, now), event.clock, event.place].filter(Boolean).join(" · ")}</small>
+              </span>
+              <ChevronRight size={15} strokeWidth={1.8} aria-hidden="true" className={cx("evrow-go")} />
+            </button>
+          );
+        };
         return (
           <div className="rpw-page">
-            <KitApp view="events" part="flow" host>
-              <div className={cx("card")} style={{ marginTop: 0, maxWidth: "none" }}>
-                <div className={cx("meta")}><span className={cx("livepill")}><i />Friday</span><span>10:00 am · every week</span></div>
-                <h2>Friday build call</h2>
-                <p className={cx("say")}>Jon is sharing the invitation that took him past 100 members. I'll save what's learned to Knowledge afterwards.</p>
-                <div className={cx("acts")}><Btn go>Join when it starts</Btn><Btn>Add to calendar</Btn></div>
-              </div>
-              <span className={cx("lab")} style={{ display: "block", marginTop: 32 }}>Coming up</span>
-              <div className="rpw-events">
-                <div><b>Office hours</b><span>Tuesday · 4:00 pm · bring one question</span></div>
-                <div><b>Launch week kickoff</b><span>Dec 2 · 6:00 pm · Launch pod</span></div>
+            <KitApp view="events" host part="flow">
+              <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
+                <div className={cx("evtop")}>
+                  <div>
+                    <p className={cx("evlead")}>{later.length + 1} coming up.</p>
+                    <p className={cx("sub")} style={{ margin: "4px 0 0" }}>Times are in your time zone.</p>
+                  </div>
+                  <span className={cx("btn go")}><Plus size={14} aria-hidden="true" />Add an event</span>
+                </div>
+                <span className={cx("lab")} style={{ display: "block", marginTop: 28 }}>Next</span>
+                <div className={cx("evnext", state.event === next.id && "on")}>
+                  <span className={cx("evday")}><b>{block.number}</b><span>{block.word}</span></span>
+                  <div>
+                    <span className={cx("evsoon")}><i />In 2 days</span>
+                    <h2>{next.title}{eventTags(next)}</h2>
+                    <p className={cx("evnext-when")}>{eventDayWord(next.at, now)} · {next.clock} your time</p>
+                    <p className={cx("evnext-where")}><Video size={14} aria-hidden="true" />{next.place}</p>
+                    <p className={cx("evnext-say")}>{next.say}</p>
+                    <div className={cx("evnext-acts")}>
+                      <span className={cx("btn go")}>Join when it starts</span>
+                      <span className={cx("btn")}><CalendarPlus size={15} aria-hidden="true" />Add to calendar</span>
+                      <Btn onClick={() => { track("event_details"); dispatch({ type: "event", id: next.id }); }}>Details</Btn>
+                    </div>
+                  </div>
+                </div>
+                <span className={cx("evsect")}><span className={cx("lab")}>Later</span><em>{later.length}</em></span>
+                <div className={cx("evrows")}>{later.map(row)}</div>
+                <span className={cx("evsect")}>
+                  <span className={cx("lab")}>Past</span><em>{past.length}</em>
+                  <button type="button" className={cx("evmore")} aria-expanded={state.pastOpen} onClick={() => dispatch({ type: "past" })}>
+                    {state.pastOpen ? "Hide" : "Show"}<ChevronDown size={14} aria-hidden="true" style={state.pastOpen ? { transform: "rotate(180deg)" } : undefined} />
+                  </button>
+                </span>
+                {state.pastOpen ? <div className={cx("evrows")}>{past.map(row)}</div> : null}
               </div>
             </KitApp>
           </div>
         );
+      }
       case "members":
         return (
           <div className="rpw-page">
@@ -790,7 +946,9 @@ export function RealAppPreview() {
 
   return (
     <div ref={ref} className={played ? "rp played" : "rp"} style={{ height: DESIGN_HEIGHT * scale }}
-      role="region" aria-label={`A working preview of Polynet, in a made-up community called ${PREVIEW_COMMUNITY}`}>
+      role="region" aria-label={`A working preview of Polynet, in a made-up community called ${PREVIEW_COMMUNITY}`}
+      // The map's wheel zoom would hold the page still; in the preview the wheel always scrolls.
+      onWheelCapture={(event) => { if ((event.target as Element).closest?.("svg")) event.stopPropagation(); }}>
       <div className="rp-stage rpw" style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT, zoom: scale }}>
         <aside className="rpw-nav" aria-label="Community">
           <div className="rpw-cover">

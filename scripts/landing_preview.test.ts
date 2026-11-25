@@ -70,3 +70,25 @@ test("pods are always listed, and each opens its own room", () => {
   const html = renderToStaticMarkup(React.createElement(RealAppPreview));
   for (const pod of PODS) expect(html).toContain(pod.name);
 });
+
+test("Events reads like the app's: next, later and past, and a picked event fills the right column", () => {
+  const { EVENTS } = previewModule;
+  const events = EVENTS(Date.now());
+  expect(events.later.length).toBeGreaterThan(1);
+  expect(events.past.every((event: { past?: boolean }) => event.past)).toBe(true);
+  const picked = run({ type: "open", page: "events" }, { type: "event", id: events.next.id });
+  expect(picked.event).toBe(events.next.id);
+  // Picking it again closes it; leaving Events clears it.
+  expect(previewReducer(picked, { type: "event", id: events.next.id }).event).toBeNull();
+  expect(previewReducer(picked, { type: "open", page: "home" }).event).toBeNull();
+});
+
+test("every pod has its own knowledge map with the pod at the centre", () => {
+  const { PODS, podBrain } = previewModule;
+  for (const pod of PODS) {
+    const map = podBrain(pod, Date.now());
+    expect(map.center).toEqual({ name: pod.name, kind: "pod" });
+    expect(map.points.length).toBeGreaterThanOrEqual(5);
+    expect(map.subjects.length).toBeGreaterThan(1);
+  }
+});
