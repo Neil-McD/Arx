@@ -1,98 +1,131 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { BarChart2, Boxes, CalendarDays, ChevronDown, ChevronRight, Hash, House, Inbox, Library, Plus, Search, UserPlus, Users } from "lucide-react";
 
 import type { BrainAttach, BrainMap, BrainPoint } from "../../../../../shared/communityBrain";
+import { brainFact, latestLearned } from "../../../../../shared/communityBrain";
 import type { MemberTableRow } from "../../../../../shared/communityMembersTable";
 import { memberKey } from "../../../../../shared/communityMembersTable";
+import type { ReplyDraftView } from "../../../../../shared/communityReplyDrafts";
+import type { MemberCoachDraftView } from "../../../../../shared/communityMemberCoachTypes";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 import {
-  Btn, Card, Chips, Cover, Dock, Eyebrow, Figs, Foot, Group, Hello, HomeBody, Icon, KitApp, Main, Me, Mine, NavRow, Rail, Sec, Sep,
-  Side, Since, SinceItem, Spacer, Talk, Theirs, Top, View, cx, type KitView,
+  Btn, Chips, Cover, Dock, Eyebrow, Hello, HomeBody, Icon, KitApp, Main, Mine, Rail, Scroll, Talk, TextLink, Theirs, cx,
 } from "../../v1/kit";
 import { KitBrainMap } from "../../v1/KitBrainMap";
-import { MembersTable, MembersToolbar } from "../../v1/KitMembersTable";
+import { GuideSuggests } from "../../v1/KitGuideSuggests";
+import { JoinRequestsLine, MembersTable, MembersToolbar } from "../../v1/KitMembersTable";
+import { NeedsYou, type HomeThing } from "../../v1/KitNeedsYou";
+import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "../../v1/KitPanel";
 
-// The home page's product preview: the real app, drawn by the app's own kit,
+// The home page's product preview: Polynet as it is today, drawn with the
+// app's own pieces (the frame and left column copied from the app's styles),
 // in a made-up community (The Build Club) with made-up people. Every click
-// moves a fixed script; nothing is sent anywhere. It shows only what Polynet
-// does today: the morning brief and a check-in waiting for your yes, the
-// guide answering from your courses, the community brain, members, events.
+// moves a fixed script; nothing is sent anywhere. Only what Polynet does today.
 
-export type PreviewPage = "home" | "inbox" | "general" | "wins" | "know" | "events" | "members";
+export type PreviewPage = "home" | "inbox" | "general" | "wins" | "know" | "brain" | "events" | "members";
 
 export type PreviewState = {
   page: PreviewPage;
-  draftOpen: boolean;
-  joshCheckedIn: boolean;
+  /** Join requests still waiting (ids). */
+  waiting: string[];
+  /** The guide's drafts on Home: still waiting, sent, or skipped (skipping sends nothing). */
+  replyDraft: DraftState;
+  checkIn: DraftState;
   /** The visitor sent the question waiting in #general's message box. */
   asked: boolean;
   answered: boolean;
-  /** The question chip the visitor pressed on Home, if any. */
   talk: string | null;
-  /** The member open in Members' side panel. */
   member: string | null;
-  /** What's picked on the brain map. */
   picked: string | null;
+  podsOpen: boolean;
 };
+
+export type DraftState = "waiting" | "sent" | "skipped";
 
 export type PreviewAction =
   | { type: "open"; page: PreviewPage; picked?: string | null }
-  | { type: "review" }
-  | { type: "skip" }
-  | { type: "send" }
+  | { type: "approve"; id: string }
+  | { type: "decline"; id: string }
+  | { type: "post_reply" }
+  | { type: "skip_reply" }
+  | { type: "send_check_in" }
+  | { type: "skip_check_in" }
   | { type: "ask" }
   | { type: "answer" }
   | { type: "talk"; chip: string | null }
   | { type: "member"; key: string | null }
-  | { type: "pick"; id: string | null };
+  | { type: "pick"; id: string | null }
+  | { type: "pods" };
 
 export const INITIAL_PREVIEW: PreviewState = {
-  page: "home", draftOpen: false, joshCheckedIn: false, asked: false, answered: false, talk: null, member: null, picked: null,
+  page: "home", waiting: ["r1", "r2"], replyDraft: "waiting", checkIn: "waiting", asked: false, answered: false,
+  talk: null, member: null, picked: null, podsOpen: false,
 };
 
 export function previewReducer(state: PreviewState, action: PreviewAction): PreviewState {
   switch (action.type) {
     case "open":
-      return { ...state, page: action.page, talk: null, draftOpen: false, member: action.page === "members" ? state.member : null,
-        picked: action.picked !== undefined ? action.picked : action.page === "know" ? state.picked : null };
-    case "review":
-      return state.joshCheckedIn ? state : { ...state, draftOpen: true, talk: null };
-    case "skip":
-      return { ...state, draftOpen: false };
-    case "send":
-      return state.draftOpen ? { ...state, draftOpen: false, joshCheckedIn: true } : state;
+      return { ...state, page: action.page, talk: null, member: action.page === "members" ? state.member : null,
+        picked: action.picked !== undefined ? action.picked : action.page === "brain" ? state.picked : null };
+    case "approve":
+    case "decline":
+      return { ...state, waiting: state.waiting.filter((id) => id !== action.id) };
+    case "post_reply":
+      return state.replyDraft === "waiting" ? { ...state, replyDraft: "sent" } : state;
+    case "skip_reply":
+      return state.replyDraft === "waiting" ? { ...state, replyDraft: "skipped" } : state;
+    case "send_check_in":
+      return state.checkIn === "waiting" ? { ...state, checkIn: "sent" } : state;
+    case "skip_check_in":
+      return state.checkIn === "waiting" ? { ...state, checkIn: "skipped" } : state;
     case "ask":
       return state.asked ? state : { ...state, asked: true };
     case "answer":
       return state.asked ? { ...state, answered: true } : state;
     case "talk":
-      return { ...state, talk: action.chip, draftOpen: false };
+      return { ...state, talk: action.chip };
     case "member":
-      return { ...state, member: action.key, draftOpen: false };
+      return { ...state, member: action.key };
     case "pick":
       return { ...state, picked: action.id };
+    case "pods":
+      return { ...state, podsOpen: !state.podsOpen };
   }
 }
 
 export const PREVIEW_COMMUNITY = "The Build Club";
 const BANNER = "/design-lab/polynet-earth.webp";
 
-// The kit names a page by the mock's view; the two channels share its channel view.
-const KIT_VIEW: Record<PreviewPage, KitView> = {
-  home: "home", inbox: "inbox", general: "wins", wins: "wins", know: "know", events: "events", members: "members",
+const JOIN_REQUESTS = [
+  { id: "r1", userId: "x1", displayName: "Kai Tanaka", avatarUrl: null, message: "I sell templates for freelancers. Want to turn it into a course.", createdAtLabel: "2 hours ago" },
+  { id: "r2", userId: "x2", displayName: "Rosa Lind", avatarUrl: null, message: null, createdAtLabel: "Yesterday" },
+];
+
+const REPLY_DRAFT: ReplyDraftView = {
+  id: "d1", author: "Priya", channel: "general", hours_waiting: 3,
+  question: "Anyone tried a founding-member price?",
+  text: "Yes. Three members did this in Start here's pricing lesson: 30 seats at half price, then the full price once they're gone. The note \"Founding-member pricing\" in Knowledge has their numbers.",
+  source: "Pricing your first offer",
 };
 
-const CHECK_IN_DRAFT =
+export const CHECK_IN_TEXT =
   "Hey Josh, we've missed you on the last two calls. Friday's call covers pricing, the thing you asked about in your first week. Hope to see you there.";
+
+const CHECK_IN: MemberCoachDraftView = {
+  id: "c1", member_name: "Josh Reed", member_handle: "josh-reed", reason: "quiet_member" as MemberCoachDraftView["reason"],
+  reason_label: "Quiet member", signal_summary: "Quiet for 25 days and missed the last two calls.",
+  text: CHECK_IN_TEXT, created_at: new Date().toISOString(),
+};
 
 export const QUESTION = "@guide where's the lesson on finding your first customers?";
 export const GUIDE_REPLY =
   "It's Lesson 4 of Start here, \"Your first ten customers\". The short version: start with people who already asked you for help, then ask each one who else has the same problem.";
 
-// What the guide says when a question chip on Home is pressed.
+// The live app's chips on Home, and what the guide says to each.
 export const CHIP_ANSWERS: Record<string, string> = {
   "How was this week?": "Busy. 132 people were active, three joined, and I answered 41 questions. Jon's invitation post was the most useful thing shared.",
-  "Who might leave?": "Josh. He's been quiet for 25 days and missed the last two calls. I've drafted a check-in for you, it's at the top of Home.",
-  "Draft Friday's agenda": "1. Jon's three-line invitation, with his numbers. 2. Pricing your first offer, since four people asked this week. 3. Wins from the week.",
+  "Who is at risk of leaving?": "Josh. He's been quiet for 25 days and missed the last two calls. I've drafted a check-in for you, it's under Your guide suggests.",
+  "Who should I welcome?": "Lena joined yesterday and said hello in #general. Kai and Rosa are waiting to join, so you could welcome them once you let them in.",
 };
 
 function track(action: string) {
@@ -103,7 +136,7 @@ function lessMotion() {
   return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 }
 
-// ---------- a channel, drawn the way the app's mock draws one ----------
+// ---------- a channel, in the app's message style ----------
 
 type Message = {
   who: string; tone: string; time: string; text: ReactNode; host?: boolean; guide?: boolean;
@@ -134,7 +167,7 @@ const WINS: Array<Message | string> = [
   { who: "Maya", tone: "a4", time: "9:12 am", text: "Sending my first ten today. Wish me luck.", reactions: ["🚀 3"] },
 ];
 
-function Feed(props: { items: Array<Message | string>; onNote: (id: string) => void; extra?: ReactNode }) {
+function Feed(props: { items: Array<Message | string>; onNote: (id: string) => void }) {
   return (
     <div className={cx("feed")}>
       {props.items.map((item, index) => typeof item === "string" ? <div key={index} className={cx("day")}>{item}</div> : (
@@ -161,29 +194,31 @@ function Feed(props: { items: Array<Message | string>; onNote: (id: string) => v
           </div>
         </div>
       ))}
-      {props.extra}
     </div>
   );
 }
 
-function AskBox(props: { value: string; placeholder: string; disabled: boolean; glow: boolean; onSend: () => void }) {
+function Composer(props: { value: string; placeholder: string; sent: boolean; glow?: boolean; onSend?: () => void }) {
   return (
-    <form className={cx("ask")} onSubmit={(event) => { event.preventDefault(); if (!props.disabled) props.onSend(); }}>
-      <input type="text" readOnly value={props.disabled ? "" : props.value} placeholder={props.placeholder} aria-label={props.placeholder} />
-      <button type="submit" className={[cx("send"), props.glow ? "rp-glow" : ""].join(" ")} aria-label="Send" disabled={props.disabled}><Icon name="up" /></button>
+    <form className="rpw-composer" onSubmit={(event) => { event.preventDefault(); if (!props.sent) props.onSend?.(); }}>
+      <input type="text" readOnly value={props.sent ? "" : props.value} placeholder={props.placeholder} aria-label={props.placeholder} />
+      <span className="rpw-composer-tools" aria-hidden="true"><Plus size={15} /><span>@</span><Icon name="mic" /></span>
+      <button type="submit" className={props.glow && !props.sent ? "rpw-send rp-glow" : "rpw-send"} aria-label="Send" disabled={props.sent || !props.onSend}><Icon name="up" /></button>
     </form>
   );
 }
 
-function GeneralPage(props: { state: PreviewState; dispatch: (action: PreviewAction) => void }) {
+function ChannelPage(props: { state: PreviewState; dispatch: (action: PreviewAction) => void; slug: "general" | "wins" }) {
   const { state, dispatch } = props;
   const words = GUIDE_REPLY.split(" ");
   const [shown, setShown] = useState(0);
+  const feed = useRef<HTMLDivElement | null>(null);
+  const general = props.slug === "general";
   useEffect(() => {
-    if (!state.asked || state.answered) return;
+    if (!general || !state.asked || state.answered) return;
     const thinking = window.setTimeout(() => dispatch({ type: "answer" }), lessMotion() ? 0 : 900);
     return () => window.clearTimeout(thinking);
-  }, [state.asked, state.answered, dispatch]);
+  }, [general, state.asked, state.answered, dispatch]);
   useEffect(() => {
     if (!state.answered) return;
     if (lessMotion()) { setShown(words.length); return; }
@@ -191,28 +226,35 @@ function GeneralPage(props: { state: PreviewState; dispatch: (action: PreviewAct
     const next = window.setTimeout(() => setShown((count) => count + 1), 40);
     return () => window.clearTimeout(next);
   }, [state.answered, shown, words.length]);
-  const typing = state.answered && shown < words.length;
-  const feed = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const node = feed.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [state.asked, state.answered, shown]);
-  const mine: Array<Message | string> = state.asked ? [
-    { who: "You", tone: "a2", host: true, time: "now", text: <><span className={cx("at")}>@guide</span> where's the lesson on finding your first customers?</> },
-    { who: "Guide", tone: "guide", guide: true, time: "now",
-      text: state.answered ? <>{words.slice(0, shown).join(" ")}{typing ? <span className="rp-caret" aria-hidden="true" /> : null}</> : <span className="rp-thinking">Looking through your courses…</span>,
-      note: state.answered && !typing ? { title: "Your first ten customers", id: "resource:first10" } : undefined },
+  }, [props.slug, state.asked, state.answered, shown, state.replyDraft]);
+  const typing = state.answered && shown < words.length;
+  const extra: Array<Message | string> = general ? [
+    ...(state.replyDraft !== "sent" ? [] : [{ who: "Guide", tone: "guide", guide: true, time: "now", text: REPLY_DRAFT.text, note: { title: "Founding-member pricing", id: "note:founding" } } as Message]),
+    ...(state.asked ? [
+      { who: "You", tone: "a2", host: true, time: "now", text: <><span className={cx("at")}>@guide</span> where's the lesson on finding your first customers?</> } as Message,
+      { who: "Guide", tone: "guide", guide: true, time: "now",
+        text: state.answered ? <>{words.slice(0, shown).join(" ")}{typing ? <span className="rp-caret" aria-hidden="true" /> : null}</> : <span className="rp-thinking">Looking through your courses…</span>,
+        note: state.answered && !typing ? { title: "Your first ten customers", id: "resource:first10" } : undefined } as Message,
+    ] : []),
   ] : [];
   return (
-    <>
-      <div className="rp-scroll" aria-live="polite" ref={feed}>
-        <Feed items={[...GENERAL, ...mine]} onNote={(id) => dispatch({ type: "open", page: "know", picked: id })} />
+    <div className="rpw-channel">
+      <div className="rpw-feed" ref={feed} aria-live="polite">
+        <KitApp view="wins" part="flow">
+          <Feed items={[...(general ? GENERAL : WINS), ...extra]} onNote={(id) => dispatch({ type: "open", page: "brain", picked: id })} />
+        </KitApp>
       </div>
-      <Dock>
-        <AskBox value={QUESTION} placeholder="Message #general" disabled={state.asked} glow={!state.asked}
-          onSend={() => { track("guide_asked"); dispatch({ type: "ask" }); }} />
-      </Dock>
-    </>
+      <div className="rpw-dock">
+        {general ? (
+          <Composer value={QUESTION} placeholder="Message #general" sent={state.asked} glow onSend={() => { track("guide_asked"); dispatch({ type: "ask" }); }} />
+        ) : (
+          <Composer value="" placeholder="Message #wins" sent={false} />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -284,6 +326,24 @@ export function buildClubBrain(now: number): BrainMap {
   return map;
 }
 
+function learnedWhen(iso: string, now: number): string {
+  const days = Math.floor((now - Date.parse(iso)) / DAY);
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+// The panels' brain part, as the app draws it: the small map, the count, the latest names, Open.
+function BrainPart(props: { map: BrainMap; now: number; onOpen: () => void }) {
+  return (
+    <PanelPart label="The community brain" action={<PanelAction onClick={props.onOpen}>Open</PanelAction>}>
+      <button type="button" className={cx("brainmini")} onClick={props.onOpen} aria-label="Open the community brain">
+        <KitBrainMap map={props.map} size="panel" now={props.now} />
+      </button>
+      {brainFact(props.map) ? <span className={cx("braincap")}>{brainFact(props.map)}</span> : null}
+      {latestLearned(props.map, 2).map((note) => <PanelLearned key={note.id} title={note.title} when={learnedWhen(note.at, props.now)} />)}
+    </PanelPart>
+  );
+}
+
 function pickedWords(map: BrainMap, id: string | null): { title: string; where: string; say: string } | null {
   if (!id) return null;
   for (const course of map.courses) {
@@ -334,49 +394,7 @@ function dayFor(iso: string | null): string | null {
 const colour = (id: string) => `hsl(${(id.charCodeAt(1) * 47) % 360} 35% 38%)`;
 const initials = (name: string) => name.split(" ").map((part) => part[0]).join("").slice(0, 2);
 
-// ---------- the check-in Chief of Staff drafted ----------
-
-function CheckInCard(props: { state: PreviewState; dispatch: (action: PreviewAction) => void; where: string }) {
-  const { state, dispatch } = props;
-  const [text, setText] = useState(CHECK_IN_DRAFT);
-  if (state.joshCheckedIn) {
-    return <SinceItem kind="Sent" title="Checked in with Josh" detail="Just now · his reply will land in Inbox" still />;
-  }
-  return (
-    <Card label="Needs you" note="Drafted at 7:02 am" title="Check in with Josh"
-      say="Quiet for 25 days and missed the last two calls. Friday covers pricing, which he asked about in his first week.">
-      {state.draftOpen ? (
-        <div className="rp-draft">
-          <textarea aria-label="Check-in message to Josh" rows={3} value={text} onChange={(event) => setText(event.target.value)} />
-          <div className="rp-draft-acts">
-            <Btn go disabled={!text.trim()} onClick={() => { track(`check_in_sent_${props.where}`); dispatch({ type: "send" }); }}>Send to Josh</Btn>
-            <Btn txt onClick={() => dispatch({ type: "skip" })}>Not now</Btn>
-          </div>
-        </div>
-      ) : (
-        <span className="rp-acts">
-          <Btn go onClick={() => { track(`check_in_review_${props.where}`); dispatch({ type: "review" }); }}>Review the draft</Btn>
-        </span>
-      )}
-    </Card>
-  );
-}
-
-// ---------- the whole app ----------
-
-const TITLE_VIEW: Record<PreviewPage, number> = { home: 0, inbox: 3, general: 1, wins: 1, know: 2, events: 4, members: 5 };
-
-function pageTitle(page: PreviewPage, brain: BrainMap): ReactNode {
-  switch (page) {
-    case "home": return null;
-    case "inbox": return "Inbox";
-    case "general": return <># general <small>Say hello, ask anything</small></>;
-    case "wins": return <># wins <small>Share what worked</small></>;
-    case "know": return <>The community brain <small>{brain.counts.courses} courses · {brain.counts.lessons} lessons · {brain.counts.learned} learned · {brain.counts.this_week} this week</small></>;
-    case "events": return "Events";
-    case "members": return "Members";
-  }
-}
+// ---------- the frame ----------
 
 const DESIGN_WIDTH = 1280;
 const DESIGN_HEIGHT = 800;
@@ -387,8 +405,7 @@ function useFitScale() {
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-    // Fits the width; on a phone it stops shrinking and the right side is
-    // cut off at the edge, like a desktop screenshot.
+    // Fits the width; on a phone it stops shrinking and is cut off at the right edge.
     const fit = () => setScale(Math.max(0.6, Math.min(1, node.clientWidth / DESIGN_WIDTH)));
     fit();
     if (typeof ResizeObserver === "undefined") return;
@@ -398,6 +415,32 @@ function useFitScale() {
   }, []);
   return { ref, scale };
 }
+
+function NavRow(props: { icon: ReactNode; label: string; on?: boolean; hint?: string; count?: string; dot?: boolean; onClick?: () => void; chevron?: ReactNode }) {
+  const inner = (
+    <>
+      <span className="rpw-ic">{props.icon}</span>
+      <span className="rpw-label">{props.label}</span>
+      {props.chevron}
+      {props.count ? <span className="rpw-count">{props.count}</span> : null}
+      {props.hint ? <span className="rpw-hint">{props.hint}</span> : null}
+      {props.dot ? <span className="rpw-dot" aria-hidden="true" /> : null}
+    </>
+  );
+  return props.onClick
+    ? <button type="button" className={props.on ? "rpw-row on" : "rpw-row"} aria-current={props.on ? "page" : undefined} onClick={props.onClick}>{inner}</button>
+    : <div className="rpw-row">{inner}</div>;
+}
+
+const TITLES: Partial<Record<PreviewPage, ReactNode>> = {
+  home: "Home",
+  inbox: "Inbox",
+  general: <span className="rpw-ch"><Hash size={15} />general<ChevronDown size={13} /></span>,
+  wins: <span className="rpw-ch"><Hash size={15} />wins<ChevronDown size={13} /></span>,
+  know: "Knowledge",
+  events: "Events",
+  members: "Members",
+};
 
 export function RealAppPreview() {
   const [state, dispatch] = useReducer(previewReducer, INITIAL_PREVIEW);
@@ -418,168 +461,297 @@ export function RealAppPreview() {
   const go = (page: PreviewPage, picked?: string | null) => { track(`open_${page}`); dispatch({ type: "open", page, picked }); };
   const open = rows.find((row) => memberKey(row) === state.member) ?? null;
   const picked = pickedWords(brain, state.picked);
-  const channelRow = (page: "general" | "wins", label: string, extra: { unread?: boolean; dot?: boolean } = {}) => (
-    <NavRow icon="hash" label={label} view={state.page === page ? "wins" : undefined} {...extra} onClick={() => go(page)} />
-  );
-  return (
-    <div ref={ref} className={played ? "rp played" : "rp"} style={{ height: DESIGN_HEIGHT * scale }}
-      role="region" aria-label={`A working preview of Polynet, in a made-up community called ${PREVIEW_COMMUNITY}`}>
-      <div className="rp-stage" style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT, zoom: scale }}>
-        <KitApp view={KIT_VIEW[state.page]} host talking={state.page === "home" && Boolean(state.talk)} banner={BANNER} bannerPosition="72% 38%" aura={0.08} className="rp-app">
-          <Side>
-            <Cover name={PREVIEW_COMMUNITY} onSwitch={() => go("home")} />
-            <Spacer height={10} />
-            <NavRow icon="home" label="Home" view="home" onClick={() => go("home")} />
-            <NavRow icon="inbox" label="Inbox" view="inbox" hint="2" onClick={() => go("inbox")} />
-            <Group>Channels</Group>
-            {channelRow("general", "general")}
-            {channelRow("wins", "wins", { unread: true, dot: true })}
-            <Group>Community</Group>
-            <NavRow icon="stars" label="Knowledge" view="know" hint="4 new" onClick={() => go("know")} />
-            <NavRow icon="cal" label="Events" view="events" live="Fri" onClick={() => go("events")} />
-            <NavRow icon="users" label="Members" view="members" hint="214" onClick={() => go("members")} />
-            <Foot>
-              <Me name="You" role="Host" avatar="Y" tone="a2" />
-            </Foot>
-          </Side>
+  const page = state.page;
+  const things: HomeThing[] = [
+    { key: "sara", icon: "question", title: "Sara asked how you priced your founding tier", detail: "In Inbox · 1 hour ago", action: "Reply", strong: true, onAction: () => go("inbox") },
+  ];
+  const requests = JOIN_REQUESTS.filter((request) => state.waiting.includes(request.id));
 
-          <Main>
-            <Top title={pageTitle(state.page, brain)} titleView={TITLE_VIEW[state.page]} />
-            {/* Home: the morning brief and the one thing that needs you. */}
-            <View index={0}>
+  // The right column for each page, drawn as the app draws it.
+  const rail: ReactNode = (() => {
+    if (page === "home") {
+      return (
+        <KitApp view="home" host part="rail"><Rail index={0} label="The community today">
+          <PanelPart label="Next up" fact="Friday" action={<PanelAction onClick={() => go("events")}>All events</PanelAction>}>
+            <PanelNext title="Friday build call" sub="10:00 am · you're hosting" onClick={() => go("events")} />
+          </PanelPart>
+          <BrainPart map={brain} now={now} onOpen={() => go("brain")} />
+          <PanelPart label="Here" fact="214 members">
+            <PanelPeople names={["Maya Chen", "Dev Patel", "Priya Shah", "Jon Park", "Lena Novak", "Sara Lind"]} max={4} />
+            <PanelLine>3 joined this week</PanelLine>
+          </PanelPart>
+        </Rail></KitApp>
+      );
+    }
+    if (page === "general" || page === "wins") {
+      return (
+        <KitApp view="wins" part="rail"><Rail index={1} label="About this channel">
+          <PanelPart label="About"><p className={cx("chabout")}>{page === "general" ? "Say hello, ask anything. The guide answers when you tag it." : "Share what worked, big or small."}</p></PanelPart>
+          {page === "general" ? (
+            <PanelPart label="Pinned">
+              <div className={cx("chpin")}>
+                <span className={cx("chpin-by")}><b>You</b><em>2 weeks ago</em></span>
+                <strong className={cx("chpin-title")}>Start here</strong>
+                <div className={cx("chpin-body")}><p>New? Take the Start here course first. It's five short lessons and the guide can answer anything in it.</p></div>
+              </div>
+            </PanelPart>
+          ) : null}
+          <PanelPart label="Here" fact="214 members" action={<PanelAction onClick={() => go("members")}>Everyone</PanelAction>}>
+            <PanelPeople names={["Maya Chen", "Dev Patel", "Priya Shah", "Jon Park", "Lena Novak", "Sara Lind"]} max={5} />
+            <PanelLine>6 here now</PanelLine>
+          </PanelPart>
+        </Rail></KitApp>
+      );
+    }
+    if (page === "know") {
+      return (
+        <KitApp view="know" part="rail"><Rail index={2} label="Knowledge">
+          <PanelPart label="Waiting on an answer" fact="1">
+            <PanelLine action={<PanelAction onClick={() => go("general")}>Teach</PanelAction>}>How do I run a waitlist?</PanelLine>
+          </PanelPart>
+          <BrainPart map={brain} now={now} onOpen={() => go("brain")} />
+          <PanelPart label="Learning">
+            <PanelLine fact="38 started · 21 finished">Start here</PanelLine>
+            <PanelLine fact="12 started · 3 finished">Launch week</PanelLine>
+          </PanelPart>
+        </Rail></KitApp>
+      );
+    }
+    if (page === "brain") {
+      return (
+        <KitApp view="know" part="rail"><Rail index={2} label="Picked">
+          {picked ? (
+            <PanelPart label={picked.where}><p className={cx("chabout")}><b>{picked.title}</b></p><PanelLine dim>{picked.say}</PanelLine></PanelPart>
+          ) : (
+            <PanelPart label="The community brain"><PanelLine dim>Courses, lessons and what members learn from each other, kept and connected. Click anything on the map.</PanelLine></PanelPart>
+          )}
+        </Rail></KitApp>
+      );
+    }
+    if (page === "events") {
+      return (
+        <KitApp view="events" part="rail"><Rail index={4} label="This event">
+          <PanelPart label="Friday build call" fact="weekly">
+            <PanelLine>Fridays, 10:00 am</PanelLine>
+            <PanelLine dim>Jon is sharing the invitation that took him past 100 members. What's learned is saved to Knowledge afterwards.</PanelLine>
+          </PanelPart>
+        </Rail></KitApp>
+      );
+    }
+    if (page === "members" && open) {
+      const josh = open.user_id === JOSH;
+      return (
+        <KitApp view="members" part="rail"><Rail index={5} label="Member">
+          <div className="rpw-record-top"><button type="button" onClick={() => dispatch({ type: "member", key: null })}>← Members</button></div>
+          <PanelPart label={open.name}>
+            <PanelLine fact={open.plan.label}>Plan</PanelLine>
+            <PanelLine fact={dayFor(open.joined_at)}>Joined</PanelLine>
+            <PanelLine fact={timeFor(open.last_active_at, now)}>Last active</PanelLine>
+          </PanelPart>
+          {josh ? (
+            <PanelPart label="Journey · steers your guide">
+              <PanelLine dim>Quiet for 25 days. Asked about pricing in his first week.</PanelLine>
+              {state.checkIn === "waiting" ? <TextLink onClick={() => go("home")}>A check-in is drafted on Home</TextLink> : state.checkIn === "sent" ? <PanelLine>You checked in today.</PanelLine> : <PanelLine>You skipped the check-in for now.</PanelLine>}
+            </PanelPart>
+          ) : null}
+          <PanelPart label="Notes · only hosts see these">
+            <PanelLine dim>{josh ? "Wants to launch in January." : "No notes yet."}</PanelLine>
+          </PanelPart>
+        </Rail></KitApp>
+      );
+    }
+    if (page === "inbox") {
+      return (
+        <div className="rpw-convo">
+          <div className="rpw-convo-head"><b>Jon Park</b><span>Direct message</span></div>
+          <KitApp view="inbox" part="flow">
+            <div className="rpw-bubbles">
+              <div className="rpw-theirs"><span className={cx("av a1")}>J</span><p>Thanks for asking me to share on Friday.</p></div>
+              <Mine>Can't wait. Bring the numbers too.</Mine>
+              <div className="rpw-theirs"><span className={cx("av a1")}>J</span><p>Happy to share the full invitation sequence if you want it for Friday.</p></div>
+            </div>
+          </KitApp>
+          <Composer value="" placeholder="Reply to Jon" sent={false} />
+        </div>
+      );
+    }
+    return null;
+  })();
+
+  const main: ReactNode = (() => {
+    switch (page) {
+      case "home":
+        return (
+          <KitApp view="home" host talking={Boolean(state.talk)} part="main">
+            <Main>
+            <Scroll>
               {state.talk ? (
-                <div className="rp-talk">
+                <HomeBody>
                   <Talk>
                     <Mine>{state.talk}</Mine>
                     <Theirs><p>{CHIP_ANSWERS[state.talk]}</p></Theirs>
                   </Talk>
-                  <Btn txt onClick={() => dispatch({ type: "talk", chip: null })}>Back to the brief</Btn>
-                </div>
+                  <TextLink style={{ marginTop: 20 }} onClick={() => dispatch({ type: "talk", chip: null })}>Back to Home</TextLink>
+                </HomeBody>
               ) : (
-                <HomeBody hostOnly>
+                <HomeBody>
                   <Eyebrow community={PREVIEW_COMMUNITY} time="9:24 am" />
-                  <Hello greeting="Good morning." line={state.joshCheckedIn ? "You're all caught up. The community looked after itself overnight." : "One person needs you. Everything else is handled."} />
-                  <div className="rp-card"><CheckInCard state={state} dispatch={dispatch} where="home" /></div>
-                  <Since label="Since yesterday" style={{ marginTop: 28 }}>
-                    <SinceItem kind="Answered" learned title="I answered Dev's pricing question at 2:14 am" detail="From Start here, lesson 3 · he's going with $49" onOpen={() => go("general")} />
-                    <SinceItem kind="Saved" learned title="Jon's invitation is in Knowledge now" detail="Two members asked for exactly this last week" onOpen={() => go("know", "note:invite")} />
-                    <SinceItem kind="Joined" title="Lena joined and said hello" detail="Maya pointed her to Start here" onOpen={() => go("general")} />
-                  </Since>
+                  <Hello greeting="Good morning, Alex." line="" />
+                  <div className={cx("hbrief")}>
+                    <p>Most of the talk is about pricing a first offer: Dev settled on $49 after the guide's answer, and Priya is weighing a founding-member price. Jon's three-line invitation took him past 100 members, and Friday's call is where it's all headed.</p>
+                    <span><em>Written 2 hours ago</em>
+                      <button type="button" onClick={() => go("general")}>#general</button>
+                      <button type="button" onClick={() => go("wins")}>#wins</button>
+                    </span>
+                  </div>
+                  <NeedsYou label="Needs you"
+                    join={{ requests, loaded: true, decidingId: null,
+                      onApprove: (id) => { track("join_approved"); dispatch({ type: "approve", id }); },
+                      onDecline: (id) => { track("join_declined"); dispatch({ type: "decline", id }); } }}
+                    joinCount={requests.length} onShowAllJoinRequests={() => go("members")} things={things} />
+                  <GuideSuggests
+                    drafts={state.replyDraft === "waiting" ? [REPLY_DRAFT] : []}
+                    onPost={async () => { track("reply_posted"); dispatch({ type: "post_reply" }); return null; }}
+                    onSkip={() => dispatch({ type: "skip_reply" })}
+                    coachDrafts={state.checkIn === "waiting" ? [CHECK_IN] : []}
+                    onSendCoach={async () => { track("check_in_sent"); dispatch({ type: "send_check_in" }); return null; }}
+                    onSkipCoach={() => dispatch({ type: "skip_check_in" })} />
+                  {state.replyDraft !== "waiting" && state.checkIn !== "waiting" && requests.length === 0 ? <p className={cx("hnone")}>Nothing else needs you today.</p> : null}
                 </HomeBody>
               )}
-              <Dock>
-                <Chips hostOnly chips={Object.keys(CHIP_ANSWERS)} onChip={(chip) => { track("home_chip"); dispatch({ type: "talk", chip }); }} />
-              </Dock>
-            </View>
-
-            {/* Inbox: direct messages. */}
-            <View index={3}>
-              <div className={cx("page")}>
-                <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>Two of these need a reply.</p>
-                <div className={cx("list")} style={{ marginTop: 18 }}>
-                  <div className={cx("mrow sel")}><span className={cx("av a1")}>J</span><div><div className={cx("h")}><b>Jon</b><span>Direct message</span><time>20 min</time></div><p>Happy to share the full invitation sequence if you want it for Friday.</p></div><span className={cx("dot")} /></div>
-                  <div className={cx("mrow")}><span className={cx("av a6")}>S</span><div><div className={cx("h")}><b>Sara</b><span>Mentioned you in #general</span><time>1 h</time></div><p><span className={cx("at")}>@You</span> how did you price your founding tier?</p></div><span className={cx("dot")} /></div>
-                  <div className={cx("mrow read")}><span className={cx("av a3")}>L</span><div><div className={cx("h")}><b>Lena</b><span>Direct message</span><time>Yesterday</time></div><p>Thanks for the welcome! Starting the course tonight.</p></div></div>
-                  {state.joshCheckedIn ? (
-                    <div className={cx("mrow read")}><span className={cx("av a2")}>Y</span><div><div className={cx("h")}><b>Josh</b><span>You checked in</span><time>now</time></div><p>{CHECK_IN_DRAFT}</p></div></div>
-                  ) : null}
-                </div>
+            </Scroll>
+            <Dock>
+              <Chips chips={Object.keys(CHIP_ANSWERS)} onChip={(chip) => { track("home_chip"); dispatch({ type: "talk", chip }); }} />
+              <form className={cx("ask")} onSubmit={(event) => event.preventDefault()}>
+                <Icon name="spark" extra="sp" />
+                <input type="text" readOnly placeholder="Ask your guide anything" aria-label="Ask your guide anything" />
+                <span className={cx("ib")}><Icon name="mic" /></span>
+                <span className={cx("send")}><Icon name="up" /></span>
+              </form>
+            </Dock>
+            </Main>
+          </KitApp>
+        );
+      case "general":
+      case "wins":
+        return <ChannelPage state={state} dispatch={dispatch} slug={page} />;
+      case "know":
+        return (
+          <div className="rpw-page">
+            <KitApp view="know" part="flow" host>
+              <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>Members have started 2 courses between them.</p>
+              <button type="button" className={cx("ask kask kask-btn")} onClick={() => go("brain")}><Icon name="spark" extra="sp" /><span>Ask anything {PREVIEW_COMMUNITY} knows</span></button>
+              <span className={cx("lab")} style={{ display: "block", marginTop: 28 }}>Courses</span>
+              <div className={cx("kgrid")} style={{ marginTop: 12 }}>
+                {brain.courses.map((course, index) => (
+                  <div key={course.id} className={cx("kcard")}>
+                    <button type="button" className={cx("kcourse")} onClick={() => go("brain", course.lessons[0]?.id ?? null)}>
+                      <span className={cx("kcover", index === 0 ? "t2" : "t5")}><Icon name="book" /></span>
+                      <b><i className={cx("knum")}>{index + 1}</i><span>{course.name}</span></b>
+                      <span className={cx("kmeta")}><span>{index === 0 ? "38 started · 21 finished" : "12 started · 3 finished"}</span><span className={cx("right")}>{course.lessons.length} lessons</span></span>
+                    </button>
+                  </div>
+                ))}
+                <button type="button" className={cx("kcourse knew")} disabled><Icon name="plus" />New course</button>
               </div>
-            </View>
-
-            {/* The two channels share the channel view. */}
-            <View index={1}>
-              {state.page === "wins" ? (
-                <div className="rp-scroll"><Feed items={WINS} onNote={(id) => go("know", id)} /></div>
-              ) : (
-                <GeneralPage state={state} dispatch={dispatch} />
-              )}
-            </View>
-
-            {/* Knowledge: the community brain. */}
-            <View index={2}>
-              <div className="rp-brain">
-                <KitBrainMap map={brain} size="page" now={now} selectedId={state.picked} onSelect={(id) => { track("brain_pick"); dispatch({ type: "pick", id }); }}
-                  onClear={() => dispatch({ type: "pick", id: null })} />
+            </KitApp>
+          </div>
+        );
+      case "brain":
+        return (
+          <div className="rpw-brain">
+            <KitApp view="know" part="main">
+              <KitBrainMap map={brain} size="page" now={now} selectedId={state.picked}
+                onSelect={(id) => { track("brain_pick"); dispatch({ type: "pick", id }); }} onClear={() => dispatch({ type: "pick", id: null })} />
+            </KitApp>
+          </div>
+        );
+      case "events":
+        return (
+          <div className="rpw-page">
+            <KitApp view="events" part="flow" host>
+              <div className={cx("card")} style={{ marginTop: 0, maxWidth: "none" }}>
+                <div className={cx("meta")}><span className={cx("livepill")}><i />Friday</span><span>10:00 am · every week</span></div>
+                <h2>Friday build call</h2>
+                <p className={cx("say")}>Jon is sharing the invitation that took him past 100 members. I'll save what's learned to Knowledge afterwards.</p>
+                <div className={cx("acts")}><Btn go>Join when it starts</Btn><Btn>Add to calendar</Btn></div>
               </div>
-            </View>
-
-            {/* Events. */}
-            <View index={4}>
-              <div className={cx("page")}>
-                <div className={cx("card")} style={{ marginTop: 28, maxWidth: "none" }}>
-                  <div className={cx("meta")}><span className={cx("livepill")}><i />Friday</span><span>10:00 am · every week</span></div>
-                  <h2>Friday build call</h2>
-                  <p className={cx("say")}>Jon is sharing the invitation that took him past 100 members. I'll save what's learned to Knowledge afterwards.</p>
-                  <div className={cx("acts")}><Btn go>Join when it starts</Btn><Btn>Add to calendar</Btn></div>
-                </div>
-                <Since label="Coming up" style={{ marginTop: 32 }}>
-                  <SinceItem kind="Tue" title="Office hours" detail="4:00 pm · bring one question" still />
-                  <SinceItem kind="Dec 2" title="Launch week kickoff" detail="6:00 pm · Launch pod" still />
-                </Since>
+              <span className={cx("lab")} style={{ display: "block", marginTop: 32 }}>Coming up</span>
+              <div className="rpw-events">
+                <div><b>Office hours</b><span>Tuesday · 4:00 pm · bring one question</span></div>
+                <div><b>Launch week kickoff</b><span>Dec 2 · 6:00 pm · Launch pod</span></div>
               </div>
-            </View>
-
-            {/* Members. */}
-            <View index={5}>
-              <div className={cx("page")} style={{ overflowY: "auto" }}>
-                <p className={cx("sub")} style={{ margin: 0 }}>Everyone in {PREVIEW_COMMUNITY}, what they pay and who needs you.</p>
-                <MembersToolbar search="" onSearch={() => undefined} filter="everyone" onFilter={() => undefined} onExport={() => undefined} exporting={false} canExport={false}
-                  filters={[{ id: "everyone", label: "Everyone", count: 214 }, { id: "paid", label: "Paying", count: 151 }]} />
-                <MembersTable rows={rows} avatarOf={() => null} now={now} timeFor={timeFor} dayFor={dayFor} sort={null} onSort={() => undefined}
-                  selected={new Set()} onToggle={() => undefined} onToggleAll={() => undefined}
-                  openKey={state.member} onOpen={(key) => { track("member_open"); dispatch({ type: "member", key }); }} empty="No one here."
-                  getAvatarColor={colour} getInitials={initials} />
+            </KitApp>
+          </div>
+        );
+      case "members":
+        return (
+          <div className="rpw-page">
+            <KitApp view="members" part="flow" host>
+              <JoinRequestsLine count={requests.length} open={false} onOpen={() => go("home")} />
+              <MembersToolbar search="" onSearch={() => undefined} filter="everyone" onFilter={() => undefined} onExport={() => undefined} exporting={false} canExport
+                filters={[{ id: "everyone", label: "Everyone", count: 214 }, { id: "paid", label: "$49 a month", count: 151 }]} />
+              <MembersTable rows={rows} avatarOf={() => null} now={now} timeFor={timeFor} dayFor={dayFor} sort={null} onSort={() => undefined}
+                selected={new Set()} onToggle={() => undefined} onToggleAll={() => undefined}
+                openKey={state.member} onOpen={(key) => { track("member_open"); dispatch({ type: "member", key }); }} empty="No one here."
+                getAvatarColor={colour} getInitials={initials} />
+            </KitApp>
+          </div>
+        );
+      case "inbox":
+        return (
+          <div className="rpw-page">
+            <KitApp view="inbox" part="flow" host>
+              <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>2 of these need a reply. The newest is from Jon.</p>
+              <div className={cx("filters")} style={{ marginTop: 18 }}><span className={cx("chip sel")}>Needs a reply · 2</span><span className={cx("chip")}>Everything</span><span className={cx("chip")}>Only {PREVIEW_COMMUNITY}</span></div>
+              <div className={cx("list")} style={{ marginTop: 14 }}>
+                <div className={cx("mrow one sel")}><span className={cx("av a1")}>J</span><div><div className={cx("h")}><b>Jon Park</b><span>{PREVIEW_COMMUNITY}</span><time>20 min</time></div><p>Happy to share the full invitation sequence if you want it for Friday.</p></div><span className={cx("dot")} /></div>
+                <div className={cx("mrow one")}><span className={cx("av a6")}>S</span><div><div className={cx("h")}><b>Sara Lind</b><span>{PREVIEW_COMMUNITY}</span><time>1 h</time></div><p>How did you price your founding tier?</p></div><span className={cx("dot")} /></div>
+                <div className={cx("mrow one read")}><span className={cx("av a3")}>L</span><div><div className={cx("h")}><b>Lena Novak</b><span>{PREVIEW_COMMUNITY}</span><time>Yesterday</time></div><p>Thanks for the welcome! Starting the course tonight.</p></div></div>
+                {state.checkIn === "sent" ? <div className={cx("mrow one read")}><span className={cx("av a2")}>J</span><div><div className={cx("h")}><b>Josh Reed</b><span>You checked in</span><time>now</time></div><p>{CHECK_IN_TEXT}</p></div></div> : null}
               </div>
-            </View>
-          </Main>
+            </KitApp>
+          </div>
+        );
+    }
+  })();
 
-          {/* Right column. */}
-          <Rail index={0} hostOnly label="The community right now">
-            <Figs figures={[
-              { label: "Members", value: "214", note: "3 joined this week" },
-              { label: "Active this week", value: "132", note: "62 percent" },
-              { label: "Revenue this month", value: "$7,350", note: "up $490" },
-              { label: "Next payout", value: "$1,820", note: "Friday" },
-            ]} />
-            <Sep />
-            <Sec label="Next up">
-              <h3>Friday build call</h3>
-              <p>Friday, 10:00 am · you're hosting</p>
-            </Sec>
-            <Sep />
-            <Sec label="Your guide, this week">
-              <p>Answered 41 questions, welcomed 3 members, and saved 4 things to Knowledge.</p>
-            </Sec>
-          </Rail>
-          <Rail index={1} label="About this channel">
-            <Sec label="In this channel · 214"><p>6 here now</p></Sec>
-            <Sep />
-            <Sec label="Your guide here"><p>Answers when tagged, from your courses and what the community has learned. Every answer links to where it came from.</p></Sec>
-          </Rail>
-          <Rail index={2} label="Picked">
-            {picked ? (
-              <Sec label={picked.where}><h3>{picked.title}</h3><p>{picked.say}</p></Sec>
-            ) : (
-              <Sec label="The community brain"><p>Courses, lessons and what members learn from each other, kept and connected. Click anything on the map.</p></Sec>
-            )}
-          </Rail>
-          <Rail index={4} label="Events"><Sec label="This week"><p>Friday build call · 10:00 am</p><p>Office hours · Tuesday</p></Sec></Rail>
-          <Rail index={5} label="Member">
-            {open ? (
-              <Sec label="Member">
-                <h3>{open.name}</h3>
-                <p>{open.plan.label} · joined {dayFor(open.joined_at)}</p>
-                <p>Last active {open.user_id === JOSH && state.joshCheckedIn ? "— you checked in just now" : timeFor(open.last_active_at, now).toLowerCase()}</p>
-                {open.user_id === JOSH ? (
-                  <div style={{ marginTop: 12 }}><CheckInCard state={state} dispatch={dispatch} where="members" /></div>
-                ) : null}
-              </Sec>
-            ) : (
-              <Sec label="Who needs you"><p>Josh Reed has been quiet for 25 days. Open him to check in.</p></Sec>
-            )}
-          </Rail>
-        </KitApp>
+  const title = page === "brain"
+    ? <span className="rpw-ch"><button type="button" className="rpw-back" onClick={() => go("know")}>← Knowledge</button>The community brain</span>
+    : TITLES[page];
+
+  return (
+    <div ref={ref} className={played ? "rp played" : "rp"} style={{ height: DESIGN_HEIGHT * scale }}
+      role="region" aria-label={`A working preview of Polynet, in a made-up community called ${PREVIEW_COMMUNITY}`}>
+      <div className="rp-stage rpw" style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT, zoom: scale }}>
+        <aside className="rpw-nav" aria-label="Community">
+          <div className="rpw-cover">
+            <KitApp view="home" part="cover" banner={BANNER} bannerPosition="72% 38%"><Cover name={PREVIEW_COMMUNITY} onSwitch={() => go("home")} /></KitApp>
+          </div>
+          <div className="rpw-search"><Search size={14} /><span>Search or ask</span><kbd>⌘K</kbd></div>
+          <NavRow icon={<House size={14} />} label="Home" on={page === "home"} onClick={() => go("home")} />
+          <NavRow icon={<Inbox size={14} />} label="Inbox" count="2" on={page === "inbox"} onClick={() => go("inbox")} />
+          <div className="rpw-section"><span>Channels</span><Plus size={13} /></div>
+          <NavRow icon={<Hash size={14} />} label="general" on={page === "general"} onClick={() => go("general")} />
+          <NavRow icon={<Hash size={14} />} label="wins" dot={page !== "wins"} on={page === "wins"} onClick={() => go("wins")} />
+          <NavRow icon={<Hash size={14} />} label="intros" />
+          <div className="rpw-section"><span>Community</span></div>
+          <NavRow icon={<Boxes size={14} />} label="Pods" chevron={state.podsOpen ? <ChevronDown size={12} className="rpw-chev" /> : <ChevronRight size={12} className="rpw-chev" />} onClick={() => dispatch({ type: "pods" })} />
+          {state.podsOpen ? <div className="rpw-pods"><NavRow icon={<span className="rpw-podmark" />} label="Launch pod" /></div> : null}
+          <NavRow icon={<Library size={14} />} label="Knowledge" on={page === "know" || page === "brain"} onClick={() => go("know")} />
+          <NavRow icon={<CalendarDays size={14} />} label="Events" on={page === "events"} onClick={() => go("events")} />
+          <NavRow icon={<Users size={14} />} label="Members" hint="214" on={page === "members"} onClick={() => go("members")} />
+          <div className="rpw-foot">
+            <NavRow icon={<BarChart2 size={14} />} label="Analytics" />
+            <NavRow icon={<UserPlus size={14} />} label="Invite people" />
+            <div className="rpw-me"><span className="rpw-av">A</span><div><b>Alex Rivera</b><span>Host</span></div></div>
+          </div>
+        </aside>
+        <main className={rail ? "rpw-panel has-rail" : "rpw-panel"}>
+          <header className="rpw-head">{title}</header>
+          <div className="rpw-body">{main}</div>
+          {rail ? <div className="rpw-rail">{rail}</div> : null}
+        </main>
       </div>
     </div>
   );
