@@ -373,13 +373,23 @@ export function KitMembersPage(props: {
                     setBoardVersion((version) => version + 1);
                   }}
                   onSaveStages={async (stages) => {
-                    if (!scope) return;
-                    await saveCloudCommunityJourneyStages({
+                    if (!scope) return null;
+                    const saved = await saveCloudCommunityJourneyStages({
                       session: scope.session,
                       communityId: scope.communityId,
                       stages,
                     });
+                    setBoard((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            stages: saved.stages,
+                            auto_advance_enabled: saved.auto_advance_enabled,
+                          }
+                        : prev,
+                    );
                     setBoardVersion((version) => version + 1);
+                    return saved.stages;
                   }}
                   getAvatarColor={props.getAvatarColor}
                   getInitials={props.getInitials}
