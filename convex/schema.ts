@@ -1400,6 +1400,7 @@ export default defineSchema({
         v.literal("on_track"),
         v.literal("stuck"),
         v.literal("needs_you"),
+        v.literal("quiet"),
         v.literal("done"),
       ),
     ),

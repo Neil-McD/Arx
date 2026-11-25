@@ -21,6 +21,7 @@ import {
   defaultStageKeyForMember,
   deriveMemberJourneyStatus,
   formatCoachOutcomeSummary,
+  formatMemberActivitySummary,
   normalizeFounderInstruction,
   normalizeJourneyStages,
   type JourneyCardStatus,
@@ -38,6 +39,7 @@ const statusOverrideValidator = v.union(
   v.literal("on_track"),
   v.literal("stuck"),
   v.literal("needs_you"),
+  v.literal("quiet"),
   v.literal("done"),
   v.literal("auto"),
 );
@@ -70,6 +72,59 @@ async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
   };
 }
 
+async function readMemberParticipationSignals(
+  ctx: any,
+  communityId: any,
+  userId: any,
+): Promise<{
+  postsCount: number;
+  lessonsDoneCount: number;
+  participationCount: number;
+  lastParticipationAtMs: number | null;
+}> {
+  const [roots, replies, courseProgressRows] = await Promise.all([
+    ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q.eq("communityId", communityId).eq("actorUserId", userId),
+      )
+      .order("desc")
+      .take(5),
+    ctx.db
+      .query("communityInteractionReplies")
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q.eq("communityId", communityId).eq("actorUserId", userId),
+      )
+      .order("desc")
+      .take(5),
+    ctx.db
+      .query("communityCourseProgress")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", communityId).eq("userId", userId),
+      )
+      .take(10),
+  ]);
+  const liveRoots = roots.filter((row: any) => row.status === "live");
+  const liveReplies = replies.filter((row: any) => row.status === "live");
+  const postsCount = liveRoots.length + liveReplies.length;
+  let lessonsDoneCount = 0;
+  let lastCourseAt = 0;
+  for (const row of courseProgressRows) {
+    if (Array.isArray(row.doneResourceIds)) lessonsDoneCount += row.doneResourceIds.length;
+    const completedAt = Number(row.lastCompletedAt ?? 0);
+    if (completedAt > lastCourseAt) lastCourseAt = completedAt;
+  }
+  const latestRootAt = liveRoots[0] ? Number(liveRoots[0].createdAt ?? 0) : 0;
+  const latestReplyAt = liveReplies[0] ? Number(liveReplies[0].createdAt ?? 0) : 0;
+  const bestAt = Math.max(latestRootAt, latestReplyAt, lastCourseAt);
+  return {
+    postsCount,
+    lessonsDoneCount,
+    participationCount: postsCount + lessonsDoneCount,
+    lastParticipationAtMs: bestAt > 0 ? bestAt : null,
+  };
+}
+
 async function resolveDerivedStageKeyForMember(
   ctx: any,
   args: {
@@ -79,10 +134,11 @@ async function resolveDerivedStageKeyForMember(
     membership?: any | null;
     user?: any | null;
     presence?: any | null;
+    participation?: { participationCount: number; lastParticipationAtMs: number | null } | null;
     nowMs: number;
   },
 ): Promise<string> {
-  const [membership, user, presence] = await Promise.all([
+  const [membership, user, presence, participation] = await Promise.all([
     args.membership !== undefined
       ? Promise.resolve(args.membership)
       : ctx.db
@@ -100,18 +156,21 @@ async function resolveDerivedStageKeyForMember(
             q.eq("communityId", args.communityId).eq("userId", args.userId),
           )
           .unique(),
+    args.participation !== undefined && args.participation !== null
+      ? Promise.resolve(args.participation)
+      : readMemberParticipationSignals(ctx, args.communityId, args.userId),
   ]);
   const joinedAtMs = typeof membership?.createdAt === "number" ? membership.createdAt : null;
-  const lastActiveAtMs =
-    typeof presence?.lastSeenAt === "number"
-      ? presence.lastSeenAt
-      : typeof user?.lastActiveAt === "number"
-        ? user.lastActiveAt
-        : null;
+  const presenceAt = typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0;
+  const userAt = typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0;
+  const partAt = participation?.lastParticipationAtMs ?? 0;
+  const bestActiveAt = Math.max(presenceAt, userAt, partAt);
+  const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
   return defaultStageKeyForMember({
     stages: args.stages,
     joinedAtMs,
     lastActiveAtMs,
+    participationCount: participation?.participationCount ?? 0,
     nowMs: args.nowMs,
   });
 }
@@ -347,7 +406,7 @@ export const getCommunityMemberJourneyBoard = query({
           .map((check: any) => (typeof check.threadId === "string" ? check.threadId : ""))
           .filter(Boolean);
 
-        const [userRaw, profile, storedCard, subRows, presence, lastGuideReplyAt] = await Promise.all([
+        const [userRaw, profile, storedCard, subRows, presence, participation, lastGuideReplyAt] = await Promise.all([
           ctx.db.get(membership.userId),
           resolveUserProfileDisplayProjection(ctx, membership.userId),
           ctx.db
@@ -366,6 +425,7 @@ export const getCommunityMemberJourneyBoard = query({
               q.eq("communityId", args.communityId).eq("userId", membership.userId),
             )
             .unique(),
+          readMemberParticipationSignals(ctx, args.communityId, membership.userId),
           sentDrafts.length > 0
             ? readLastMemberGuideReplyAt(ctx, {
                 communityId: args.communityId,
@@ -384,17 +444,23 @@ export const getCommunityMemberJourneyBoard = query({
         const moneyKind = money?.kind === "on_hold" || money?.kind === "cancelling" ? money.kind : null;
 
         const joinedAtMs = typeof membership.createdAt === "number" ? membership.createdAt : null;
-        const lastActiveAtMs =
-          typeof presence?.lastSeenAt === "number"
-            ? presence.lastSeenAt
-            : typeof user?.lastActiveAt === "number"
-              ? user.lastActiveAt
-              : null;
+        const bestActiveAt = Math.max(
+          typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0,
+          typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0,
+          participation.lastParticipationAtMs ?? 0,
+        );
+        const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
 
         const stageKey =
           storedCard && validStageKeys.has(storedCard.stageKey)
             ? String(storedCard.stageKey)
-            : defaultStageKeyForMember({ stages, joinedAtMs, lastActiveAtMs, nowMs });
+            : defaultStageKeyForMember({
+                stages,
+                joinedAtMs,
+                lastActiveAtMs,
+                participationCount: participation.participationCount,
+                nowMs,
+              });
 
         let latestCoachSummary: { summary: string; at: number } | null = null;
         let unansweredCoachCount = 0;
@@ -465,6 +531,10 @@ export const getCommunityMemberJourneyBoard = query({
           agent_outcome: agentOutcome,
           agent_outcome_at: iso(agentOutcomeAt),
           working_on: goalByUserId.get(userIdStr) ?? null,
+          activity_summary: formatMemberActivitySummary({
+            postsCount: participation.postsCount,
+            lessonsDoneCount: participation.lessonsDoneCount,
+          }),
           joined_at: iso(joinedAtMs),
           last_active_at: iso(lastActiveAtMs),
         };

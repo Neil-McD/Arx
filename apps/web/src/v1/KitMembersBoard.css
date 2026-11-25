@@ -1,10 +1,68 @@
+.members-board-shell {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 14px;
+}
+
 .members-board-toolbar {
+  flex: none;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.members-board-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.members-board-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.members-board-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  width: 196px;
+  max-width: 100%;
+}
+
+.members-board-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.members-board-search input::placeholder {
+  color: var(--text-muted);
 }
 
 .members-board-filters {
@@ -14,8 +72,21 @@
   gap: 6px;
 }
 
+.members-board-pulse {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.members-board-pulse strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .members-board-stage-editor {
-  margin-top: 14px;
+  flex: none;
+  margin-top: 12px;
   padding: 14px;
   border: 1px solid var(--border-default);
   border-radius: 12px;
@@ -23,6 +94,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 44vh;
+  overflow-y: auto;
 }
 
 .members-board-stage-editor-head {
@@ -74,18 +147,25 @@
 }
 
 .members-board-columns {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 16px;
-  padding-bottom: 16px;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(224px, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+  padding-bottom: 4px;
   overflow-x: auto;
+  overflow-y: hidden;
+  align-items: stretch;
 }
 
 .members-board-col {
-  flex: 1 0 264px;
-  min-width: 264px;
-  max-width: 340px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -102,6 +182,7 @@
 }
 
 .members-board-col-head {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -127,9 +208,20 @@
 
 .members-board-col-goal {
   margin: 0;
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.38;
   color: var(--text-muted);
+}
+
+.members-board-col-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-right: 2px;
 }
 
 .members-board-col-empty {
@@ -142,12 +234,13 @@
 }
 
 .members-board-card {
+  flex: none;
   width: 100%;
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 10px 11px;
+  gap: 6px;
+  padding: 9px 10px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
   background: var(--bg-primary);
@@ -182,7 +275,7 @@
 
 .members-board-card-name {
   display: block;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -206,27 +299,33 @@
   gap: 5px;
   padding: 2px 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   border: 1px solid transparent;
 }
 
 .members-board-status.is-needs_you {
   color: #fca5a5;
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.13);
+  border-color: rgba(239, 68, 68, 0.28);
 }
 
 .members-board-status.is-stuck {
   color: #fcd34d;
   background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.26);
 }
 
 .members-board-status.is-on_track {
-  color: var(--text-secondary);
-  background: var(--surface-subtle);
-  border-color: color-mix(in srgb, var(--border-muted) 75%, transparent);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.members-board-status.is-quiet {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border-muted) 70%, transparent);
 }
 
 .members-board-status.is-done {
@@ -248,7 +347,7 @@
 
 .members-board-card-instruction {
   margin: 0;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border-radius: 7px;
   font-size: 11.5px;
   line-height: 1.38;

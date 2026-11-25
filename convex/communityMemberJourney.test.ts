@@ -406,4 +406,99 @@ describe("member journey board", () => {
     expect(board.cards.some((c) => c.membership_id === String(f.memberMembershipId))).toBe(true);
     expect(board.cards.some((c) => c.membership_id === String(f.quietMembershipId))).toBe(true);
   });
+
+  it("separates long-dormant members into quiet and places active contributors into the active stage with an activity summary", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await seedJourneyFixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "journey-owner" });
+
+    const { dormantMembershipId, activeMembershipId } = await t.run(async (ctx) => {
+      const dormantUserId = await ctx.db.insert("users", {
+        authSubject: "journey-dormant",
+        displayName: "Morgan",
+        handle: "morgan",
+        normalizedHandle: "morgan",
+        email: "morgan@example.com",
+        emailVerifiedAt: nowMs,
+        createdAt: nowMs - 60 * DAY_MS,
+        updatedAt: nowMs - 45 * DAY_MS,
+      } as any);
+      const dormantMemId = await ctx.db.insert("communityMemberships", {
+        communityId: f.communityId,
+        userId: dormantUserId,
+        role: "member",
+        accessSource: "free_grant",
+        state: "active",
+        createdAt: nowMs - 60 * DAY_MS,
+        updatedAt: nowMs - 45 * DAY_MS,
+      } as any);
+      await ctx.db.insert("communityPresence", {
+        communityId: f.communityId,
+        userId: dormantUserId,
+        lastSeenAt: nowMs - 45 * DAY_MS,
+        createdAt: nowMs - 60 * DAY_MS,
+        updatedAt: nowMs - 45 * DAY_MS,
+      } as any);
+
+      const activeUserId = await ctx.db.insert("users", {
+        authSubject: "journey-active-contributor",
+        displayName: "Casey",
+        handle: "casey",
+        normalizedHandle: "casey",
+        email: "casey@example.com",
+        emailVerifiedAt: nowMs,
+        createdAt: nowMs - 20 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+      const activeMemId = await ctx.db.insert("communityMemberships", {
+        communityId: f.communityId,
+        userId: activeUserId,
+        role: "member",
+        accessSource: "free_grant",
+        state: "active",
+        createdAt: nowMs - 20 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId,
+        slug: "general",
+        name: "General",
+        accessMode: "all_members",
+        postingPolicy: "members",
+        status: "active",
+        position: 0,
+        createdAt: nowMs - 30 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+      for (let i = 0; i < 3; i += 1) {
+        await ctx.db.insert("communityInteractionRoots", {
+          communityId: f.communityId,
+          channelId,
+          actorType: "human",
+          actorUserId: activeUserId,
+          kind: "discussion",
+          status: "live",
+          visibilityScope: "community",
+          contentSummary: `Update #${i + 1}`,
+          replyCount: 0,
+          reactionSummary: [],
+          idempotencyKey: `journey-post-${i}`,
+          createdAt: nowMs - (i + 1) * DAY_MS,
+          updatedAt: nowMs - (i + 1) * DAY_MS,
+        } as any);
+      }
+      return { dormantMembershipId: dormantMemId, activeMembershipId: activeMemId };
+    });
+
+    const board = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const morgan = board.cards.find((c) => c.membership_id === String(dormantMembershipId))!;
+    const casey = board.cards.find((c) => c.membership_id === String(activeMembershipId))!;
+    expect(morgan.status).toBe("quiet");
+    expect(casey.stage_key).toBe("active");
+    expect(casey.status).toBe("on_track");
+    expect(casey.activity_summary).toBe("3 posts");
+  });
 });
