@@ -163,7 +163,7 @@
 }
 
 /* Sections: a label for a heading, never a slogan (the hero has the only one). */
-.pn-landing main section { padding: 0 0 96px; }
+.pn-landing main section:where(:not(.rpw *)) { padding: 0 0 96px; }
 
 .pn-landing h1,
 .pn-landing h2,
@@ -191,10 +191,13 @@
 .pn-landing .hero {
   position: relative;
   margin: -84px calc(50% - 50vw) 0;
-  padding: 0 0 64px;
-  background: radial-gradient(70% 60% at 50% 0%, #0c0e16 0%, #05060a 70%);
+  padding: 0 0 72px;
+  background: radial-gradient(70% 40% at 50% 0%, #0c0e16 0%, #05060a 70%);
   overflow: hidden;
 }
+/* The sky fades into the page just below the preview, before the next section. */
+.pn-landing .hero::after { content: ""; position: absolute; inset: auto 0 0; height: 140px; background: linear-gradient(180deg, transparent, var(--bg)); pointer-events: none; }
+.pn-landing .hero > .product { position: relative; z-index: 1; width: min(100% - 48px, var(--content)); margin: 56px auto 0; }
 .pn-landing .stars { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pn-landing .hero-text {
   position: relative;
@@ -229,7 +232,7 @@
 }
 
 /* The product, drawn small. */
-.pn-landing .product { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: -8px; position: relative; }
+.pn-landing .product { display: flex; flex-direction: column; align-items: center; gap: 18px; position: relative; }
 .pn-landing .product::before { content: ""; position: absolute; inset: -80px 10% auto; height: 260px; background: radial-gradient(50% 50% at 50% 50%, rgba(124, 92, 240, .16), transparent 70%); pointer-events: none; }
 .pn-landing .caption { color: var(--muted); font-size: 14.5px; text-align: center; }
 .pn-landing .shot {
@@ -503,7 +506,7 @@
   .pn-landing .topbar nav.topbar-links { display: none; }
   .pn-landing .shot-side,
   .pn-landing .shot-rail { display: none; }
-  .pn-landing main section { padding-bottom: 72px; }
+  .pn-landing main section:where(:not(.rpw *)) { padding-bottom: 72px; }
 }
 
 @media (max-width: 560px) {
@@ -600,7 +603,7 @@
   background: #030406;
   box-shadow: 0 40px 120px rgba(0, 0, 0, .6), 0 0 80px rgba(124, 92, 240, .10);
 }
-.pn-landing .rp-wait { aspect-ratio: 1280 / 800; }
+.pn-landing .rp-wait { aspect-ratio: 1280 / 820; }
 .pn-landing .rp-stage { position: absolute; top: 0; left: 0; }
 .pn-landing .rp-draft { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .pn-landing .rp-draft textarea {
@@ -667,8 +670,6 @@
 .pn-landing .rpw-hint { margin-left: auto; color: var(--faint); font-size: 12px; }
 .pn-landing .rpw-dot { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--ink); }
 .pn-landing .rpw-section { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 2px; padding: 0 8px; color: var(--faint); font-size: 12px; font-weight: 500; }
-.pn-landing .rpw-pods { padding-left: 14px; }
-.pn-landing .rpw-podmark { width: 8px; height: 8px; border-radius: 2px; background: #3d8fd6; }
 .pn-landing .rpw-foot { margin-top: auto; }
 .pn-landing .rpw-me { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 6px 8px; }
 .pn-landing .rpw-me div { display: flex; flex-direction: column; }
@@ -731,3 +732,20 @@
 .pn-landing .rpw-body > [class] { flex: 1; min-height: 0; }
 .pn-landing .rpw-theirs { display: flex; align-items: flex-end; gap: 8px; }
 .pn-landing .rpw-theirs p { max-width: 82%; padding: 9px 12px; border-radius: 14px; background: rgba(255, 255, 255, .06); font-size: 13.5px; line-height: 1.45; }
+
+/* Pods: always open under Pods, a quiet guide line, each one opens its room. */
+.pn-landing .rpw-pods { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px 15px; padding-left: 10px; border-left: 1px solid var(--edge); }
+.pn-landing .rpw-pod {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 26px; padding: 3px 8px;
+  border: 0; border-radius: 6px; background: none; color: var(--nav-ink); font-size: 13px; text-align: left; cursor: pointer;
+}
+.pn-landing .rpw-pod:hover { background: var(--hover); color: var(--ink); }
+.pn-landing .rpw-pod.on { background: var(--sel); color: var(--ink); }
+.pn-landing .rpw-pod:has(.rpw-dot) span:first-child { color: var(--ink); font-weight: 500; }
+/* Faces, as the app draws them: round, initials in white on the person's tone. */
+.pn-landing .rpw .community-dm-kit-avatar { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; border-radius: 50%; color: rgba(255, 255, 255, .9); font-size: 11px; font-weight: 600; }
+/* The Inbox conversation fits its column: the reply box keeps only send. */
+.pn-landing .rpw-convo .rpw-composer-tools { display: none; }
+.pn-landing .rpw-convo .rpw-composer { min-height: 42px; }
+.pn-landing .rpw-convo .rpw-bubbles { margin-top: auto; }
+.pn-landing .rpw-convo .rpw-composer { margin-top: 0; }

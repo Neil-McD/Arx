@@ -9,8 +9,8 @@ const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
 vi.mock("../apps/web/src/posthogAnalytics", () => ({ captureProductAnalyticsEvent: () => undefined }));
-const { RealAppPreview, previewReducer, INITIAL_PREVIEW, GUIDE_REPLY, CHIP_ANSWERS, CHECK_IN_TEXT, PREVIEW_COMMUNITY, buildClubBrain } =
-  await import("../apps/web/src/components/polynetLanding/RealAppPreview");
+const previewModule = await import("../apps/web/src/components/polynetLanding/RealAppPreview");
+const { RealAppPreview, previewReducer, INITIAL_PREVIEW, GUIDE_REPLY, CHIP_ANSWERS, CHECK_IN_TEXT, PREVIEW_COMMUNITY, buildClubBrain } = previewModule;
 
 const run = (...actions: Parameters<typeof previewReducer>[1][]) => actions.reduce(previewReducer, INITIAL_PREVIEW);
 
@@ -60,4 +60,13 @@ test("it opens on Home with the live app's menu and Home, and claims only what's
   const words = `${html} ${GUIDE_REPLY} ${CHECK_IN_TEXT} ${Object.values(CHIP_ANSWERS).join(" ")}`;
   const found = words.match(/.{50}(RSVP|\d+ going|voice note|import|trained on|Coming soon).{30}/i)?.[0] ?? null;
   expect(found).toBeNull();
+});
+
+test("pods are always listed, and each opens its own room", () => {
+  const { PODS } = previewModule;
+  expect(PODS.length).toBeGreaterThan(1);
+  const opened = run({ type: "pod", pod: PODS[1].key });
+  expect(opened).toMatchObject({ page: "pod", pod: PODS[1].key });
+  const html = renderToStaticMarkup(React.createElement(RealAppPreview));
+  for (const pod of PODS) expect(html).toContain(pod.name);
 });
