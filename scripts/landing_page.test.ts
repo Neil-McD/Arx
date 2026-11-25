@@ -65,8 +65,8 @@ test("every link on the page goes somewhere that exists", () => {
   // The site's frame: Product and Resources menus, the statement with its figures, a full footer.
   expect(html).toContain('aria-controls="product-menu"');
   expect(html).toContain('aria-controls="resources-menu"');
-  expect(html).toContain("A community with an AI at its centre.");
-  for (const label of ["FIG 0.1", "FIG 0.2", "FIG 0.3", "It answers", "It remembers", "It runs"]) expect(html).toContain(label);
+  expect(html).toContain("Communities that think.");
+  for (const label of ["FIG 0.1", "FIG 0.2", "FIG 0.3", "It learns", "It acts", "You decide"]) expect(html).toContain(label);
   expect(html).toContain("Operated by EXECUTIVEINTELLIGENCE LLC.");
 });
 

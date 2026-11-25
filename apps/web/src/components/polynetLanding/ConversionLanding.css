@@ -299,7 +299,41 @@
 .pn-landing .figs article:last-child { padding-right: 0; }
 .pn-landing .figs article + article { border-left: 1px solid var(--line); }
 .pn-landing .fig-label { color: #6e737d; font: 400 12px/1 var(--font-mono, "Geist Mono Variable", ui-monospace, monospace); letter-spacing: 0.06em; }
-.pn-landing .fig { display: block; width: 100%; max-width: 280px; height: auto; margin: 20px 0 24px; }
+.pn-landing .fig { display: block; width: 100%; max-width: 400px; height: 280px; margin: 20px 0 24px; overflow: visible; }
+
+/* The figures move (LandingFigures.tsx). Each part responds under a pointer;
+   .play does the same once on phones, as the figure comes into view. */
+.pn-landing .figs svg * { transition-timing-function: cubic-bezier(.2, .8, .2, 1); }
+/* It learns: the layer under the pointer lifts; the figure sends a point up into the memory. */
+.pn-landing .f1 .layer { transition: transform 350ms cubic-bezier(.2, .8, .2, 1); }
+.pn-landing .f1 .layer:hover { transform: translateY(-6px); }
+.pn-landing .f1 .layer:hover .face, .pn-landing .f1 .layer:hover .edge { stroke: #9aa0aa; }
+.pn-landing .f1 .layer:hover .mark { stroke: #c9ccd2; }
+.pn-landing .f1 .trail { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 900ms cubic-bezier(.2, .8, .2, 1); }
+.pn-landing .f1 .rise { transition: transform 900ms cubic-bezier(.2, .8, .2, 1); }
+.pn-landing .f1:hover .trail, .pn-landing .f1.play .trail { stroke-dashoffset: 0; }
+.pn-landing .f1:hover .rise, .pn-landing .f1.play .rise { transform: translateY(-64px); }
+/* It acts: the person under the pointer lights their line; the figure reaches the quiet one. */
+.pn-landing .f2 .spoke-line { transition: stroke 250ms; }
+.pn-landing .f2 .spoke:hover .spoke-line { stroke: #9aa0aa; }
+.pn-landing .f2 .person { transition: transform 300ms cubic-bezier(.2, .8, .2, 1); }
+.pn-landing .f2 .spoke:hover .person { transform: translateY(-4px); }
+.pn-landing .f2 .spoke:hover .person * { stroke: #e6e7ea; }
+.pn-landing .f2 .reach { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 700ms cubic-bezier(.2, .8, .2, 1); }
+.pn-landing .f2 .note { opacity: 0; transform: translateY(8px); transition: opacity 400ms 600ms, transform 400ms 600ms; }
+.pn-landing .f2 .back { opacity: 0; transition: opacity 400ms 900ms; }
+.pn-landing .f2:hover .reach, .pn-landing .f2.play .reach { stroke-dashoffset: 0; }
+.pn-landing .f2:hover .note, .pn-landing .f2.play .note { opacity: 1; transform: none; }
+.pn-landing .f2:hover .back, .pn-landing .f2.play .back { opacity: 1; }
+/* You decide: the card nudges under the pointer; the figure lets the lock go and it drops in. */
+.pn-landing .f3 .card { transition: transform 700ms cubic-bezier(.2, .8, .2, 1); }
+.pn-landing .f3 .card:hover { transform: translateY(4px); }
+.pn-landing .f3 .latch, .pn-landing .f3 .drop { transition: opacity 250ms; }
+.pn-landing .f3 .tick { opacity: 0; transform: translateY(6px); transition: opacity 300ms 650ms, transform 300ms 650ms; }
+.pn-landing .f3:hover .card, .pn-landing .f3.play .card { transform: translateY(86px); }
+.pn-landing .f3:hover .latch, .pn-landing .f3.play .latch, .pn-landing .f3:hover .drop, .pn-landing .f3.play .drop { opacity: 0; }
+.pn-landing .f3:hover .tick, .pn-landing .f3.play .tick { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .pn-landing .figs svg * { transition: none !important; } }
 .pn-landing .figs h3 { font-size: 16px; }
 .pn-landing .figs p { max-width: 320px; margin-top: 8px; color: var(--quiet); font-size: 15px; }
 
