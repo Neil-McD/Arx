@@ -25,7 +25,7 @@ describe("the operations list", () => {
 
   it("says which operations take something away or reach many people", () => {
     const of = (effect: string) => CALL_OPERATION_NAMES.filter((name) => CALL_OPERATIONS[name].effect === effect);
-    expect(of("destroy")).toEqual(["community.interaction.remove", "community.course.delete", "community.members.remove", "community.members.ban"]);
+    expect(of("destroy")).toEqual(["community.interaction.remove", "community.course.delete", "community.members.remove", "community.members.ban", "community.journey.remove_stage"]);
     // What every member is told. Opening the community is join_mode.set's variant.
     expect(of("broadcast")).toEqual(["community.agent.instructions.set", "community.handbook.approve", "community.event.cancel", "community.announcement.post", "community.course.publish"]);
     expect(CALL_OPERATION_VARIANTS["community.join_mode.set:open"]).toMatchObject({ effect: "broadcast", ask: "every_time" });
@@ -48,6 +48,7 @@ describe("the operations list", () => {
       "community.members.set_role": "every_time",
       "community.members.remove": "every_time",
       "community.members.ban": "every_time",
+      "community.journey.remove_stage": "every_time",
       "community.join_mode.set:open": "every_time",
     });
     // A person's own AI: deleting its own post is its app's call (posts and messages are "words": its app's too).

@@ -85,6 +85,7 @@ assert.deepEqual(
     "personal_memory",
     "personal_soul",
     "member_identity_context",
+    "member_coaching_context",
     "recent_answers",
     "runtime_turn_context",
     "right_now",
@@ -126,7 +127,7 @@ assert.match(bundle.split.turnText, /PERSONAL_SOUL[\s\S]*Keep coaching concise/)
 assert.doesNotMatch(bundle.text, /COMMUNITY_MEMORY_RECALL/, "no notes are pushed into a turn by a search");
 // Everything per-member or per-message comes after everything shared by the community.
 const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);
-for (const later of ["member_identity_context", "recent_answers", "runtime_turn_context", "right_now"]) {
+for (const later of ["member_identity_context", "member_coaching_context", "recent_answers", "runtime_turn_context", "right_now"]) {
   for (const earlier of ["guide_identity", "community_card", "community_system_prompt", "community_memory"]) assert.ok(order(earlier) < order(later), `${earlier} before ${later}`);
 }
 

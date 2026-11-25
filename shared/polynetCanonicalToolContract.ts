@@ -418,8 +418,17 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     text: { type: "string", maxLength: 40_000 },
     // People (owners and admins): a selection of members, a tag, a role.
     members: { type: "array", minItems: 1, maxItems: 50, items: { type: "string", pattern: "^user:[A-Za-z0-9]+$", maxLength: 180 } },
+    member: { type: "string", pattern: "^user:[A-Za-z0-9]+$", maxLength: 180 },
     tag: { type: "string", minLength: 1, maxLength: 40 },
     role: { type: "string", enum: ["member", "moderator", "admin"] },
+    // Member Board (owners and admins).
+    stage: { type: "string", minLength: 1, maxLength: 64 },
+    status: { type: "string", enum: ["needs_you", "stuck", "on_track", "quiet", "done", "auto"] },
+    milestone: { type: "string", minLength: 1, maxLength: 64 },
+    label: { type: "string", minLength: 1, maxLength: 64 },
+    remove_outcome_id: { type: "string", minLength: 1, maxLength: 80 },
+    move_to_stage: { type: "string", minLength: 1, maxLength: 64 },
+    stages: { type: "array", minItems: 2, maxItems: 8, items: { type: "object" } },
     expected_created_at: { type: "string", maxLength: 24 },
     expected_updated_at: { type: "string", maxLength: 24 },
     retrieval_log_id: { type: "string", minLength: 1, maxLength: 180 },

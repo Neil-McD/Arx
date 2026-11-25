@@ -17,6 +17,7 @@ import {
   POLYNET_BUILDER_ANALYTICS_PATH,
   POLYNET_BUILDER_COMMUNITY_PATH,
   POLYNET_BUILDER_DIRECTORY_PATH,
+  POLYNET_BUILDER_JOURNEY_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
   POLYNET_CHANNELS_DIRECTORY_PATH,
@@ -42,8 +43,19 @@ import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  announcementQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideInstructionsQuestion, handbookQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
+  announcementQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideInstructionsQuestion, handbookQuestion, journeyStageRemoveQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
+import {
+  JOURNEY_CARD_STATUSES,
+  MAX_CHECKPOINT_LABEL_CHARS,
+  MAX_FOUNDER_INSTRUCTION_CHARS,
+  MAX_JOURNEY_STAGES,
+  MAX_OUTCOME_TEXT_CHARS,
+  MAX_STAGE_CHECKPOINTS,
+  MAX_STAGE_GOAL_CHARS,
+  MAX_STAGE_NAME_CHARS,
+  MIN_JOURNEY_STAGES,
+} from "../shared/communityMemberJourney.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -120,9 +132,29 @@ const EVENT_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezo
 // Courses members see: published or unpublished, and deleted, on the person's yes.
 const COURSE_PUBLISH_OPERATION = "community.course.publish";
 const COURSE_DELETE_OPERATION = "community.course.delete";
+// Member Board (owners and admins): stages, checkpoints, statuses, wins, coaching notes.
+const JOURNEY_MOVE_STAGE_OPERATION = "community.journey.move_stage";
+const JOURNEY_SET_STATUS_OPERATION = "community.journey.set_status";
+const JOURNEY_SET_MILESTONE_OPERATION = "community.journey.set_milestone";
+const JOURNEY_RECORD_WIN_OPERATION = "community.journey.record_win";
+const JOURNEY_SET_GUIDE_NOTE_OPERATION = "community.journey.set_guide_note";
+const JOURNEY_SAVE_STAGES_OPERATION = "community.journey.save_stages";
+const JOURNEY_REMOVE_STAGE_OPERATION = "community.journey.remove_stage";
+const JOURNEY_MULTI_MEMBER_OPERATIONS = [JOURNEY_MOVE_STAGE_OPERATION, JOURNEY_SET_STATUS_OPERATION];
+const JOURNEY_SINGLE_MEMBER_OPERATIONS = [
+  JOURNEY_SET_MILESTONE_OPERATION,
+  JOURNEY_RECORD_WIN_OPERATION,
+  JOURNEY_SET_GUIDE_NOTE_OPERATION,
+];
+const JOURNEY_OPERATIONS = [
+  ...JOURNEY_MULTI_MEMBER_OPERATIONS,
+  ...JOURNEY_SINGLE_MEMBER_OPERATIONS,
+  JOURNEY_SAVE_STAGES_OPERATION,
+  JOURNEY_REMOVE_STAGE_OPERATION,
+];
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
   HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS, ANNOUNCEMENT_POST_OPERATION,
-  COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION];
+  COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION, ...JOURNEY_OPERATIONS];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -1043,6 +1075,33 @@ function capabilityDocument(args: {
       required: [], optional: ["course", "lesson"], one_of: "course or lesson, not both", course: "a published course's id from builder/resources/ (deletes it with its lessons)",
       lesson: "a lesson's id in a published course", result: "the person is shown what goes with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { deleted, name }",
       effects: ["delete_published_course_content_after_the_persons_yes"], forbidden_effects: ["delete_sources"] }
+    : args.operation === JOURNEY_MOVE_STAGE_OPERATION ? {
+      required: ["members", "stage"], members, stage: "stage key or exact stage name from builder/journey.json",
+      result: "result: { results, succeeded, failed }", effects: ["move_members_between_journey_stages"] }
+    : args.operation === JOURNEY_SET_STATUS_OPERATION ? {
+      required: ["members", "status"], members, status: "needs_you, stuck, on_track, quiet, done, or auto",
+      result: "result: { results, succeeded, failed }", effects: ["set_member_journey_status"] }
+    : args.operation === JOURNEY_SET_MILESTONE_OPERATION ? {
+      required: ["member", "milestone"], optional: ["done", "label"], member: "one active member handle or user:<id> ref",
+      milestone: "checkpoint key or label from builder/journey.json", done: "true (default) or false",
+      result: "result: { member, stage_key, milestone_key, done }", effects: ["set_member_journey_milestone"] }
+    : args.operation === JOURNEY_RECORD_WIN_OPERATION ? {
+      required: ["member"], optional: ["text", "remove_outcome_id"], one_of: "text or remove_outcome_id, not both",
+      member: "one active member handle or user:<id> ref", text: `concrete win (up to ${MAX_OUTCOME_TEXT_CHARS} characters)`,
+      remove_outcome_id: "id of a logged win from builder/journey.json to remove",
+      result: "result: { member, outcome | removed_outcome_id }", effects: ["record_or_remove_member_win"] }
+    : args.operation === JOURNEY_SET_GUIDE_NOTE_OPERATION ? {
+      required: ["member", "note"], member: "one active member handle or user:<id> ref",
+      note: `private coaching focus for your community's AI guide (up to ${MAX_FOUNDER_INSTRUCTION_CHARS} characters); empty clears it`,
+      result: "result: { member, founder_instruction }", effects: ["set_member_guide_note"] }
+    : args.operation === JOURNEY_SAVE_STAGES_OPERATION ? {
+      required: ["stages"], stages: `ordered list of ${MIN_JOURNEY_STAGES} to ${MAX_JOURNEY_STAGES} stages; keep every existing stage key (use community.journey.remove_stage to delete a stage)`,
+      result: "result: { stages }", effects: ["update_journey_stages"], forbidden_effects: ["remove_existing_stage"] }
+    : args.operation === JOURNEY_REMOVE_STAGE_OPERATION ? {
+      required: ["stage"], optional: ["move_to_stage"], stage: "stage key or exact stage name from builder/journey.json to remove",
+      move_to_stage: "optional stage key or name for members currently on the removed stage; defaults to first remaining stage",
+      result: "the person is shown the stage and member count with Yes and No, every time: waiting_for_person until they say. Then result: { removed_stage_key, moved_to_stage_key, moved_cards_count, stages }",
+      effects: ["remove_journey_stage_after_the_persons_yes"] }
     : args.operation === HANDBOOK_DRAFT_OPERATION ? {
       required: ["text"], text: `the handbook draft in markdown, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; members and the agent don't see it until approved`,
       result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
@@ -1540,6 +1599,7 @@ async function executeCanonicalList(args: {
         entries: [
           { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, where members spend time, agent instructions, handbook" },
           { path: mountedPath(target.communitySlug, POLYNET_BUILDER_ANALYTICS_PATH), kind: "document", type: "builder", name: "The community's numbers, as the Analytics page shows them" },
+          { path: mountedPath(target.communitySlug, POLYNET_BUILDER_JOURNEY_PATH), kind: "document", type: "builder", name: "The Member Board: stages, checkpoints, member placement, statuses, wins, and Guide notes" },
           joinRequests,
           {
             path: mountedPath(
@@ -1927,6 +1987,21 @@ async function executeCanonicalRead(args: {
       const analytics = await args.ctx.runQuery((internal as any).communityAdmin.readCommunityAnalyticsForTrustedManagerInternal,
         { userId: args.userId, communityId: target.communityId });
       return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload: analytics }),
+        writable: false, searchable: false } };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
+
+  // The Member Board, for owners and admins only (fail closed for members & moderators).
+  if (target.localPath === POLYNET_BUILDER_JOURNEY_PATH) {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const board = await args.ctx.runQuery((internal as any).communityMemberJourney.readCommunityMemberJourneyBoardForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId });
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload: board }),
         writable: false, searchable: false } };
     } catch {
       return canonicalError("semantic_not_found", "Community path not found or not accessible.");
@@ -3107,6 +3182,32 @@ async function askPersonFirst(args: {
         if (!found.live) return canonicalError("not_published", "That is a draft: delete it with polynet_delete_draft (the guide: a delete in polynet_change_courses), no question needed.");
         question = courseDeleteQuestion(found);
       }
+    } else if (operation === JOURNEY_REMOVE_STAGE_OPERATION) {
+      const stage = typeof callInput.stage === "string" ? callInput.stage.trim() : "";
+      const moveToStage = typeof callInput.move_to_stage === "string" ? callInput.move_to_stage.trim() : undefined;
+      if (!stage || stage.length > 64 || (callInput.move_to_stage !== undefined && (!moveToStage || moveToStage.length > 64))) {
+        return null;
+      }
+      const found = await args.ctx.runQuery(
+        (internal as any).communityMemberJourney.describeJourneyStageRemovalInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          stage,
+          ...(moveToStage ? { moveToStage } : {}),
+        },
+      ) as
+        | { ok: true; stageKey: string; stageName: string; fallbackStageKey: string; fallbackStageName: string; memberCount: number }
+        | { ok: false; code: string };
+      if (!found.ok) {
+        const refusal = COMMUNITY_REFUSALS[found.code] ?? ["journey_stage_not_found", "No stage with that key or name on the Member Board. Read builder/journey.json first."];
+        return canonicalError(refusal[0], refusal[1]);
+      }
+      question = journeyStageRemoveQuestion({
+        stageName: found.stageName,
+        memberCount: found.memberCount,
+        fallbackStageName: found.fallbackStageName,
+      });
     } else if (operation === EVENT_CANCEL_OPERATION) {
       const eventId = typeof callInput.event === "string" ? callInput.event.trim() : "";
       const scope = callInput.scope === "occurrence" || callInput.scope === "series" ? callInput.scope : undefined;
@@ -3462,6 +3563,18 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_event_recurrence_until_invalid: ["invalid_tool_args", "recurrence_until must be a time on or after starts_at."],
   community_name_required: ["invalid_tool_args", "Give it a name."],
   community_channel_order: ["channel_order_changed", "The channels changed order since you listed them. List channels/ again and retry."],
+  journey_stage_not_found: ["journey_stage_not_found", "No stage with that key or name on the Member Board. Read builder/journey.json for the current stages."],
+  journey_fallback_stage_not_found: ["journey_fallback_stage_not_found", "The move_to_stage isn't another remaining stage on the Member Board. Read builder/journey.json first."],
+  journey_stages_count_invalid: ["invalid_tool_args", `The Member Board must have between ${MIN_JOURNEY_STAGES} and ${MAX_JOURNEY_STAGES} stages.`],
+  journey_stage_name_required: ["invalid_tool_args", "Every stage needs a name."],
+  journey_stage_removal_requires_tool: ["stage_removal_requires_confirmation", "Removing an existing stage requires polynet_remove_journey_stage so the host can confirm moving any members on it."],
+  journey_outcome_not_found: ["outcome_not_found", "No logged win with that id on this member's card. Read builder/journey.json for current outcome ids."],
+  journey_outcome_text_required: ["invalid_tool_args", "Give non-empty text for the win."],
+  journey_outcome_input_invalid: ["invalid_tool_args", "Give text to log a win or remove_outcome_id to remove one, not both."],
+  journey_status_invalid: ["invalid_tool_args", "status must be needs_you, stuck, on_track, quiet, done, or auto."],
+  journey_milestone_required: ["invalid_tool_args", "Give milestone (a checkpoint key or label)."],
+  community_owner_not_on_board: ["owner_not_on_board", "The community owner doesn't sit on the Member Board."],
+  community_member_not_found: ["member_not_found", "They aren't an active member of this community."],
 };
 
 // The community itself: profile, how people join, the agent's instructions and
@@ -3477,6 +3590,33 @@ async function executeCommunityOperation(args: {
   const text = (key: string, max: number) => typeof rawInput[key] === "string" && (rawInput[key] as string).length <= max;
   const only = (keys: string[]) => Object.keys(rawInput).every(key => keys.includes(key));
   const settingsKeys = ["expected_revision", "name", "slug", "one_liner", "about", "visibility"];
+  const isUserRef = (value: unknown) => typeof value === "string" && /^user:[A-Za-z0-9]+$/.test(value);
+  const isUserRefArray = (value: unknown) =>
+    Array.isArray(value) && value.length >= 1 && value.length <= SELECTION_MAX &&
+    value.every(isUserRef) && new Set(value).size === value.length;
+  const isValidStagesPayload = (value: unknown) => {
+    if (!Array.isArray(value) || value.length < MIN_JOURNEY_STAGES || value.length > MAX_JOURNEY_STAGES) return false;
+    return value.every((stage) => {
+      if (!stage || typeof stage !== "object") return false;
+      const rec = stage as Record<string, unknown>;
+      if (Object.keys(rec).some((k) => !["key", "name", "goal", "checkpoints"].includes(k))) return false;
+      if (typeof rec.name !== "string" || !rec.name.trim() || rec.name.length > MAX_STAGE_NAME_CHARS) return false;
+      if (rec.key !== undefined && (typeof rec.key !== "string" || !rec.key.trim() || rec.key.length > 48)) return false;
+      if (rec.goal !== undefined && (typeof rec.goal !== "string" || rec.goal.length > MAX_STAGE_GOAL_CHARS)) return false;
+      if (rec.checkpoints !== undefined) {
+        if (!Array.isArray(rec.checkpoints) || rec.checkpoints.length > MAX_STAGE_CHECKPOINTS) return false;
+        for (const cp of rec.checkpoints) {
+          if (!cp || typeof cp !== "object") return false;
+          const cpRec = cp as Record<string, unknown>;
+          if (Object.keys(cpRec).some((k) => !["key", "label", "kind"].includes(k))) return false;
+          if (typeof cpRec.label !== "string" || !cpRec.label.trim() || cpRec.label.length > MAX_CHECKPOINT_LABEL_CHARS) return false;
+          if (cpRec.key !== undefined && (typeof cpRec.key !== "string" || !cpRec.key.trim() || cpRec.key.length > 48)) return false;
+          if (cpRec.kind !== undefined && !["first_post", "regular_posts", "first_lesson", "shared_goal", "custom"].includes(String(cpRec.kind))) return false;
+        }
+      }
+      return true;
+    });
+  };
   const valid = target.localPath === `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` && (
     operation === SETTINGS_UPDATE_OPERATION
       ? only(settingsKeys) && Number.isSafeInteger(rawInput.expected_revision) && (rawInput.expected_revision as number) >= 0 &&
@@ -3506,6 +3646,20 @@ async function executeCommunityOperation(args: {
       (rawInput.after === undefined || rawInput.after === null || text("after", 64))
     : operation === COURSE_PUBLISH_OPERATION ? only(["course", "published"]) && text("course", 180) && typeof rawInput.published === "boolean"
     : operation === COURSE_DELETE_OPERATION ? only(["course", "lesson"]) && (text("course", 180) !== text("lesson", 180))
+    : operation === JOURNEY_MOVE_STAGE_OPERATION ? only(["members", "stage"]) && isUserRefArray(rawInput.members) && text("stage", 64) && String(rawInput.stage).trim().length > 0
+    : operation === JOURNEY_SET_STATUS_OPERATION ? only(["members", "status"]) && isUserRefArray(rawInput.members) &&
+      (rawInput.status === "auto" || (JOURNEY_CARD_STATUSES as readonly string[]).includes(String(rawInput.status)))
+    : operation === JOURNEY_SET_MILESTONE_OPERATION ? only(["member", "milestone", "done", "label"]) && isUserRef(rawInput.member) &&
+      text("milestone", 64) && String(rawInput.milestone).trim().length > 0 &&
+      (rawInput.done === undefined || typeof rawInput.done === "boolean") &&
+      (rawInput.label === undefined || text("label", MAX_CHECKPOINT_LABEL_CHARS))
+    : operation === JOURNEY_RECORD_WIN_OPERATION ? only(["member", "text", "remove_outcome_id"]) && isUserRef(rawInput.member) &&
+      ((text("text", MAX_OUTCOME_TEXT_CHARS) && String(rawInput.text).trim().length > 0) !==
+        (text("remove_outcome_id", 80) && String(rawInput.remove_outcome_id).trim().length > 0))
+    : operation === JOURNEY_SET_GUIDE_NOTE_OPERATION ? only(["member", "note"]) && isUserRef(rawInput.member) && text("note", MAX_FOUNDER_INSTRUCTION_CHARS)
+    : operation === JOURNEY_SAVE_STAGES_OPERATION ? only(["stages"]) && isValidStagesPayload(rawInput.stages)
+    : operation === JOURNEY_REMOVE_STAGE_OPERATION ? only(["stage", "move_to_stage"]) && text("stage", 64) && String(rawInput.stage).trim().length > 0 &&
+      (rawInput.move_to_stage === undefined || (text("move_to_stage", 64) && String(rawInput.move_to_stage).trim().length > 0))
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
   if (!valid) {
@@ -3523,6 +3677,13 @@ async function executeCommunityOperation(args: {
       : operation === CHANNEL_MOVE_OPERATION ? "Give channel (its slug) and, to put it after another, after (that channel's slug)."
       : operation === COURSE_PUBLISH_OPERATION ? "Give course (its id from builder/resources/) and published (true or false)."
       : operation === COURSE_DELETE_OPERATION ? "Give course or lesson (its id from builder/resources/), not both."
+      : operation === JOURNEY_MOVE_STAGE_OPERATION ? `Give members (1 to ${SELECTION_MAX} handles or user:<id> refs) and stage (a stage key or name from builder/journey.json).`
+      : operation === JOURNEY_SET_STATUS_OPERATION ? `Give members (1 to ${SELECTION_MAX} handles or user:<id> refs) and status (needs_you, stuck, on_track, quiet, done, or auto).`
+      : operation === JOURNEY_SET_MILESTONE_OPERATION ? "Give member (handle or user:<id>), milestone (checkpoint key or label), and optional done (true or false) and label."
+      : operation === JOURNEY_RECORD_WIN_OPERATION ? `Give member (handle or user:<id>) and either text (up to ${MAX_OUTCOME_TEXT_CHARS} characters) or remove_outcome_id, not both.`
+      : operation === JOURNEY_SET_GUIDE_NOTE_OPERATION ? `Give member (handle or user:<id>) and note (up to ${MAX_FOUNDER_INSTRUCTION_CHARS} characters; empty clears it).`
+      : operation === JOURNEY_SAVE_STAGES_OPERATION ? `Give stages (${MIN_JOURNEY_STAGES} to ${MAX_JOURNEY_STAGES} stages, each with a name and up to ${MAX_STAGE_CHECKPOINTS} checkpoints).`
+      : operation === JOURNEY_REMOVE_STAGE_OPERATION ? "Give stage (a stage key or name from builder/journey.json) and optional move_to_stage."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
   // Opening lets in everyone who is waiting, and that can't be taken back.
@@ -3543,6 +3704,9 @@ async function executeCommunityOperation(args: {
       : operation === ANNOUNCEMENT_POST_OPERATION
         ? personOnly({ what: "Posting an @everybody announcement", where: "Chat: open a shared channel and mention @everybody",
           path: buildCommunityTabPath(target.communitySlug, "chat") })
+      : operation === JOURNEY_REMOVE_STAGE_OPERATION
+        ? personOnly({ what: "Removing a Member Board stage", where: "Members: Board, then open the stage menu and Delete stage",
+          path: buildCommunityTabPath(target.communitySlug, "members") ? `${buildCommunityTabPath(target.communitySlug, "members")}/board` : null })
         : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
           path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }
@@ -3869,9 +4033,17 @@ export async function executePolynetCanonicalTool(args: {
   // Resolved once, here, so the question the person sees and the call that
   // runs name the same people. Nobody is guessed at.
   let rawInput = args.input;
-  if (args.toolName === "polynet_call" && MEMBERS_OPERATIONS.includes(String(input.operation ?? ""))) {
+  const callOperationName = String(input.operation ?? "");
+  const resolvesMemberList =
+    args.toolName === "polynet_call" &&
+    (MEMBERS_OPERATIONS.includes(callOperationName) || JOURNEY_MULTI_MEMBER_OPERATIONS.includes(callOperationName));
+  const resolvesSingleMember =
+    args.toolName === "polynet_call" && JOURNEY_SINGLE_MEMBER_OPERATIONS.includes(callOperationName);
+  if (resolvesMemberList || resolvesSingleMember) {
     const callInput = input.input && typeof input.input === "object" ? input.input as Record<string, unknown> : null;
-    const named = callInput && Array.isArray(callInput.members) ? callInput.members : null;
+    const named = resolvesMemberList
+      ? (callInput && Array.isArray(callInput.members) ? callInput.members : null)
+      : (callInput && typeof callInput.member === "string" && callInput.member.trim() ? [callInput.member] : null);
     const scope = named && named.length <= SELECTION_MAX && named.every(ref => typeof ref === "string")
       ? await resolveCommunityTarget({ ...common, path: input.target }) : null;
     if (named && scope?.ok) {
@@ -3886,10 +4058,16 @@ export async function executePolynetCanonicalTool(args: {
         return canonicalError("member_not_found",
           `Nobody in this community matches ${found.missing.map(name => `"${name}"`).join(", ")}. List members/ and name each person by their handle (the name in members/<handle>.json).`);
       }
-      input = { ...input, input: { ...callInput, members: found.refs } };
+      const nextCallInput = resolvesMemberList
+        ? { ...callInput, members: found.refs }
+        : { ...callInput, member: found.refs[0] };
+      input = { ...input, input: nextCallInput };
       common.input = input;
       const rawCall = args.input?.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
-      rawInput = { ...args.input, input: { ...rawCall, members: found.refs } };
+      rawInput = {
+        ...args.input,
+        input: resolvesMemberList ? { ...rawCall, members: found.refs } : { ...rawCall, member: found.refs[0] },
+      };
     }
   }
   // Asking the person costs nothing; what runs is counted. The guide in a

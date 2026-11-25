@@ -127,12 +127,15 @@ describe("the course-building skill", () => {
       expect(text).not.toContain(COURSE_BUILDING_SKILL_MD);
       expect(text).not.toContain("builder/resources/");
       expect(text).not.toContain("builder/analytics.json");
+      expect(text).not.toContain("builder/journey.json");
     }
   });
 
-  test("a host's map has the community's numbers; a member's does not", () => {
+  test("a host's map has the community's numbers and Member Board; a member's does not", () => {
     for (const talk of [TALKS.owner, TALKS.admin]) {
-      expect(prompt(talk).text).toContain("- builder/analytics.json : the community's numbers, as the Analytics page shows them.");
+      const text = prompt(talk).text;
+      expect(text).toContain("- builder/analytics.json : the community's numbers, as the Analytics page shows them.");
+      expect(text).toContain("- builder/journey.json : the Member Board");
     }
   });
 
@@ -198,7 +201,7 @@ describe("the receipt", () => {
     expect(bundle.sections.map((entry) => entry.id)).toEqual([
       "guide_identity", "community_map", "how_to_work", "what_you_may_do", "how_to_speak", "skill",
       "community_identity", "community_card", "community_handbook", "community_system_prompt", "community_soul", "community_memory", "personal_memory",
-      "personal_soul", "member_identity_context", "recent_answers", "runtime_turn_context", "right_now",
+      "personal_soul", "member_identity_context", "member_coaching_context", "recent_answers", "runtime_turn_context", "right_now",
     ]);
     const manifest = buildRuntimeContextManifest({ promptSections: bundle.sections, allowedToolNames: talkToolNames(TALKS.owner) });
     const drawn = bundle.sections.filter((entry) => entry.rendered).map((entry) => entry.id);

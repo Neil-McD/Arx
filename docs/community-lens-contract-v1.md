@@ -78,6 +78,23 @@ of the slices that follow.
   removing or banning a paying member is refused (`paid_member_use_studio`:
   it cancels their subscription, so a person does it in Studio). Planned: own
   profile; invite.
+- **Member Board (Journey):**
+  - Member: R own member-safe coaching focus (`journey` in `members/me/context.md`:
+    stage goal, completed/remaining checkpoints, personal wins). Never sees
+    other members' stage/checkpoints/wins, CRM status labels (`needs_you`,
+    `stuck`, `quiet`), or founder coaching notes. In a private talk with the
+    hosted Guide (`member_private`), any founder coaching note is supplied
+    silently without ever revealing board/pipeline language or the note itself.
+  - Moderator: own `members/me/context.md` only; fails closed on builder board
+    reads and all board mutations.
+  - Admin & Owner (Builder lens): R full Member Board (`builder/journey.json`)
+    and per-member board summary on `members/<handle>.json` (outcomes,
+    checkpoints, wins, status, founder notes; never private 1:1 chat words).
+    W/A identically via Official Polynet MCP (Free+) and Studio Guide chat
+    ($20+): `community.journey.move_stage`, `community.journey.set_status`,
+    `community.journey.set_milestone`, `community.journey.record_win`,
+    `community.journey.set_guide_note`, `community.journey.save_stages`, and
+    `community.journey.remove_stage` (confirmed every time).
 - Tags on people were built and never used; they were deleted Nov 7.
   A selection never sends direct messages in bulk.
 

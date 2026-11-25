@@ -129,6 +129,17 @@ export const CALL_OPERATIONS = {
   "community.members.remove": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
   "community.members.ban": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
   "community.members.unban": entry("builder", "write", "builder_change"),
+  // Member Board (owners and admins only): move members between stages, pin or
+  // reset statuses, check off milestones, log or remove wins, leave a private
+  // coaching note for the community AI, update stages, or remove a stage
+  // (removing a stage always asks the host first).
+  "community.journey.move_stage": entry("builder", "write", "builder_change"),
+  "community.journey.set_status": entry("builder", "write", "builder_change"),
+  "community.journey.set_milestone": entry("builder", "write", "builder_change"),
+  "community.journey.record_win": entry("builder", "write", "builder_change"),
+  "community.journey.set_guide_note": entry("builder", "write", "builder_change"),
+  "community.journey.save_stages": entry("builder", "write", "builder_change"),
+  "community.journey.remove_stage": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
 } satisfies Record<string, OperationEntry>;
 
 // An operation that is a different thing for one of its inputs.
