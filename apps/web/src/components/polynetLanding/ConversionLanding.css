@@ -366,9 +366,8 @@
 /* One feature: a label for a title, one paragraph, a wide scene that runs off
    the right edge and fades, and the names of what's inside. */
 .pn-landing main section.feat { padding: 104px 0 88px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
-.pn-landing .plan-tag { display: inline-flex; padding: 3px 10px; border: 1px solid rgba(var(--ai-rgb), .35); border-radius: 999px; background: rgba(var(--ai-rgb), .08); color: var(--ai); font-size: 12.5px; font-weight: 500; }
-.pn-landing .feat-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px); gap: 32px 48px; align-items: end; }
-.pn-landing .feat-head h2 { margin-top: 18px; font-size: clamp(34px, 4.4vw, 56px); line-height: 1.04; letter-spacing: -0.035em; }
+.pn-landing .feat-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 480px); gap: 32px 48px; align-items: end; }
+.pn-landing .feat-head h2 { font-size: clamp(34px, 4.4vw, 56px); line-height: 1.04; letter-spacing: -0.035em; }
 .pn-landing .feat-head p { color: var(--secondary); font-size: clamp(17px, 1.6vw, 22px); line-height: 1.42; letter-spacing: -0.01em; }
 .pn-landing .scene { position: relative; height: 540px; margin-top: 64px; }
 .pn-landing .scene-back {
@@ -385,6 +384,68 @@
 .pn-landing .feat-list > span { color: var(--quiet); }
 .pn-landing .feat-list ul { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; color: var(--secondary); }
 .pn-landing .feat-list ul + ul { padding-left: 32px; border-left: 1px solid var(--line); }
+
+/* The guide's scene (GuideScene.tsx), from the app's own parts: the member's
+   guide chat in front, the place its answer points to behind, lit. */
+.pn-landing .scene.live { height: 580px; }
+.pn-landing .gsc, .pn-landing .gsc-wait { position: relative; height: 100%; }
+.pn-landing .gsc-back {
+  position: absolute; top: 40px; left: 30%; width: 980px; height: 540px;
+  -webkit-mask-image: linear-gradient(90deg, #000 55%, transparent 94%), linear-gradient(180deg, #000 60%, transparent);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, #000 55%, transparent 94%), linear-gradient(180deg, #000 60%, transparent); mask-composite: intersect;
+}
+.pn-landing .gsc-win.rpw { grid-template-columns: minmax(0, 1fr); height: 100%; border: 1px solid rgba(255, 255, 255, .07); border-radius: 14px; overflow: hidden; }
+.pn-landing .gsc-win .rpw-panel { margin: 8px; }
+.pn-landing .gsc-win .rpw-head { padding: 0 24px 0 calc(14% + 56px); }
+.pn-landing .gsc .gsc-page { padding-left: calc(14% + 56px); animation: pn-rise .45s ease-out both; }
+.pn-landing .gsc .rpw-channel { padding: 16px 44px 0 calc(14% + 44px); }
+.pn-landing .gsc-h { margin: 0; color: #eef0f4; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.pn-landing .gsc .gsc-lit { position: relative; border-radius: 10px; background: rgba(var(--ai-rgb), .09); box-shadow: inset 0 0 0 1px rgba(var(--ai-rgb), .42); transition: background .4s, box-shadow .4s; }
+.pn-landing .gsc [class*="msg"].gsc-lit { margin: 0 -12px; padding: 10px 12px; }
+.pn-landing .gsc-front { position: absolute; z-index: 2; top: 0; left: 0; width: min(468px, 100%); }
+.pn-landing .gsc-chat {
+  display: flex; flex-direction: column; padding: 20px 20px 16px;
+  border: 1px solid #2a2c32; border-radius: 16px; background: #0f1011;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .65), 0 0 70px rgba(124, 92, 240, .10);
+}
+.pn-landing .gsc-chat > :first-child { margin-top: 0; }
+.pn-landing .gsc-talk { display: flex; flex-direction: column; justify-content: flex-end; min-height: 214px; margin: 14px 0 18px; }
+.pn-landing .gsc-talk > * { display: flex !important; flex-direction: column; gap: 16px; }
+.pn-landing .gsc .gsc-answer { font-size: 17px; }
+.pn-landing .gsc-chat [class*="dock"] { margin: 0; padding: 0; }
+.pn-landing .gsc-chat [class*="chips"] { flex-wrap: wrap; }
+.pn-landing .gsc-typing { display: inline-flex; gap: 5px; padding-top: 10px; }
+.pn-landing .gsc-typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--ai); animation: pn-typing 1.1s ease-in-out infinite; }
+.pn-landing .gsc-typing i:nth-child(2) { animation-delay: .15s; } .pn-landing .gsc-typing i:nth-child(3) { animation-delay: .3s; }
+/* The app's chip and card (apps/web/src/styles/community-and-content.css), as they look there. */
+.pn-landing .gsc .entity-chip-wrap { position: relative; display: inline-block; max-width: 100%; vertical-align: baseline; }
+.pn-landing .gsc .entity-chip {
+  display: inline-block; max-width: 100%; box-sizing: border-box; margin: 0; padding: 0 5px; border: 0; border-radius: 5px;
+  background: rgba(167, 139, 250, .12); color: #c4b2fc; font: inherit; line-height: 1.3; vertical-align: baseline; cursor: pointer;
+}
+.pn-landing .gsc .entity-chip:hover, .pn-landing .gsc .entity-chip[aria-expanded="true"] { background: rgba(167, 139, 250, .22); }
+.pn-landing .gsc .entity-chip.gsc-static { cursor: default; }
+.pn-landing .gsc .entity-chip svg { width: .8em; height: .8em; margin-right: 4px; vertical-align: -0.08em; opacity: .8; }
+.pn-landing .gsc .entity-card {
+  position: absolute; z-index: 40; left: 0; bottom: calc(100% + 8px); width: 260px; box-sizing: border-box; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px; border: 1px solid rgba(238, 240, 244, .12); border-radius: 10px; background: #16171a;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: #9ea0a3; font-family: "Geist Variable", "Geist", system-ui, sans-serif; font-size: 13px; line-height: 1.45;
+  opacity: 0; pointer-events: none; visibility: hidden; transform: translateY(4px) scale(.985); transform-origin: 22px bottom;
+  transition: opacity 130ms ease, transform 130ms ease, visibility 0s linear 130ms;
+}
+.pn-landing .gsc .entity-card.is-open { opacity: 1; pointer-events: auto; visibility: visible; transform: none; transition: opacity 130ms ease, transform 130ms ease, visibility 0s linear 0s; }
+.pn-landing .gsc .entity-card-name { color: #eef0f4; font-size: 14px; font-weight: 600; }
+.pn-landing .gsc .entity-card-action { margin-top: 2px; color: #c4b2fc; font-weight: 500; }
+@media (max-width: 900px) {
+  .pn-landing .scene.live { height: auto; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+  .pn-landing .gsc { display: flex; flex-direction: column; }
+  .pn-landing .gsc-front { position: relative; width: 100%; }
+  .pn-landing .gsc-back { order: 2; position: relative; top: auto; left: auto; width: 760px; height: 380px; margin: -36px 0 0 14%; }
+  .pn-landing .gsc-win .rpw-head, .pn-landing .gsc .gsc-page { padding-left: 32px; }
+  .pn-landing .gsc-chat [class*="chips"] { flex-wrap: nowrap; overflow-x: auto; margin-right: -20px; padding-right: 20px; scrollbar-width: none; }
+  .pn-landing .gsc-chat [class*="chips"] > * { flex: none; }
+  .pn-landing .gsc .rpw-channel { padding-left: 24px; }
+}
 
 /* Inside a scene: a floating panel, and a table or map behind it. */
 .pn-landing .sc-panel { display: flex; flex-direction: column; gap: 14px; padding: 22px; border: 1px solid #2a2c32; border-radius: 16px; background: #111214; box-shadow: 0 30px 90px rgba(0, 0, 0, .65), 0 0 70px rgba(124, 92, 240, .10); }

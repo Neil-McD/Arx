@@ -77,23 +77,28 @@ function Face(props: { person: Person; small?: boolean }) {
 // One feature: a label-like title, one paragraph, a wide scene that runs off
 // the page's right edge and fades, and the names of what's inside.
 export function FeatureSection(props: {
-  id: string; plan: string; title: [string, string]; children: ReactNode; sceneLabel: string;
-  front: ReactNode; back: ReactNode; features: string[];
+  id: string; title: [string, string]; children: ReactNode; sceneLabel: string;
+  front?: ReactNode; back?: ReactNode; features: string[];
+  // A scene you use, made from the app's own parts, in place of the picture.
+  live?: ReactNode;
 }) {
   const half = Math.ceil(props.features.length / 2);
   return (
     <section className="feat" id={props.id} aria-labelledby={`${props.id}-title`} data-rv>
       <div className="feat-head">
         <div>
-          <span className="plan-tag">{props.plan}</span>
           <h2 id={`${props.id}-title`}>{props.title[0]}<br />{props.title[1]}</h2>
         </div>
         <p>{props.children}</p>
       </div>
-      <div className="scene" role="img" aria-label={props.sceneLabel}>
-        <div className="scene-back" aria-hidden="true">{props.back}</div>
-        <div className="scene-front" aria-hidden="true">{props.front}</div>
-      </div>
+      {props.live ? (
+        <div className="scene live" aria-label={props.sceneLabel} role="group">{props.live}</div>
+      ) : (
+        <div className="scene" role="img" aria-label={props.sceneLabel}>
+          <div className="scene-back" aria-hidden="true">{props.back}</div>
+          <div className="scene-front" aria-hidden="true">{props.front}</div>
+        </div>
+      )}
       <div className="feat-list">
         <span>Features</span>
         <ul>{props.features.slice(0, half).map((name) => <li key={name}>{name}</li>)}</ul>
@@ -101,43 +106,6 @@ export function FeatureSection(props: {
       </div>
     </section>
   );
-}
-
-// The guide: a member's private question, answered from a lesson that is lit
-// in the course behind it.
-export function guideScene() {
-  const lessons: Array<[string, string, string, boolean?]> = [
-    ["1", "Why a community, why now", "8 min"], ["2", "Find your first ten members", "12 min"], ["3", "Your first live call", "9 min"],
-    ["4", "Pricing your first cohort", "14 min", true], ["5", "Keeping people to the end", "11 min"], ["6", "From cohort to community", "10 min"],
-    ["7", "What to measure", "7 min"],
-  ];
-  return {
-    front: (
-      <div className="sc-panel">
-        <span className="sc-eyebrow">Your guide · private to Dev</span>
-        <div className="sc-msg"><Face person={DEV} /><div><b>Dev <i>2:07 am</i></b><span>How should I price my first cohort?</span></div></div>
-        <div className="sc-msg ai">
-          <span className="sc-face ai"><Sparkles size={14} aria-hidden="true" /></span>
-          <div>
-            <b>Your guide <i>2:07 am</i></b>
-            <span>Maya ran two cohorts here. Monthly billing kept more people to the end than one payment. Lesson 4 walks through the numbers.</span>
-            <em>Lesson 4 · Pricing your first cohort</em>
-          </div>
-        </div>
-        <div className="sc-box">Ask your guide anything</div>
-      </div>
-    ),
-    back: (
-      <div className="sc-table">
-        <div className="sc-row head"><span /><span>Build your community, A to Z</span><span>Length</span><span>Finished</span></div>
-        {lessons.map(([number, title, length, lit], index) => (
-          <div key={number} className={lit ? "sc-row lit" : "sc-row"}>
-            <span /><span><i className="sc-num">{number}</i>{title}</span><span>{length}</span><span>{[14, 12, 11, 9, 6, 4, 3][index]} members</span>
-          </div>
-        ))}
-      </div>
-    ),
-  };
 }
 
 // The brain: what the community knows as a map, and what it learned lately.
