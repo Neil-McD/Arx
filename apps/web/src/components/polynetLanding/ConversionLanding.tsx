@@ -119,16 +119,19 @@ export function Brand() {
   );
 }
 
-// The hero's backdrop: a quiet field of stars; the product itself leads.
+// The hero's backdrop: a quiet field of stars, from the top bar down behind
+// the product preview; the product itself leads.
 const STARS: Array<[number, number, number]> = [
   [96, 84, 1.3], [212, 168, 0.8], [338, 62, 1.1], [470, 214, 0.7], [560, 96, 1.4], [842, 58, 1], [968, 182, 0.8], [1096, 88, 1.3],
   [1238, 150, 1], [1356, 72, 1.2], [60, 300, 0.8], [182, 392, 1], [1290, 320, 0.9], [1392, 430, 1.1], [1150, 262, 0.7], [284, 270, 0.7],
   [700, 40, 0.8], [1010, 330, 0.7], [420, 356, 0.7], [760, 250, 0.6], [1220, 470, 0.8], [130, 500, 0.7], [640, 420, 0.6],
+  [40, 640, 0.9], [1400, 620, 1], [70, 820, 0.7], [1380, 860, 0.8], [26, 1040, 1.1], [1414, 1080, 0.8], [110, 1230, 0.8], [1330, 1260, 1],
+  [60, 1340, 0.7], [1400, 1370, 0.9], [210, 600, 0.6], [1240, 700, 0.7],
 ];
 
 function StarField() {
   return (
-    <svg className="stars" viewBox="0 0 1440 560" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+    <svg className="stars" viewBox="0 0 1440 1400" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
       <g fill="#DFE6FF">
         {STARS.map(([cx, cy, r], index) => (
           <circle key={index} className={index % 4 === 0 ? "star-twinkle" : undefined} style={index % 4 === 0 ? { animationDelay: `-${index * 0.4}s` } : undefined} cx={cx} cy={cy} r={r} />
@@ -540,13 +543,13 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             </div>
             <p className="microcopy">{LANDING_OFFER_LINE}</p>
           </div>
-        </section>
-
-        <section className="product" id="how" aria-label="The product" data-rv>
-          <Suspense fallback={<div className="rp rp-wait" aria-hidden="true" />}>
-            <RealAppPreview />
-          </Suspense>
-          <p className="caption">Try it: let someone in, send the check-in your guide drafted, ask it in #general, open Knowledge.</p>
+          {/* The product sits inside the hero, so the night sky runs down behind it. */}
+          <div className="product" id="how" aria-label="The product" role="region" data-rv>
+            <Suspense fallback={<div className="rp rp-wait" aria-hidden="true" />}>
+              <RealAppPreview />
+            </Suspense>
+            <p className="caption">Try it: let someone in, send the check-in your guide drafted, ask it in #general, open a pod.</p>
+          </div>
         </section>
 
         <StatementFigures />

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { BarChart2, Boxes, CalendarDays, ChevronDown, ChevronRight, Hash, House, Inbox, Library, Plus, Search, UserPlus, Users } from "lucide-react";
+import { BarChart2, Boxes, CalendarDays, ChevronDown, Hash, House, Inbox, Library, Plus, Search, UserPlus, Users } from "lucide-react";
 
 import type { BrainAttach, BrainMap, BrainPoint } from "../../../../../shared/communityBrain";
 import { brainFact, latestLearned } from "../../../../../shared/communityBrain";
@@ -22,7 +22,7 @@ import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople
 // in a made-up community (The Build Club) with made-up people. Every click
 // moves a fixed script; nothing is sent anywhere. Only what Polynet does today.
 
-export type PreviewPage = "home" | "inbox" | "general" | "wins" | "know" | "brain" | "events" | "members";
+export type PreviewPage = "home" | "inbox" | "general" | "wins" | "know" | "brain" | "events" | "members" | "pod";
 
 export type PreviewState = {
   page: PreviewPage;
@@ -37,7 +37,8 @@ export type PreviewState = {
   talk: string | null;
   member: string | null;
   picked: string | null;
-  podsOpen: boolean;
+  /** The pod open on the pod page. */
+  pod: string;
 };
 
 export type DraftState = "waiting" | "sent" | "skipped";
@@ -55,11 +56,11 @@ export type PreviewAction =
   | { type: "talk"; chip: string | null }
   | { type: "member"; key: string | null }
   | { type: "pick"; id: string | null }
-  | { type: "pods" };
+  | { type: "pod"; pod: string };
 
 export const INITIAL_PREVIEW: PreviewState = {
   page: "home", waiting: ["r1", "r2"], replyDraft: "waiting", checkIn: "waiting", asked: false, answered: false,
-  talk: null, member: null, picked: null, podsOpen: false,
+  talk: null, member: null, picked: null, pod: "launch",
 };
 
 export function previewReducer(state: PreviewState, action: PreviewAction): PreviewState {
@@ -88,8 +89,8 @@ export function previewReducer(state: PreviewState, action: PreviewAction): Prev
       return { ...state, member: action.key };
     case "pick":
       return { ...state, picked: action.id };
-    case "pods":
-      return { ...state, podsOpen: !state.podsOpen };
+    case "pod":
+      return { ...state, page: "pod", pod: action.pod, talk: null, member: null, picked: null };
   }
 }
 
@@ -391,13 +392,44 @@ function dayFor(iso: string | null): string | null {
   return iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 }
 
-const colour = (id: string) => `hsl(${(id.charCodeAt(1) * 47) % 360} 35% 38%)`;
+// The kit's avatar tones (a1 to a6), so faces match the rest of the app.
+const TONES = ["#5B6CF0", "#E0788C", "#3DAE8C", "#C58B3A", "#7A6FF0", "#3D8FD6"];
+const colour = (id: string) => TONES[Number(id.replace(/\D/g, "") || 0) % TONES.length];
 const initials = (name: string) => name.split(" ").map((part) => part[0]).join("").slice(0, 2);
+
+// ---------- pods ----------
+
+type Pod = { key: string; name: string; purpose: string; when: string; next: string; unread?: boolean; people: string[]; knows: Array<[string, string]>; feed: Array<Message | string> };
+export const PODS: Pod[] = [
+  { key: "launch", name: "Launch pod", unread: true, when: "6 weeks", next: "Thu 6:00 pm",
+    purpose: "Six builders launching their first paid offer by December, with a weekly call and a launch checklist.",
+    people: ["Maya Chen", "Dev Patel", "Priya Shah", "Tom Alvarez", "Hana Sato", "Alex Rivera"],
+    knows: [["Launch pod's weekly plan", "2 days ago"], ["Launch post headlines that worked", "3 days ago"]],
+    feed: [
+      "Today",
+      { who: "Maya", tone: "a4", time: "8:15 am", text: "Checklist done up to step 4. Landing page is live, writing the launch post tonight." , reactions: ["🔥 3"] },
+      { who: "Tom", tone: "a1", time: "8:31 am", text: "Same. Stuck on the headline though." },
+      { who: "Guide", tone: "guide", guide: true, time: "8:32 am", text: "Three headlines that worked for members here are saved in the pod's notes. The pattern: the result, then who it's for.",
+        note: { title: "Launch post headlines that worked", id: "note:headline" } },
+      { who: "Dev", tone: "a1", time: "9:02 am", text: "Booked Thursday's call. Bringing my numbers." },
+    ] },
+  { key: "pricing", name: "Pricing circle", when: "ongoing", next: "Tue 7:00 pm",
+    purpose: "A small group that reviews each other's prices before they go live.",
+    people: ["Priya Shah", "Jon Park", "Sara Lind", "Alex Rivera"],
+    knows: [["Founding-member pricing", "yesterday"], ["One price beats three tiers at the start", "12 days ago"]],
+    feed: [
+      "Yesterday",
+      { who: "Priya", tone: "a5", time: "5:40 pm", text: "Thinking $490 a year with 30 founding seats at half. Too low?" },
+      { who: "Jon", tone: "a1", time: "6:05 pm", text: "Not too low for founders. Raise it once the seats are gone, like I did." , reactions: ["🙌 2"] },
+      { who: "Guide", tone: "guide", guide: true, time: "6:06 am", text: "Saved as \"Founding-member pricing\" for the circle, with Jon's numbers.",
+        note: { title: "Founding-member pricing", id: "note:founding" } },
+    ] },
+];
 
 // ---------- the frame ----------
 
 const DESIGN_WIDTH = 1280;
-const DESIGN_HEIGHT = 800;
+const DESIGN_HEIGHT = 820;
 
 function useFitScale() {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -483,22 +515,21 @@ export function RealAppPreview() {
         </Rail></KitApp>
       );
     }
-    if (page === "general" || page === "wins") {
+    if (page === "pod") {
+      const pod = PODS.find((entry) => entry.key === state.pod) ?? PODS[0];
       return (
-        <KitApp view="wins" part="rail"><Rail index={1} label="About this channel">
-          <PanelPart label="About"><p className={cx("chabout")}>{page === "general" ? "Say hello, ask anything. The guide answers when you tag it." : "Share what worked, big or small."}</p></PanelPart>
-          {page === "general" ? (
-            <PanelPart label="Pinned">
-              <div className={cx("chpin")}>
-                <span className={cx("chpin-by")}><b>You</b><em>2 weeks ago</em></span>
-                <strong className={cx("chpin-title")}>Start here</strong>
-                <div className={cx("chpin-body")}><p>New? Take the Start here course first. It's five short lessons and the guide can answer anything in it.</p></div>
-              </div>
-            </PanelPart>
-          ) : null}
-          <PanelPart label="Here" fact="214 members" action={<PanelAction onClick={() => go("members")}>Everyone</PanelAction>}>
-            <PanelPeople names={["Maya Chen", "Dev Patel", "Priya Shah", "Jon Park", "Lena Novak", "Sara Lind"]} max={5} />
-            <PanelLine>6 here now</PanelLine>
+        <KitApp view="wins" part="rail"><Rail index={1} label={pod.name}>
+          <PanelPart label={pod.name} fact={pod.when}>
+            <p className={cx("chabout")}>{pod.purpose}</p>
+          </PanelPart>
+          <PanelPart label="Next call" fact="every week">
+            <PanelNext title={pod.next} sub={`${pod.name} call`} />
+          </PanelPart>
+          <PanelPart label="What this pod knows" fact={String(pod.knows.length)}>
+            {pod.knows.map(([title, when]) => <PanelLearned key={title} title={title} when={when} />)}
+          </PanelPart>
+          <PanelPart label="In this pod" fact={String(pod.people.length)}>
+            <PanelPeople names={pod.people} max={4} />
           </PanelPart>
         </Rail></KitApp>
       );
@@ -598,7 +629,7 @@ export function RealAppPreview() {
                   <Eyebrow community={PREVIEW_COMMUNITY} time="9:24 am" />
                   <Hello greeting="Good morning, Alex." line="" />
                   <div className={cx("hbrief")}>
-                    <p>Most of the talk is about pricing a first offer: Dev settled on $49 after the guide's answer, and Priya is weighing a founding-member price. Jon's three-line invitation took him past 100 members, and Friday's call is where it's all headed.</p>
+                    <p>Most of the talk is about pricing a first offer: Dev settled on $49 after the guide's answer, and Priya is weighing a founding-member price. Jon's invitation took him past 100 members.</p>
                     <span><em>Written 2 hours ago</em>
                       <button type="button" onClick={() => go("general")}>#general</button>
                       <button type="button" onClick={() => go("wins")}>#wins</button>
@@ -635,6 +666,17 @@ export function RealAppPreview() {
       case "general":
       case "wins":
         return <ChannelPage state={state} dispatch={dispatch} slug={page} />;
+      case "pod": {
+        const pod = PODS.find((entry) => entry.key === state.pod) ?? PODS[0];
+        return (
+          <div className="rpw-channel">
+            <div className="rpw-feed">
+              <KitApp view="wins" part="flow"><Feed items={pod.feed} onNote={(id) => go("brain", id)} /></KitApp>
+            </div>
+            <div className="rpw-dock"><Composer value="" placeholder={`Message ${pod.name}`} sent={false} /></div>
+          </div>
+        );
+      }
       case "know":
         return (
           <div className="rpw-page">
@@ -716,7 +758,10 @@ export function RealAppPreview() {
     }
   })();
 
-  const title = page === "brain"
+  const openPod = PODS.find((entry) => entry.key === state.pod) ?? PODS[0];
+  const title = page === "pod"
+    ? <span className="rpw-ch"><Boxes size={15} />{openPod.name}<ChevronDown size={13} /></span>
+    : page === "brain"
     ? <span className="rpw-ch"><button type="button" className="rpw-back" onClick={() => go("know")}>← Knowledge</button>The community brain</span>
     : TITLES[page];
 
@@ -736,8 +781,16 @@ export function RealAppPreview() {
           <NavRow icon={<Hash size={14} />} label="wins" dot={page !== "wins"} on={page === "wins"} onClick={() => go("wins")} />
           <NavRow icon={<Hash size={14} />} label="intros" />
           <div className="rpw-section"><span>Community</span></div>
-          <NavRow icon={<Boxes size={14} />} label="Pods" chevron={state.podsOpen ? <ChevronDown size={12} className="rpw-chev" /> : <ChevronRight size={12} className="rpw-chev" />} onClick={() => dispatch({ type: "pods" })} />
-          {state.podsOpen ? <div className="rpw-pods"><NavRow icon={<span className="rpw-podmark" />} label="Launch pod" /></div> : null}
+          <NavRow icon={<Boxes size={14} />} label="Pods" />
+          <div className="rpw-pods" role="group" aria-label="Your pods">
+            {PODS.map((pod) => (
+              <button key={pod.key} type="button" className={page === "pod" && state.pod === pod.key ? "rpw-pod on" : "rpw-pod"}
+                onClick={() => { track(`open_pod_${pod.key}`); dispatch({ type: "pod", pod: pod.key }); }}>
+                <span>{pod.name}</span>
+                {pod.unread && !(page === "pod" && state.pod === pod.key) ? <span className="rpw-dot" aria-hidden="true" /> : null}
+              </button>
+            ))}
+          </div>
           <NavRow icon={<Library size={14} />} label="Knowledge" on={page === "know" || page === "brain"} onClick={() => go("know")} />
           <NavRow icon={<CalendarDays size={14} />} label="Events" on={page === "events"} onClick={() => go("events")} />
           <NavRow icon={<Users size={14} />} label="Members" hint="214" on={page === "members"} onClick={() => go("members")} />
