@@ -330,11 +330,6 @@
 @keyframes pn-glowpulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 .pn-landing .f1 .core-glow { transform-box: fill-box; transform-origin: center; animation: pn-core 5s ease-in-out infinite; }
 @keyframes pn-core { 0%, 100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.18); } }
-/* the figure as a whole: a point climbs from a conversation into the memory */
-.pn-landing .f1 .trail { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 900ms cubic-bezier(.2, .8, .2, 1); }
-.pn-landing .f1 .rise { transition: transform 900ms cubic-bezier(.2, .8, .2, 1); }
-.pn-landing .f1:hover .trail, .pn-landing .f1.play .trail { stroke-dashoffset: 0; }
-.pn-landing .f1:hover .rise, .pn-landing .f1.play .rise { transform: translateY(-74px); }
 /* It acts: the person under the pointer lights their line; the figure reaches the quiet one. */
 .pn-landing .f2 .spoke-line { transition: stroke 250ms; }
 .pn-landing .f2 .spoke:hover .spoke-line { stroke: #9aa0aa; }
@@ -347,6 +342,11 @@
 .pn-landing .f2:hover .reach, .pn-landing .f2.play .reach { stroke-dashoffset: 0; }
 .pn-landing .f2:hover .note, .pn-landing .f2.play .note { opacity: 1; transform: none; }
 .pn-landing .f2:hover .back, .pn-landing .f2.play .back { opacity: 1; }
+/* It acts, all the time: a signal runs out to each person; their head brightens as it lands; the centre breathes. */
+.pn-landing .f2 .sig { stroke-dasharray: .07 .93; stroke-dashoffset: 1; opacity: .55; animation-name: pn-fire; animation-timing-function: linear; animation-iteration-count: infinite; }
+.pn-landing .f2 .flash { opacity: 0; animation-name: pn-land; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes pn-land { 0% { opacity: .8; } 18% { opacity: 0; } 97% { opacity: 0; } 100% { opacity: .8; } }
+.pn-landing .f2 .core-glow { transform-box: fill-box; transform-origin: center; animation: pn-core 5s ease-in-out infinite; }
 /* You decide: the card nudges under the pointer; the figure lets the lock go and it drops in. */
 .pn-landing .f3 .card { transition: transform 700ms cubic-bezier(.2, .8, .2, 1); }
 .pn-landing .f3 .card:hover { transform: translateY(4px); }
@@ -355,6 +355,10 @@
 .pn-landing .f3:hover .card, .pn-landing .f3.play .card { transform: translateY(86px); }
 .pn-landing .f3:hover .latch, .pn-landing .f3.play .latch, .pn-landing .f3:hover .drop, .pn-landing .f3.play .drop { opacity: 0; }
 .pn-landing .f3:hover .tick, .pn-landing .f3.play .tick { opacity: 1; transform: none; }
+/* while it waits, the held card floats very slightly */
+.pn-landing .f3 .float { animation: pn-bob 4.5s ease-in-out infinite; }
+.pn-landing .f3:hover .float, .pn-landing .f3.play .float { animation: none; }
+@keyframes pn-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .pn-landing .figs svg * { transition: none !important; animation: none !important; } }
 .pn-landing .figs h3 { font-size: 16px; }
 .pn-landing .figs p { max-width: 320px; margin-top: 8px; color: var(--quiet); font-size: 15px; }
