@@ -24,7 +24,12 @@ import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { runDueBuilderHeartbeatsForAction } from "./communityBuilderHeartbeat";
+import {
+  readActiveCommunityAllowanceState,
+  runFounderAllowanceAlertsForAction,
+} from "./communityAllowanceGuardrails";
 import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
+import { shouldPauseBackgroundAiForAllowance } from "../shared/allowanceGuardrails";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
@@ -409,6 +414,16 @@ export const claimCommunityMemberCoachScanInternal = internalMutation({
 
     const community = await ctx.db.get(settings.communityId);
     if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, settings.communityId))) {
+      await ctx.db.patch(settings._id, {
+        nextScanAt: args.nowMs + MEMBER_COACH_SCAN_INTERVAL_MS,
+        leaseUntil: undefined,
+        updatedAt: args.nowMs,
+      });
+      return null;
+    }
+
+    const allowance = await readActiveCommunityAllowanceState(ctx, settings.communityId, args.nowMs);
+    if (allowance?.backgroundAiPaused) {
       await ctx.db.patch(settings._id, {
         nextScanAt: args.nowMs + MEMBER_COACH_SCAN_INTERVAL_MS,
         leaseUntil: undefined,
@@ -1266,6 +1281,8 @@ export const processDueMemberCoachScansInternal = internalAction({
     );
     // Builder's Own Proactive Heartbeat (Owner + active Admins private commitments).
     const builders = await runDueBuilderHeartbeatsForAction(ctx, nowMs);
+    // Calm, idempotent 80% & 100% founder allowance alerts per billing cycle.
+    const allowanceAlerts = await runFounderAllowanceAlertsForAction(ctx, nowMs);
     return {
       scanned: due.length,
       outcomes,
@@ -1273,6 +1290,7 @@ export const processDueMemberCoachScansInternal = internalAction({
       builderScanned: builders.scanned,
       builderOutcomes: builders.outcomes,
       builderUnseenEmailsEnqueued: builders.unseenEmailsEnqueued,
+      allowanceAlertsSent: allowanceAlerts.alertsSent,
     };
   },
 });
@@ -1498,6 +1516,9 @@ async function buildCoachSettingsView(
   const cycleStartMs = activeLedgerCycle
     ? Number(activeLedgerCycle.cycleStartAt)
     : utcMonthWindow(nowMs).startAt;
+  const cycleEndMs = activeLedgerCycle
+    ? Number(activeLedgerCycle.cycleEndAt)
+    : utcMonthWindow(nowMs).endAt;
   const allowanceMicros = activeLedgerCycle
     ? Number(activeLedgerCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)
     : POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS;
@@ -1611,6 +1632,11 @@ async function buildCoachSettingsView(
       allowance_micros: allowanceMicros,
       percent_used: authoritativePercentUsed,
       spend_truncated: spend.truncated,
+      cycle_end_at: cycleEndMs,
+      background_ai_paused: shouldPauseBackgroundAiForAllowance({
+        settledMicros: authoritativeTotalMicros,
+        allowanceMicros,
+      }),
       reengaged_30d: reengagement.reengagedCount,
       contacted_30d: reengagement.contactedCount,
       reengagement_truncated: reengagementTruncated,

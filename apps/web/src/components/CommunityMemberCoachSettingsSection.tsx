@@ -2,6 +2,7 @@
 // (docs/specs/proactive-community-agent-v0.md, slice 1). Loaded on demand for
 // community owners only so members never download it.
 import { useEffect, useState } from "react";
+import { formatAllowanceResetDate } from "../../../../shared/allowanceGuardrails";
 import { formatMicrosUsd } from "../../../../shared/agentRoiSummary";
 import {
   MEMBER_COACH_REASONS,
@@ -101,8 +102,12 @@ export function CommunityMemberCoachSettingsSection(props: {
   const countsSummary = heartbeat?.counts
     ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up ($0 AI)`
     : "Updates automatically on the next heartbeat scan.";
+  const resetLabel = formatAllowanceResetDate(impact?.cycle_end_at);
   const spendSummary = impact
-    ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)} monthly allowance used (${impact.percent_used}%) · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
+    ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)} monthly allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
+    : null;
+  const reserveNote = impact?.background_ai_paused
+    ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining allowance for live chats, @mentions, and your Daily Brief."
     : null;
   const winBackSummary = impact
     ? impact.contacted_30d > 0
@@ -111,6 +116,12 @@ export function CommunityMemberCoachSettingsSection(props: {
         : `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
       : "No proactive check-ins sent in the last 30 days yet."
     : null;
+  const fillTone =
+    (impact?.percent_used ?? 0) >= 100
+      ? " is-full"
+      : (impact?.percent_used ?? 0) >= 80
+        ? " is-warn"
+        : "";
 
   return (
     <SettingsGroup label="Proactive guide">
@@ -125,7 +136,26 @@ export function CommunityMemberCoachSettingsSection(props: {
       {impact && spendSummary ? (
         <SettingsRow
           label="Monthly allowance & impact"
-          help={`${spendSummary} ${winBackSummary ?? ""}`}
+          help={
+            <div className="guide-allowance-meter">
+              <div
+                className="guide-allowance-track"
+                role="progressbar"
+                aria-label="Monthly AI allowance used"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={impact.percent_used}
+              >
+                <div
+                  className={`guide-allowance-fill${fillTone}`}
+                  style={{ width: `${Math.min(100, Math.max(0, impact.percent_used))}%` }}
+                />
+              </div>
+              <div className="guide-allowance-meta">
+                {spendSummary} {reserveNote ? `${reserveNote} ` : ""}{winBackSummary ?? ""}
+              </div>
+            </div>
+          }
         >
           <span className="settings-v1-value">{impact.percent_used}%</span>
         </SettingsRow>

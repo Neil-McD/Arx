@@ -16,23 +16,23 @@ export const POLYNET_BUILDER_OFFER = {
   scopeLabel: "per community",
   headline: "Give your community an agent",
   description:
-    "Your community is free. The Agent plan gives it one AI agent that remembers what the community learns, answers members, and does the work.",
+    "Your community is free forever. The Agent plan adds one always-on AI agent for your community, with $20/month in included AI usage (enough for thousands of conversations).",
   purchaseHeadline: "Turn on the agent",
   purchaseDescription:
-    "One AI agent for one community, with a monthly AI allowance included.",
+    "One always-on AI agent for one community, with $20/month in included AI usage.",
   purchaseNote: "Your community stays free either way.",
   benefits: [
     {
-      title: "An agent that remembers",
-      description: "It learns from your conversations, calls, and resources, so it answers the way your community would.",
+      title: "Living Soul & Memory",
+      description: "Remembers your community's voice, lessons, and each person's private goals — strictly private per member and builder.",
     },
     {
-      title: "Answers for every member",
-      description: "Members ask it on the Agent page, by @mention, or on your site, whenever they need it.",
+      title: "1:1 answers & follow-ups everywhere",
+      description: "Answers members privately, replies to @mentions, follows up in active threads, and works on your site and MCP.",
     },
     {
-      title: "Work done for you",
-      description: "Daily briefs, memory upkeep, and follow-ups, without you doing them by hand.",
+      title: "Chief of Staff & Proactive Heartbeats",
+      description: "Daily founder briefs, activity-tapered member & builder check-ins, and zero-AI weekly digests that bring quiet members back.",
     },
   ],
   platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,

@@ -8,6 +8,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { communityAgentIsOn } from "./communityApps";
+import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
 import {
   communityMembershipRowIsActive,
   getActiveCommunityBlock,
@@ -223,6 +224,15 @@ export const claimBuilderHeartbeatScanInternal = internalMutation({
     }
     const community = await ctx.db.get(settings.communityId);
     if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, settings.communityId))) {
+      await ctx.db.patch(settings._id, {
+        builderNextScanAt: args.nowMs + BUILDER_HEARTBEAT_SCAN_INTERVAL_MS,
+        builderLeaseUntil: undefined,
+        updatedAt: args.nowMs,
+      });
+      return null;
+    }
+    const allowance = await readActiveCommunityAllowanceState(ctx, settings.communityId, args.nowMs);
+    if (allowance?.backgroundAiPaused) {
       await ctx.db.patch(settings._id, {
         builderNextScanAt: args.nowMs + BUILDER_HEARTBEAT_SCAN_INTERVAL_MS,
         builderLeaseUntil: undefined,

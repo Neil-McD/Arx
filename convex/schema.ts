@@ -2059,6 +2059,9 @@ export default defineSchema({
     // so pausing member check-ins never silences a builder's private commitment follow-ups.
     builderNextScanAt: v.optional(v.number()),
     builderLeaseUntil: v.optional(v.number()),
+    // Idempotent 80% / 100% founder allowance alerts scoped to the active billing cycle.
+    allowanceAlertCycleKey: v.optional(v.string()),
+    allowanceAlertNotifiedPercent: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),

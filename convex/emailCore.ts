@@ -9,6 +9,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "dm_message_notification",
   "founder_daily_brief",
   "member_coach_nudge",
+  "founder_allowance_notice",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -355,6 +356,24 @@ export function renderEmailTemplate(params: {
         subject: `${guideName} checked in · ${communityName}`,
         html: shell.html,
         text: [shell.text, bodyPreview || `Your guide in ${communityName} checked in on your private thread.`].filter(Boolean).join("\n\n"),
+      };
+    }
+    case "founder_allowance_notice": {
+      const headline = readString(payload.headline) || `Monthly AI allowance update for ${communityName}`;
+      const bodyText = readString(payload.bodyText) || `Check your AI allowance and impact in ${communityName}.`;
+      const subject = readString(payload.subject) || headline;
+      const shell = buildEmailShell({
+        title: headline,
+        subtitle: communityName,
+        bodyHtml: `<div style="font-size:15px;line-height:1.55;color:#fcf8f0;">${escapeHtml(bodyText)}</div>`,
+        ctaLabel: "View allowance & impact",
+        ctaUrl: readString(payload.actionUrl),
+        footerNote: "Sent once per billing cycle milestone so you always know where your community's AI allowance stands.",
+      });
+      return {
+        subject,
+        html: shell.html,
+        text: [shell.text, bodyText].filter(Boolean).join("\n\n"),
       };
     }
     case "event_reminder":
