@@ -151,9 +151,9 @@ function HomeScreen(props: { state: PreviewState; dispatch: (action: PreviewActi
       <strong className="shot-hello big pv-line">Good morning.</strong>
       <p className="shot-text pv-line">
         Two people finished Start here.{" "}
-        <button type="button" className="pv-link" onClick={() => { track("brief_see_answer"); dispatch({ type: "open", screen: "general" }); }}>
+        <a href="#general" className="pv-link" onClick={(event) => { event.preventDefault(); track("brief_see_answer"); dispatch({ type: "open", screen: "general" }); }}>
           Dev asked about pricing overnight
-        </button>{" "}
+        </a>{" "}
         and got an answer. {state.joshCheckedIn ? "You're all caught up." : "One person needs you."}
       </p>
       {state.joshCheckedIn ? (
@@ -347,11 +347,6 @@ export function ProductPreview() {
         ))}
       </nav>
       <div className="shot-main pv-main">
-        <div className="pv-tabs" role="tablist" aria-label="Preview screens">
-          {SCREENS.map(([screen, label]) => (
-            <button type="button" role="tab" key={screen} aria-selected={state.screen === screen} className={state.screen === screen ? "on" : undefined} onClick={() => go(screen)}>{label}</button>
-          ))}
-        </div>
         {state.screen === "home" ? <HomeScreen state={state} dispatch={dispatch} /> : null}
         {state.screen === "general" ? <GeneralScreen state={state} dispatch={dispatch} /> : null}
         {state.screen === "members" ? <MembersScreen state={state} dispatch={dispatch} /> : null}
