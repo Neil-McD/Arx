@@ -119,25 +119,50 @@ export function Brand() {
   );
 }
 
-// The hero's backdrop: a quiet field of stars, from the top bar down behind
-// the product preview; the product itself leads.
-const STARS: Array<[number, number, number]> = [
-  [96, 84, 1.3], [212, 168, 0.8], [338, 62, 1.1], [470, 214, 0.7], [560, 96, 1.4], [842, 58, 1], [968, 182, 0.8], [1096, 88, 1.3],
-  [1238, 150, 1], [1356, 72, 1.2], [60, 300, 0.8], [182, 392, 1], [1290, 320, 0.9], [1392, 430, 1.1], [1150, 262, 0.7], [284, 270, 0.7],
-  [700, 40, 0.8], [1010, 330, 0.7], [420, 356, 0.7], [760, 250, 0.6], [1220, 470, 0.8], [130, 500, 0.7], [640, 420, 0.6],
-  [40, 640, 0.9], [1400, 620, 1], [70, 820, 0.7], [1380, 860, 0.8], [26, 1040, 1.1], [1414, 1080, 0.8], [110, 1230, 0.8], [1330, 1260, 1],
-  [60, 1340, 0.7], [1400, 1370, 0.9], [210, 600, 0.6], [1240, 700, 0.7],
-];
+// The hero's backdrop: a night sky in two layers, from the top bar down
+// behind the product preview. As the page scrolls the sky moves slower than
+// the page (the far layer slowest), which gives the hero depth.
+function skyLayer(count: number, seed: number, rMin: number, rMax: number): Array<[number, number, number]> {
+  let state = seed;
+  const next = () => { state = (state * 9301 + 49297) % 233280; return state / 233280; };
+  return Array.from({ length: count }, () => [Math.round(next() * 1440), Math.round(next() * 2400), +(rMin + next() * (rMax - rMin)).toFixed(2)]);
+}
+const FAR_STARS = skyLayer(110, 7, 0.45, 0.95);
+const NEAR_STARS = skyLayer(42, 31, 0.8, 1.45);
+// How much of the page's scroll each layer follows back: the far sky nearly stays put.
+const SKY_DEPTH = { far: 0.78, near: 0.55 };
 
 function StarField() {
-  return (
-    <svg className="stars" viewBox="0 0 1440 1400" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+  const far = useRef<SVGSVGElement | null>(null);
+  const near = useRef<SVGSVGElement | null>(null);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      const y = Math.min(window.scrollY, 2400);
+      if (far.current) far.current.style.transform = `translate3d(0, ${y * SKY_DEPTH.far}px, 0)`;
+      if (near.current) near.current.style.transform = `translate3d(0, ${y * SKY_DEPTH.near}px, 0)`;
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(place); };
+    place();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); if (frame) window.cancelAnimationFrame(frame); };
+  }, []);
+  const layer = (ref: typeof far, stars: Array<[number, number, number]>, className: string) => (
+    <svg ref={ref} className={`stars ${className}`} viewBox="0 0 1440 2400" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
       <g fill="#DFE6FF">
-        {STARS.map(([cx, cy, r], index) => (
-          <circle key={index} className={index % 4 === 0 ? "star-twinkle" : undefined} style={index % 4 === 0 ? { animationDelay: `-${index * 0.4}s` } : undefined} cx={cx} cy={cy} r={r} />
+        {stars.map(([cx, cy, r], index) => (
+          <circle key={index} className={index % 5 === 0 ? "star-twinkle" : undefined} style={index % 5 === 0 ? { animationDelay: `-${index * 0.37}s` } : undefined} cx={cx} cy={cy} r={r} />
         ))}
       </g>
     </svg>
+  );
+  return (
+    <>
+      {layer(far, FAR_STARS, "stars-far")}
+      {layer(near, NEAR_STARS, "stars-near")}
+    </>
   );
 }
 

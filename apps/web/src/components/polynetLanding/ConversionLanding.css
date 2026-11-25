@@ -198,7 +198,11 @@
 /* The sky fades into the page just below the preview, before the next section. */
 .pn-landing .hero::after { content: ""; position: absolute; inset: auto 0 0; height: 140px; background: linear-gradient(180deg, transparent, var(--bg)); pointer-events: none; }
 .pn-landing .hero > .product { position: relative; z-index: 1; width: min(100% - 48px, var(--content)); margin: 56px auto 0; }
-.pn-landing .stars { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The sky is taller than the hero and starts above it, so it can drift down
+   as the page scrolls without showing an edge. */
+.pn-landing .stars { position: absolute; left: 0; width: 100%; top: -80%; height: 180%; will-change: transform; pointer-events: none; }
+.pn-landing .stars-far { opacity: .55; }
+.pn-landing .stars-near { opacity: .9; }
 .pn-landing .hero-text {
   position: relative;
   display: flex;
