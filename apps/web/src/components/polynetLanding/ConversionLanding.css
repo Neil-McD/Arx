@@ -419,10 +419,10 @@
 .pn-landing .gsc-typing i:nth-child(2) { animation-delay: .15s; } .pn-landing .gsc-typing i:nth-child(3) { animation-delay: .3s; }
 /* The community brain's scene (BrainScene.tsx): the app's own map straight on
    the page, running off the right and fading, with the card beside it. */
-.pn-landing .scene.live:has(.bsc) { height: 600px; }
+.pn-landing .scene.live:has(.bsc) { height: 650px; }
 .pn-landing .bsc { position: relative; height: 100%; }
 .pn-landing .bsc-map {
-  position: absolute; top: -70px; left: 24%; width: 1180px; height: 740px;
+  position: absolute; top: -40px; left: 24%; width: 1180px; height: 680px;
   -webkit-mask-image: radial-gradient(ellipse 62% 58% at 42% 50%, #000 55%, transparent 100%);
   mask-image: radial-gradient(ellipse 62% 58% at 42% 50%, #000 55%, transparent 100%);
 }
