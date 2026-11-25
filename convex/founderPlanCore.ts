@@ -4,6 +4,7 @@ import {
   founderSubscriptionStatusGrantsAccess,
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
+import { computeEffectiveCycleAllowanceMicros } from "../shared/founderUsageBoosts";
 import type { FounderInferencePricing } from "./founderPlanPricing";
 
 export type FounderSubscriptionRow = {
@@ -36,6 +37,8 @@ export type FounderUsageCycleRow = {
   cycleStartAt: number;
   cycleEndAt: number;
   includedCostMicros: number;
+  paidBoostCostMicros?: number;
+  paidBoostCount?: number;
   reservedCostMicros: number;
   settledCostMicros: number;
   pricingVersion: string;
@@ -59,16 +62,28 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
-function assertFounderUsageCycleLedgerState(cycle: FounderUsageCycleRow): void {
+function assertFounderUsageCycleLedgerState(cycle: FounderUsageCycleRow): number {
+  const paidBoostCostMicros = cycle.paidBoostCostMicros ?? 0;
+  const paidBoostCount = cycle.paidBoostCount ?? 0;
   if (
     !isPositiveSafeInteger(cycle.includedCostMicros) ||
+    !isNonNegativeSafeInteger(paidBoostCostMicros) ||
+    !isNonNegativeSafeInteger(paidBoostCount) ||
+    (paidBoostCostMicros === 0) !== (paidBoostCount === 0) ||
     !isNonNegativeSafeInteger(cycle.reservedCostMicros) ||
     !isNonNegativeSafeInteger(cycle.settledCostMicros) ||
-    !Number.isSafeInteger(cycle.reservedCostMicros + cycle.settledCostMicros) ||
-    cycle.reservedCostMicros + cycle.settledCostMicros > cycle.includedCostMicros
+    !Number.isSafeInteger(cycle.reservedCostMicros + cycle.settledCostMicros)
   ) {
     throw new Error("founder_usage_cycle_ledger_invalid");
   }
+  const effectiveAllowanceMicros = computeEffectiveCycleAllowanceMicros({
+    includedCostMicros: cycle.includedCostMicros,
+    paidBoostCostMicros,
+  });
+  if (cycle.reservedCostMicros + cycle.settledCostMicros > effectiveAllowanceMicros) {
+    throw new Error("founder_usage_cycle_ledger_invalid");
+  }
+  return effectiveAllowanceMicros;
 }
 
 export function founderUsageCycleKey(args: {
@@ -253,7 +268,7 @@ export async function reserveFounderUsage(args: {
     return { ok: false, code: active.length > 1 ? "founder_usage_cycle_ambiguous" : "founder_usage_cycle_missing" };
   }
   const cycle = active[0]!;
-  assertFounderUsageCycleLedgerState(cycle);
+  const effectiveAllowanceMicros = assertFounderUsageCycleLedgerState(cycle);
   if (normalizedId(cycle.communityId) !== normalizedId(args.communityId)) {
     return { ok: false, code: "founder_usage_cycle_community_mismatch" };
   }
@@ -264,7 +279,7 @@ export async function reserveFounderUsage(args: {
   if (
     !Number.isSafeInteger(requestedReservationCostMicros) ||
     requestedReservationCostMicros <= 0 ||
-    requestedReservationCostMicros > cycle.includedCostMicros
+    requestedReservationCostMicros > effectiveAllowanceMicros
   ) {
     return {
       ok: false,
@@ -278,7 +293,7 @@ export async function reserveFounderUsage(args: {
   if (!Number.isSafeInteger(nextReserved)) {
     throw new Error("founder_usage_cycle_ledger_invalid");
   }
-  if (nextReserved + cycle.settledCostMicros > cycle.includedCostMicros) {
+  if (nextReserved + cycle.settledCostMicros > effectiveAllowanceMicros) {
     return { ok: false, code: "founder_usage_exhausted" };
   }
   await args.ctx.db.patch(cycle._id as any, {
@@ -305,7 +320,7 @@ export async function settleFounderUsageReservation(args: {
 }): Promise<void> {
   const cycle = (await args.ctx.db.get(args.usageCycleId as any)) as FounderUsageCycleRow | null;
   if (!cycle) throw new Error("founder_usage_cycle_missing");
-  assertFounderUsageCycleLedgerState(cycle);
+  const effectiveAllowanceMicros = assertFounderUsageCycleLedgerState(cycle);
   if (!isPositiveSafeInteger(args.reservedCostMicros)) {
     throw new Error("founder_usage_settlement_invalid");
   }
@@ -326,7 +341,7 @@ export async function settleFounderUsageReservation(args: {
     !Number.isSafeInteger(nextReservedCostMicros) ||
     !Number.isSafeInteger(nextSettledCostMicros) ||
     !Number.isSafeInteger(nextReservedCostMicros + nextSettledCostMicros) ||
-    nextReservedCostMicros + nextSettledCostMicros > cycle.includedCostMicros
+    nextReservedCostMicros + nextSettledCostMicros > effectiveAllowanceMicros
   ) {
     throw new Error("founder_usage_cycle_ledger_invalid");
   }

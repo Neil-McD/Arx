@@ -14,7 +14,12 @@ import {
   getCloudMemberCoachSettings,
   setCloudMemberCoachSettings,
 } from "../../../../shared/cloudCommunityMemberCoachGateway";
-import { SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsRows";
+import {
+  FOUNDER_USAGE_BOOST_CAP_PRESETS_CENTS,
+  FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS,
+  FOUNDER_USAGE_BOOST_PRICE_CENTS,
+} from "../../../../shared/founderUsageBoosts";
+import { SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
 export function CommunityMemberCoachSettingsSection(props: {
   communityId: string;
@@ -49,6 +54,7 @@ export function CommunityMemberCoachSettingsSection(props: {
     autoReplyEnabled: boolean;
     threadFollowupEnabled: boolean;
     weeklyDigestEnabled: boolean;
+    usageBoostCapCents?: number;
   }) => {
     if (saving) return;
     setSaving(true);
@@ -65,6 +71,9 @@ export function CommunityMemberCoachSettingsSection(props: {
           autoReplyEnabled: next.autoReplyEnabled,
           threadFollowupEnabled: next.threadFollowupEnabled,
           weeklyDigestEnabled: next.weeklyDigestEnabled,
+          ...(next.usageBoostCapCents !== undefined
+            ? { usageBoostCapCents: next.usageBoostCapCents }
+            : {}),
         }),
       );
     } catch {
@@ -103,8 +112,16 @@ export function CommunityMemberCoachSettingsSection(props: {
     ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up ($0 AI)`
     : "Updates automatically on the next heartbeat scan.";
   const resetLabel = formatAllowanceResetDate(impact?.cycle_end_at);
+  const paidBoostMicros = impact?.paid_boost_micros ?? 0;
+  const includedMicros = impact?.included_allowance_micros ?? impact?.allowance_micros ?? 0;
+  const usageBoostCapCents = impact?.usage_boost_cap_cents ?? 0;
+  const firstCycleCapActive = Boolean(impact?.first_cycle_cap_active);
+  const allowanceBreakdown =
+    paidBoostMicros > 0
+      ? ` (${formatMicrosUsd(includedMicros)} included + ${formatMicrosUsd(paidBoostMicros)} boosts)`
+      : "";
   const spendSummary = impact
-    ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)} monthly allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
+    ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)}${allowanceBreakdown} monthly allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
     : null;
   const reserveNote = impact?.background_ai_paused
     ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining allowance for live chats, @mentions, and your Daily Brief."
@@ -158,6 +175,48 @@ export function CommunityMemberCoachSettingsSection(props: {
           }
         >
           <span className="settings-v1-value">{impact.percent_used}%</span>
+        </SettingsRow>
+      ) : null}
+      {impact ? (
+        <SettingsRow
+          label="Extra usage safety cap"
+          htmlFor="usage-boost-cap"
+          help={
+            usageBoostCapCents <= 0
+              ? "Paused at your $20/month included allowance — zero extra charges."
+              : firstCycleCapActive && usageBoostCapCents > FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS
+                ? `Allows prepaid usage boosts ($30 for +$20 AI allowance) up to $${usageBoostCapCents / 100}/month after your first renewal (capped at $${FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS / 100} during your first billing cycle).`
+                : `Allows prepaid usage boosts ($30 for +$20 AI allowance) up to $${usageBoostCapCents / 100}/month. Extra boosts expire at billing cycle reset; nothing is charged automatically without your payment.`
+          }
+        >
+          <SettingsSelect
+            id="usage-boost-cap"
+            value={usageBoostCapCents}
+            disabled={!settings || saving}
+            onChange={(event) =>
+              void save({
+                enabled,
+                autoReasons,
+                autoReplyEnabled,
+                threadFollowupEnabled,
+                weeklyDigestEnabled,
+                usageBoostCapCents: Number(event.target.value),
+              })
+            }
+          >
+            {FOUNDER_USAGE_BOOST_CAP_PRESETS_CENTS.map((capCents) => {
+              const boosts = Math.floor(capCents / FOUNDER_USAGE_BOOST_PRICE_CENTS);
+              const label =
+                capCents === 0
+                  ? "Paused at $20 (default)"
+                  : `$${capCents / 100}/mo (${boosts} ${boosts === 1 ? "boost" : "boosts"})`;
+              return (
+                <option key={capCents} value={capCents}>
+                  {label}
+                </option>
+              );
+            })}
+          </SettingsSelect>
         </SettingsRow>
       ) : null}
       <SettingsRow

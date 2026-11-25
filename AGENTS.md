@@ -28,11 +28,12 @@ Three layers:
 Builders' own AI agents (Claude, Codex, Cursor) reach the core through the
 official Polynet MCP.
 
-**Business model.** Today: one founder plan, $79 a month per community with a
-$20 model allowance, plus a 2.9% fee on paid-member revenue. **Agreed direction
-(Oct 27, pending its spec):** the community is free; the agent is paid (about $49
-a month with an included budget). Do not change pricing code before that spec
-is approved.
+**Business model.** The community is free ($0/month, bounded at 10 unfunded
+live communities per owner); the Agent plan is $79/month per community with a
+$20/month included AI allowance, optional prepaid community usage boosts ($30
+for +$20 AI allowance within a founder-set monthly safety cap, off by default;
+see [docs/specs/agent-pricing-and-overage-v1.md](docs/specs/agent-pricing-and-overage-v1.md)),
+plus a 2.9% fee on paid-member revenue.
 
 ## 2) Philosophy
 

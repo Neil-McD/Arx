@@ -54,6 +54,7 @@ export async function setCloudMemberCoachSettings(
     autoReplyEnabled?: boolean;
     threadFollowupEnabled?: boolean;
     weeklyDigestEnabled?: boolean;
+    usageBoostCapCents?: number;
   },
 ): Promise<MemberCoachSettingsView> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
@@ -68,6 +69,9 @@ export async function setCloudMemberCoachSettings(
       : {}),
     ...(params.weeklyDigestEnabled !== undefined
       ? { weeklyDigestEnabled: params.weeklyDigestEnabled }
+      : {}),
+    ...(params.usageBoostCapCents !== undefined
+      ? { usageBoostCapCents: params.usageBoostCapCents }
       : {}),
   });
 }
