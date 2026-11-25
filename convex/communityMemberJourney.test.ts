@@ -500,5 +500,91 @@ describe("member journey board", () => {
     expect(casey.stage_key).toBe("active");
     expect(casey.status).toBe("on_track");
     expect(casey.activity_summary).toBe("3 posts");
+    expect(casey.checkpoints_done).toBe(1);
+    expect(casey.checkpoints_total).toBe(1);
+  });
+
+  it("supports custom stage checkpoints, toggling milestones, logging/removing member wins, and exposes remaining checkpoints to Member Coach", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await seedJourneyFixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "journey-owner" });
+
+    // Configure stages with both built-in and custom checkpoints.
+    await asOwner.mutation(api.communityMemberJourney.saveCommunityJourneyStages, {
+      communityId: f.communityId,
+      stages: [
+        {
+          key: "new",
+          name: "New",
+          goal: "Complete onboarding setup.",
+          checkpoints: [
+            { key: "first_post", label: "Posted or replied once", kind: "first_post" },
+            { key: "connected_domain", label: "Connected domain", kind: "custom" },
+          ],
+        },
+        {
+          key: "active",
+          name: "Active",
+          goal: "Ship weekly campaigns.",
+          checkpoints: [],
+        },
+      ],
+    });
+
+    const initial = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const samInitial = initial.cards.find((c) => c.membership_id === String(f.memberMembershipId))!;
+    expect(samInitial.checkpoints_done).toBe(0);
+    expect(samInitial.checkpoints_total).toBe(2);
+
+    // Check off the custom milestone and log a win.
+    await asOwner.mutation(api.communityMemberJourney.updateMemberJourneyCard, {
+      communityId: f.communityId,
+      membershipId: f.memberMembershipId,
+      toggleMilestone: { key: "connected_domain", label: "Connected domain", completed: true },
+      addOutcomeText: "Launched first campaign with 12 signups",
+    });
+
+    const afterLog = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const samAfter = afterLog.cards.find((c) => c.membership_id === String(f.memberMembershipId))!;
+    expect(samAfter.checkpoints_done).toBe(1);
+    expect(samAfter.checkpoints.find((cp) => cp.key === "connected_domain")?.done).toBe(true);
+    expect(samAfter.latest_outcome?.text).toBe("Launched first campaign with 12 signups");
+    expect(samAfter.outcomes).toHaveLength(1);
+
+    // Chief of Staff candidate receives the remaining unchecked checkpoint in stageGoal.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityMemberCoachSettings", {
+        communityId: f.communityId,
+        enabled: true,
+        autoReasons: [],
+        createdAt: nowMs - 10 * DAY_MS,
+        updatedAt: nowMs,
+      } as any);
+    });
+    const prepared = await t.query(internalRefs.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+      communityId: f.communityId,
+      autoReasons: [],
+      nowMs,
+    });
+    expect(prepared.candidate?.journeyStageGoal).toContain("Posted or replied once");
+    expect(prepared.candidate?.journeyStageGoal).not.toContain("Connected domain");
+
+    // Remove the logged win cleanly.
+    await asOwner.mutation(api.communityMemberJourney.updateMemberJourneyCard, {
+      communityId: f.communityId,
+      membershipId: f.memberMembershipId,
+      removeOutcomeId: samAfter.outcomes[0]!.id,
+    });
+    const afterRemove = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: f.communityId,
+    });
+    const samRemoved = afterRemove.cards.find((c) => c.membership_id === String(f.memberMembershipId))!;
+    expect(samRemoved.outcomes).toHaveLength(0);
+    expect(samRemoved.latest_outcome).toBeNull();
   });
 });

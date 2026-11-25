@@ -1380,6 +1380,21 @@ export default defineSchema({
         name: v.string(),
         goal: v.string(),
         position: v.number(),
+        checkpoints: v.optional(
+          v.array(
+            v.object({
+              key: v.string(),
+              label: v.string(),
+              kind: v.union(
+                v.literal("first_post"),
+                v.literal("regular_posts"),
+                v.literal("first_lesson"),
+                v.literal("shared_goal"),
+                v.literal("custom"),
+              ),
+            }),
+          ),
+        ),
       }),
     ),
     autoAdvanceEnabled: v.optional(v.boolean()),
@@ -1390,7 +1405,8 @@ export default defineSchema({
 
   // Member Journey Board card state per active member: current stage, optional
   // manual health status override, founder instruction read by the proactive
-  // Chief of Staff on its next check-in, and strictly privacy-safe agent outcome note.
+  // Chief of Staff on its next check-in, completed custom milestones, logged
+  // member outcomes/wins, and strictly privacy-safe agent outcome note.
   communityMemberJourneyCards: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
@@ -1406,6 +1422,36 @@ export default defineSchema({
     ),
     founderInstruction: v.optional(v.string()),
     founderInstructionUpdatedAt: v.optional(v.number()),
+    completedMilestones: v.optional(
+      v.array(
+        v.object({
+          key: v.string(),
+          label: v.optional(v.string()),
+          completedAt: v.number(),
+          source: v.union(
+            v.literal("founder"),
+            v.literal("app"),
+            v.literal("mcp"),
+            v.literal("agent"),
+          ),
+        }),
+      ),
+    ),
+    outcomes: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          text: v.string(),
+          at: v.number(),
+          source: v.union(
+            v.literal("founder"),
+            v.literal("app"),
+            v.literal("mcp"),
+            v.literal("agent"),
+          ),
+        }),
+      ),
+    ),
     agentOutcomeNote: v.optional(v.string()),
     agentOutcomeAt: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),

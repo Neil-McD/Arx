@@ -18,12 +18,18 @@ import { factVisibleToHost, moneyFor, planFor } from "../shared/communityMemberR
 import {
   DEFAULT_JOURNEY_STAGES,
   MAX_AGENT_OUTCOME_CHARS,
+  MAX_CARD_OUTCOMES,
+  MAX_CHECKPOINT_LABEL_CHARS,
   defaultStageKeyForMember,
   deriveMemberJourneyStatus,
+  evaluateStageCheckpoints,
   formatCoachOutcomeSummary,
   formatMemberActivitySummary,
   normalizeFounderInstruction,
   normalizeJourneyStages,
+  normalizeOutcomeText,
+  normalizeStageCheckpoints,
+  slugifyJourneyStageKey,
   type JourneyCardStatus,
   type JourneyStageDefinition,
 } from "../shared/communityMemberJourney";
@@ -54,7 +60,10 @@ async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
     .unique();
   if (!config || !Array.isArray(config.stages) || config.stages.length === 0) {
     return {
-      stages: DEFAULT_JOURNEY_STAGES.map((stage) => ({ ...stage })),
+      stages: DEFAULT_JOURNEY_STAGES.map((stage) => ({
+        ...stage,
+        checkpoints: stage.checkpoints.map((cp) => ({ ...cp })),
+      })),
       autoAdvanceEnabled: false,
     };
   }
@@ -65,6 +74,7 @@ async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
       name: String(stage.name),
       goal: String(stage.goal ?? ""),
       position: index,
+      checkpoints: normalizeStageCheckpoints(stage.checkpoints),
     }));
   return {
     stages: ordered,
@@ -257,9 +267,34 @@ export async function readMemberJourneyGuidanceForCoach(
     config.stages.find((entry) => entry.key === effectiveStageKey) ?? config.stages[0] ?? null;
   const founderInstruction = normalizeFounderInstruction(card?.founderInstruction);
   if (!stage && !founderInstruction) return null;
+  let stageGoal = stage?.goal ?? "";
+  if (stage && stage.checkpoints.length > 0) {
+    const [participation, goalRows] = await Promise.all([
+      readMemberParticipationSignals(ctx, args.communityId, args.memberUserId),
+      ctx.db
+        .query("memberFacts")
+        .withIndex("by_user_community", (q: any) =>
+          q.eq("userId", args.memberUserId).eq("communityId", args.communityId),
+        )
+        .filter((q: any) => q.eq(q.field("kind"), "goal"))
+        .take(10),
+    ]);
+    const hasSharedGoal = goalRows.some((fact: any) => fact.kind === "goal" && factVisibleToHost(fact));
+    const evaluated = evaluateStageCheckpoints({
+      checkpoints: stage.checkpoints,
+      postsCount: participation.postsCount,
+      lessonsDoneCount: participation.lessonsDoneCount,
+      hasSharedGoal,
+      completedMilestones: card?.completedMilestones,
+    });
+    const remaining = evaluated.filter((cp) => !cp.done).map((cp) => cp.label);
+    if (remaining.length > 0) {
+      stageGoal = `${stageGoal ? `${stageGoal} ` : ""}Next stage checkpoints: ${remaining.join(", ")}.`;
+    }
+  }
   return {
     stageName: stage?.name ?? "New",
-    stageGoal: stage?.goal ?? "",
+    stageGoal,
     founderInstruction,
   };
 }
@@ -515,6 +550,38 @@ export const getCommunityMemberJourneyBoard = query({
               : latestCoachSummary?.summary ?? null;
         const agentOutcomeAt = Math.max(storedOutcomeAt, coachAt) || null;
 
+        const currentStage = stages.find((entry) => entry.key === stageKey) ?? stages[0] ?? null;
+        const workingOn = goalByUserId.get(userIdStr) ?? null;
+        const evaluatedCheckpoints = evaluateStageCheckpoints({
+          checkpoints: currentStage?.checkpoints ?? [],
+          postsCount: participation.postsCount,
+          lessonsDoneCount: participation.lessonsDoneCount,
+          hasSharedGoal: Boolean(workingOn),
+          completedMilestones: storedCard?.completedMilestones,
+        });
+        const checkpointsView = evaluatedCheckpoints.map((cp) => ({
+          key: cp.key,
+          label: cp.label,
+          kind: cp.kind,
+          done: cp.done,
+          auto: cp.auto,
+          completed_at: iso(cp.completedAtMs),
+        }));
+        const checkpointsDone = checkpointsView.filter((cp) => cp.done).length;
+        const rawOutcomes = Array.isArray(storedCard?.outcomes) ? storedCard.outcomes : [];
+        const outcomesView = [...rawOutcomes]
+          .sort((a: any, b: any) => Number(b.at ?? 0) - Number(a.at ?? 0))
+          .slice(0, MAX_CARD_OUTCOMES)
+          .map((item: any) => ({
+            id: String(item.id),
+            text: String(item.text),
+            at: iso(item.at) ?? new Date(nowMs).toISOString(),
+            source: (item.source ?? "founder") as "founder" | "app" | "mcp" | "agent",
+          }));
+        const latestOutcome = outcomesView[0]
+          ? { text: outcomesView[0].text, at: outcomesView[0].at }
+          : null;
+
         return {
           membership_id: String(membership._id),
           user_id: String(user?.authSubject ?? "").trim() || String(membership.userId),
@@ -534,12 +601,17 @@ export const getCommunityMemberJourneyBoard = query({
           founder_instruction_updated_at: iso(storedCard?.founderInstructionUpdatedAt),
           agent_outcome: agentOutcome,
           agent_outcome_at: iso(agentOutcomeAt),
-          working_on: goalByUserId.get(userIdStr) ?? null,
+          working_on: workingOn,
           activity_summary: formatMemberActivitySummary({
             postsCount: participation.postsCount,
             lessonsDoneCount: participation.lessonsDoneCount,
             lessonsCapped: participation.lessonsCapped,
           }),
+          checkpoints: checkpointsView,
+          checkpoints_done: checkpointsDone,
+          checkpoints_total: checkpointsView.length,
+          outcomes: outcomesView,
+          latest_outcome: latestOutcome,
           joined_at: iso(joinedAtMs),
           last_active_at: iso(lastActiveAtMs),
         };
@@ -570,6 +642,21 @@ export const saveCommunityJourneyStages = mutation({
         key: v.optional(v.string()),
         name: v.string(),
         goal: v.string(),
+        checkpoints: v.optional(
+          v.array(
+            v.object({
+              key: v.optional(v.string()),
+              label: v.string(),
+              kind: v.union(
+                v.literal("first_post"),
+                v.literal("regular_posts"),
+                v.literal("first_lesson"),
+                v.literal("shared_goal"),
+                v.literal("custom"),
+              ),
+            }),
+          ),
+        ),
       }),
     ),
     autoAdvanceEnabled: v.optional(v.boolean()),
@@ -647,6 +734,15 @@ export const updateMemberJourneyCard = mutation({
     stageKey: v.optional(v.string()),
     statusOverride: v.optional(statusOverrideValidator),
     founderInstruction: v.optional(v.string()),
+    toggleMilestone: v.optional(
+      v.object({
+        key: v.string(),
+        label: v.optional(v.string()),
+        completed: v.boolean(),
+      }),
+    ),
+    addOutcomeText: v.optional(v.string()),
+    removeOutcomeId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const actorUserId = await resolveUserIdForAuthenticatedRequest({
@@ -704,6 +800,47 @@ export const updateMemberJourneyCard = mutation({
       ? normalizeFounderInstruction(args.founderInstruction)
       : normalizeFounderInstruction(existing?.founderInstruction);
 
+    let nextCompletedMilestones = Array.isArray(existing?.completedMilestones)
+      ? [...existing.completedMilestones]
+      : undefined;
+    if (args.toggleMilestone) {
+      const milestoneKey = slugifyJourneyStageKey(args.toggleMilestone.key, 0);
+      const current = nextCompletedMilestones ?? [];
+      const without = current.filter((row: any) => String(row.key) !== milestoneKey);
+      if (args.toggleMilestone.completed) {
+        const cleanLabel = args.toggleMilestone.label
+          ? String(args.toggleMilestone.label).replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS)
+          : undefined;
+        without.push({
+          key: milestoneKey,
+          ...(cleanLabel ? { label: cleanLabel } : {}),
+          completedAt: nowMs,
+          source: "founder" as const,
+        });
+      }
+      nextCompletedMilestones = without.slice(-40);
+    }
+
+    let nextOutcomes = Array.isArray(existing?.outcomes) ? [...existing.outcomes] : undefined;
+    if (args.removeOutcomeId) {
+      nextOutcomes = (nextOutcomes ?? []).filter(
+        (item: any) => String(item.id) !== String(args.removeOutcomeId),
+      );
+    }
+    if (args.addOutcomeText !== undefined) {
+      const text = normalizeOutcomeText(args.addOutcomeText);
+      if (text) {
+        const id =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `out_${nowMs}_${Math.random().toString(36).slice(2, 8)}`;
+        nextOutcomes = [
+          { id, text, at: nowMs, source: "founder" as const },
+          ...(nextOutcomes ?? []),
+        ].slice(0, MAX_CARD_OUTCOMES);
+      }
+    }
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         stageKey: nextStageKey,
@@ -713,6 +850,10 @@ export const updateMemberJourneyCard = mutation({
               founderInstruction: nextInstruction ?? undefined,
               founderInstructionUpdatedAt: nextInstruction ? nowMs : undefined,
             }
+          : {}),
+        ...(args.toggleMilestone ? { completedMilestones: nextCompletedMilestones } : {}),
+        ...(args.addOutcomeText !== undefined || args.removeOutcomeId
+          ? { outcomes: nextOutcomes }
           : {}),
         updatedByUserId: actorUserId,
         updatedAt: nowMs,
@@ -726,6 +867,8 @@ export const updateMemberJourneyCard = mutation({
         ...(nextInstruction
           ? { founderInstruction: nextInstruction, founderInstructionUpdatedAt: nowMs }
           : {}),
+        ...(nextCompletedMilestones?.length ? { completedMilestones: nextCompletedMilestones } : {}),
+        ...(nextOutcomes?.length ? { outcomes: nextOutcomes } : {}),
         updatedByUserId: actorUserId,
         createdAt: nowMs,
         updatedAt: nowMs,

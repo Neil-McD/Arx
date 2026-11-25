@@ -31,6 +31,7 @@ import {
   JOURNEY_CARD_STATUSES,
   JOURNEY_CARD_STATUS_LABELS,
   MAX_FOUNDER_INSTRUCTION_CHARS,
+  MAX_OUTCOME_TEXT_CHARS,
   type JourneyCardStatus,
   type JourneyStageDefinition,
 } from "../../../../shared/communityMemberJourney";
@@ -498,7 +499,14 @@ function MemberRecordView(props: {
   payments: CloudCommunityMemberBillingHistory | null;
   journeyStages?: JourneyStageDefinition[] | null;
   journeyCard?: CloudMemberJourneyCard | null;
-  onUpdateJourney?: (patch: { stageKey?: string; statusOverride?: JourneyCardStatus | "auto"; founderInstruction?: string | null }) => Promise<void>;
+  onUpdateJourney?: (patch: {
+    stageKey?: string;
+    statusOverride?: JourneyCardStatus | "auto";
+    founderInstruction?: string | null;
+    toggleMilestone?: { key: string; label?: string; completed: boolean };
+    addOutcomeText?: string;
+    removeOutcomeId?: string;
+  }) => Promise<void>;
 }) {
   const { record } = props;
   const manage = () => record.membership_id && props.onManage?.({ id: record.membership_id, user_id: record.user_id, display_name: record.name,
@@ -507,10 +515,12 @@ function MemberRecordView(props: {
   const [saving, setSaving] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
   const [instructionDraft, setInstructionDraft] = useState(props.journeyCard?.founder_instruction ?? "");
+  const [outcomeDraft, setOutcomeDraft] = useState("");
   const [savingJourney, setSavingJourney] = useState(false);
   const [journeyError, setJourneyError] = useState<string | null>(null);
   useEffect(() => {
     setInstructionDraft(props.journeyCard?.founder_instruction ?? "");
+    setOutcomeDraft("");
     setJourneyError(null);
   }, [record.membership_id, props.journeyCard?.founder_instruction]);
   const saveNote = async () => {
@@ -648,7 +658,93 @@ function MemberRecordView(props: {
                 </select>
               </div>
             </div>
-            <div className="members-journey-field" style={{ marginTop: 8 }}>
+            {props.journeyCard.checkpoints.length > 0 ? (
+              <div className="members-journey-checklist" aria-label="Stage checkpoints">
+                <span className="members-board-stage-cp-label">
+                  Stage checkpoints ({props.journeyCard.checkpoints_done}/{props.journeyCard.checkpoints_total})
+                </span>
+                {props.journeyCard.checkpoints.map((cp) => (
+                  <button
+                    key={cp.key}
+                    type="button"
+                    disabled={savingJourney || cp.auto}
+                    className={`members-journey-check-item${cp.done ? " is-done" : ""}`}
+                    onClick={() => {
+                      if (cp.auto || savingJourney) return;
+                      setSavingJourney(true);
+                      setJourneyError(null);
+                      void props.onUpdateJourney?.({
+                        toggleMilestone: { key: cp.key, label: cp.label, completed: !cp.done },
+                      })
+                        .catch(() => setJourneyError("Couldn't update checkpoint."))
+                        .finally(() => setSavingJourney(false));
+                    }}
+                  >
+                    <span>{cp.done ? "✓ " : "○ "}{cp.label}</span>
+                    <em>{cp.auto ? "Auto" : cp.done ? "Done" : "Mark done"}</em>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="members-journey-outcomes">
+              <span className="members-board-stage-cp-label">Wins & outcomes</span>
+              <form
+                className="members-journey-outcome-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const text = outcomeDraft.trim();
+                  if (!text || savingJourney) return;
+                  setSavingJourney(true);
+                  setJourneyError(null);
+                  void props.onUpdateJourney?.({ addOutcomeText: text })
+                    .then(() => setOutcomeDraft(""))
+                    .catch(() => setJourneyError("Couldn't log win."))
+                    .finally(() => setSavingJourney(false));
+                }}
+              >
+                <input
+                  value={outcomeDraft}
+                  maxLength={MAX_OUTCOME_TEXT_CHARS}
+                  placeholder="Log a win or milestone…"
+                  aria-label="Log a member win or outcome"
+                  onChange={(event) => setOutcomeDraft(event.target.value)}
+                />
+                <Btn small go disabled={savingJourney || !outcomeDraft.trim()} onClick={() => {
+                  const text = outcomeDraft.trim();
+                  if (!text || savingJourney) return;
+                  setSavingJourney(true);
+                  setJourneyError(null);
+                  void props.onUpdateJourney?.({ addOutcomeText: text })
+                    .then(() => setOutcomeDraft(""))
+                    .catch(() => setJourneyError("Couldn't log win."))
+                    .finally(() => setSavingJourney(false));
+                }}>
+                  Log
+                </Btn>
+              </form>
+              {props.journeyCard.outcomes.map((item) => (
+                <div key={item.id} className="members-journey-outcome-row">
+                  <span>{item.text}</span>
+                  <em>{shortDay(item.at, props.now) ?? memberTimeFor(item.at, props.now)}</em>
+                  <button
+                    type="button"
+                    aria-label={`Remove win ${item.text}`}
+                    disabled={savingJourney}
+                    onClick={() => {
+                      if (savingJourney) return;
+                      setSavingJourney(true);
+                      setJourneyError(null);
+                      void props.onUpdateJourney?.({ removeOutcomeId: item.id })
+                        .catch(() => setJourneyError("Couldn't remove win."))
+                        .finally(() => setSavingJourney(false));
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="members-journey-field" style={{ marginTop: 10 }}>
               <label htmlFor="member-journey-instruction">Instruction for your Guide</label>
               <textarea
                 id="member-journey-instruction"

@@ -1,5 +1,27 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import type { JourneyCardStatus, JourneyStageDefinition } from "./communityMemberJourney";
+import type {
+  JourneyCardStatus,
+  JourneyCheckpointKind,
+  JourneyMilestoneSource,
+  JourneyStageCheckpoint,
+  JourneyStageDefinition,
+} from "./communityMemberJourney";
+
+export type CloudMemberJourneyCheckpoint = {
+  key: string;
+  label: string;
+  kind: JourneyCheckpointKind;
+  done: boolean;
+  auto: boolean;
+  completed_at: string | null;
+};
+
+export type CloudMemberJourneyOutcome = {
+  id: string;
+  text: string;
+  at: string;
+  source: JourneyMilestoneSource;
+};
 
 export type CloudMemberJourneyCard = {
   membership_id: string;
@@ -22,6 +44,11 @@ export type CloudMemberJourneyCard = {
   agent_outcome_at: string | null;
   working_on: string | null;
   activity_summary: string | null;
+  checkpoints: CloudMemberJourneyCheckpoint[];
+  checkpoints_done: number;
+  checkpoints_total: number;
+  outcomes: CloudMemberJourneyOutcome[];
+  latest_outcome: { text: string; at: string } | null;
   joined_at: string | null;
   last_active_at: string | null;
 };
@@ -48,7 +75,7 @@ export async function getCloudCommunityMemberJourneyBoard<SessionT>(params: {
 export async function saveCloudCommunityJourneyStages<SessionT>(params: {
   session: SessionT;
   communityId: string;
-  stages: Array<{ key?: string; name: string; goal: string }>;
+  stages: Array<{ key?: string; name: string; goal: string; checkpoints?: JourneyStageCheckpoint[] }>;
   autoAdvanceEnabled?: boolean;
 }): Promise<{ stages: JourneyStageDefinition[]; auto_advance_enabled: boolean }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -67,6 +94,9 @@ export async function updateCloudMemberJourneyCard<SessionT>(params: {
   stageKey?: string;
   statusOverride?: JourneyCardStatus | "auto";
   founderInstruction?: string | null;
+  toggleMilestone?: { key: string; label?: string; completed: boolean };
+  addOutcomeText?: string;
+  removeOutcomeId?: string;
 }): Promise<{
   stage_key: string;
   status_override: JourneyCardStatus | null;
@@ -80,6 +110,9 @@ export async function updateCloudMemberJourneyCard<SessionT>(params: {
     ...(params.stageKey !== undefined ? { stageKey: params.stageKey } : {}),
     ...(params.statusOverride !== undefined ? { statusOverride: params.statusOverride } : {}),
     ...(params.founderInstruction !== undefined ? { founderInstruction: params.founderInstruction ?? "" } : {}),
+    ...(params.toggleMilestone !== undefined ? { toggleMilestone: params.toggleMilestone } : {}),
+    ...(params.addOutcomeText !== undefined ? { addOutcomeText: params.addOutcomeText } : {}),
+    ...(params.removeOutcomeId !== undefined ? { removeOutcomeId: params.removeOutcomeId } : {}),
   })) as {
     stage_key: string;
     status_override: JourneyCardStatus | null;

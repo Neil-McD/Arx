@@ -30,17 +30,48 @@ export const JOURNEY_CARD_STATUS_SORT_RANK: Record<JourneyCardStatus, number> = 
   quiet: 4,
 };
 
+export type JourneyCheckpointKind =
+  | "first_post"
+  | "regular_posts"
+  | "first_lesson"
+  | "shared_goal"
+  | "custom";
+
+export const BUILTIN_JOURNEY_CHECKPOINTS: ReadonlyArray<{
+  kind: Exclude<JourneyCheckpointKind, "custom">;
+  key: string;
+  label: string;
+}> = [
+  { kind: "first_post", key: "first_post", label: "Posted or replied once" },
+  { kind: "first_lesson", key: "first_lesson", label: "Completed a lesson" },
+  { kind: "shared_goal", key: "shared_goal", label: "Shared a goal" },
+  { kind: "regular_posts", key: "regular_posts", label: "3+ posts or replies" },
+] as const;
+
+export type JourneyStageCheckpoint = {
+  key: string;
+  label: string;
+  kind: JourneyCheckpointKind;
+};
+
+export type JourneyMilestoneSource = "founder" | "app" | "mcp" | "agent";
+
 export type JourneyStageDefinition = {
   key: string;
   name: string;
   goal: string;
   position: number;
+  checkpoints: JourneyStageCheckpoint[];
 };
 
 export const MIN_JOURNEY_STAGES = 2;
 export const MAX_JOURNEY_STAGES = 8;
 export const MAX_STAGE_NAME_CHARS = 48;
 export const MAX_STAGE_GOAL_CHARS = 240;
+export const MAX_STAGE_CHECKPOINTS = 6;
+export const MAX_CHECKPOINT_LABEL_CHARS = 64;
+export const MAX_OUTCOME_TEXT_CHARS = 180;
+export const MAX_CARD_OUTCOMES = 25;
 export const MAX_FOUNDER_INSTRUCTION_CHARS = 500;
 export const MAX_AGENT_OUTCOME_CHARS = 200;
 
@@ -50,24 +81,31 @@ export const DEFAULT_JOURNEY_STAGES: readonly JourneyStageDefinition[] = [
     name: "New",
     goal: "Just joined. Help them get oriented and say hello.",
     position: 0,
+    checkpoints: [{ key: "first_post", label: "Posted or replied once", kind: "first_post" }],
   },
   {
     key: "getting_started",
     name: "Getting started",
     goal: "Working through early lessons and setting a concrete goal.",
     position: 1,
+    checkpoints: [
+      { key: "first_lesson", label: "Completed a lesson", kind: "first_lesson" },
+      { key: "shared_goal", label: "Shared a goal", kind: "shared_goal" },
+    ],
   },
   {
     key: "active",
     name: "Active",
     goal: "Participating regularly and making steady progress.",
     position: 2,
+    checkpoints: [{ key: "regular_posts", label: "3+ posts or replies", kind: "regular_posts" }],
   },
   {
     key: "graduated",
     name: "Graduated",
     goal: "Reached the community's main milestone or helping newer members.",
     position: 3,
+    checkpoints: [],
   },
 ] as const;
 
@@ -80,8 +118,48 @@ export function slugifyJourneyStageKey(raw: string, fallbackIndex: number): stri
   return cleaned || `stage_${fallbackIndex + 1}`;
 }
 
+const VALID_CHECKPOINT_KINDS = new Set<JourneyCheckpointKind>([
+  "first_post",
+  "regular_posts",
+  "first_lesson",
+  "shared_goal",
+  "custom",
+]);
+
+export function normalizeStageCheckpoints(
+  rawCheckpoints: ReadonlyArray<{ key?: string | null; label?: string | null; kind?: string | null }> | undefined | null,
+): JourneyStageCheckpoint[] {
+  if (!Array.isArray(rawCheckpoints)) return [];
+  const seen = new Set<string>();
+  const normalized: JourneyStageCheckpoint[] = [];
+  for (let index = 0; index < rawCheckpoints.length && normalized.length < MAX_STAGE_CHECKPOINTS; index += 1) {
+    const entry = rawCheckpoints[index];
+    const kind: JourneyCheckpointKind = VALID_CHECKPOINT_KINDS.has(entry?.kind as JourneyCheckpointKind)
+      ? (entry!.kind as JourneyCheckpointKind)
+      : "custom";
+    const builtin = BUILTIN_JOURNEY_CHECKPOINTS.find((item) => item.kind === kind) ?? null;
+    const label = String(entry?.label ?? builtin?.label ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_CHECKPOINT_LABEL_CHARS);
+    if (!label) continue;
+    const baseKey = builtin
+      ? builtin.key
+      : slugifyJourneyStageKey(entry?.key ? String(entry.key) : label, index);
+    if (seen.has(baseKey)) continue;
+    seen.add(baseKey);
+    normalized.push({ key: baseKey, label, kind });
+  }
+  return normalized;
+}
+
 export function normalizeJourneyStages(
-  rawStages: ReadonlyArray<{ key?: string | null; name: string; goal?: string | null }>,
+  rawStages: ReadonlyArray<{
+    key?: string | null;
+    name: string;
+    goal?: string | null;
+    checkpoints?: ReadonlyArray<{ key?: string | null; label?: string | null; kind?: string | null }> | null;
+  }>,
 ): { ok: true; stages: JourneyStageDefinition[] } | { ok: false; code: string } {
   if (!Array.isArray(rawStages) || rawStages.length < MIN_JOURNEY_STAGES || rawStages.length > MAX_JOURNEY_STAGES) {
     return { ok: false, code: "journey_stages_count_invalid" };
@@ -101,9 +179,68 @@ export function normalizeJourneyStages(
       suffix += 1;
     }
     seenKeys.add(key);
-    stages.push({ key, name, goal, position: index });
+    stages.push({
+      key,
+      name,
+      goal,
+      position: index,
+      checkpoints: normalizeStageCheckpoints(entry?.checkpoints),
+    });
   }
   return { ok: true, stages };
+}
+
+export function normalizeOutcomeText(raw: unknown): string | null {
+  const cleaned = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+  return cleaned.slice(0, MAX_OUTCOME_TEXT_CHARS);
+}
+
+export function evaluateStageCheckpoints(args: {
+  checkpoints: readonly JourneyStageCheckpoint[];
+  postsCount: number;
+  lessonsDoneCount: number;
+  hasSharedGoal: boolean;
+  completedMilestones?: ReadonlyArray<{ key: string; completedAt: number }> | null;
+}): Array<{
+  key: string;
+  label: string;
+  kind: JourneyCheckpointKind;
+  done: boolean;
+  auto: boolean;
+  completedAtMs: number | null;
+}> {
+  const manualByKey = new Map<string, number>();
+  for (const row of args.completedMilestones ?? []) {
+    if (row?.key) manualByKey.set(String(row.key), Number(row.completedAt ?? 0) || 0);
+  }
+  return args.checkpoints.map((cp) => {
+    const manualAt = manualByKey.get(cp.key);
+    if (cp.kind === "first_post") {
+      const done = args.postsCount >= 1 || manualAt !== undefined;
+      return { key: cp.key, label: cp.label, kind: cp.kind, done, auto: true, completedAtMs: manualAt ?? null };
+    }
+    if (cp.kind === "regular_posts") {
+      const done = args.postsCount >= 3 || manualAt !== undefined;
+      return { key: cp.key, label: cp.label, kind: cp.kind, done, auto: true, completedAtMs: manualAt ?? null };
+    }
+    if (cp.kind === "first_lesson") {
+      const done = args.lessonsDoneCount >= 1 || manualAt !== undefined;
+      return { key: cp.key, label: cp.label, kind: cp.kind, done, auto: true, completedAtMs: manualAt ?? null };
+    }
+    if (cp.kind === "shared_goal") {
+      const done = args.hasSharedGoal || manualAt !== undefined;
+      return { key: cp.key, label: cp.label, kind: cp.kind, done, auto: true, completedAtMs: manualAt ?? null };
+    }
+    return {
+      key: cp.key,
+      label: cp.label,
+      kind: cp.kind,
+      done: manualAt !== undefined,
+      auto: false,
+      completedAtMs: manualAt ?? null,
+    };
+  });
 }
 
 export function normalizeFounderInstruction(raw: unknown): string | null {
