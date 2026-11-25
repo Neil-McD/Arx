@@ -167,6 +167,17 @@ export function goToCommunityPage(page: "events" | "pods"): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+// A community's Guide settings (its plan), by its address: where a new
+// community opens when its host picked a plan on the public pricing section.
+export function goToCommunityGuideSettings(communitySlug: string): void {
+  if (typeof window === "undefined") return;
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return;
+  const prefix = window.location.pathname.startsWith("/m/") ? "/m" : "";
+  window.history.pushState({}, "", `${prefix}/c/${encodeURIComponent(slug)}/settings/agent`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 // One lesson of a course in Knowledge, for the community in the address bar
 // (the brain map's "Open the lesson"). The app follows the address on popstate.
 export function goToCourseLesson(courseId: string, lessonId: string): void {

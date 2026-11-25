@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listCloudDiscoverCommunities } from "../../../../../shared/cloudDiscoverGateway";
 import type { DiscoverCommunitySnapshot } from "../../../../../shared/communityTypes";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
-import { PublicFrame, trackStart } from "./ConversionLanding";
+import { LANDING_OFFER_LINE, PublicFrame, trackStart } from "./ConversionLanding";
 import { cx, KitApp } from "../../v1/kit";
 import { DISCOVER_SEARCH_FROM, DiscoverCard, DiscoverSearch, discoverRowsFor } from "../../v1/KitDiscover";
 import "./ConversionLanding.css";
@@ -80,7 +80,7 @@ export function PublicFindPage({ onJoin }: PublicFindPageProps) {
       <section className="closing" aria-labelledby="find-start-title">
         <h2 id="find-start-title">Don't see yours? Start it.</h2>
         <button className="cta" type="button" onClick={trackStart("find_closing", onJoin)}>Start a community</button>
-        <p className="microcopy">Free to build · Guide $20/month · Chief of Staff $100/month</p>
+        <p className="microcopy">{LANDING_OFFER_LINE}</p>
       </section>
     </PublicFrame>
   );

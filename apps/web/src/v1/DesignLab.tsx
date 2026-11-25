@@ -47,6 +47,8 @@ import { coursesExample, fullExample, labBrainContent, middlingExample, sunriseE
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
+import { ConversionLanding } from "../components/polynetLanding/ConversionLanding";
+import "../components/polynetLanding/ConversionLanding.css";
 import { KitProfile } from "./KitProfile";
 import type { CloudMemberProfile, CloudMemberRecord } from "../../../../shared/cloudCommunityMemberRecordsGateway";
 
@@ -622,5 +624,5 @@ function ProfileLab() {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "profile" ? <ProfileLab /> : page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "landing" ? <ConversionLanding onJoin={() => undefined} /> : page === "profile" ? <ProfileLab /> : page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }

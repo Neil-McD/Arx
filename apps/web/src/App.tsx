@@ -165,6 +165,8 @@ import {
   useWebBuilderSetupSubscriptionController,
 } from "./controllers/useWebBuilderSetupFlowController";
 import { memberPreviewChannels } from "../../../shared/communityMemberPreview";
+import { rememberPlanOffer, takeLandingPlanChoice } from "../../../shared/landingPlanChoice";
+import { goToCommunityGuideSettings } from "../../../shared/routeDetails";
 
 
 type CommunityRecord = WebCommunityRecord;
@@ -878,6 +880,10 @@ export default function App() {
       );
       setCommunities((prev) => [community, ...prev]);
       void founderBilling.refresh(sessionRef.current);
+      // A plan picked on the public pricing section is offered first, on the
+      // new community's Guide settings. Nothing is charged until they start it.
+      const chosenPlan = takeLandingPlanChoice();
+      if (chosenPlan) rememberPlanOffer(community.id, chosenPlan);
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
@@ -885,6 +891,10 @@ export default function App() {
         // open Knowledge, for the knowledge step that was removed).
         communityTab: launchTab,
       });
+      if (chosenPlan && community.slug) {
+        captureProductAnalyticsEvent("landing_plan_offered", { community_id: community.id, plan_tier: chosenPlan });
+        window.setTimeout(() => goToCommunityGuideSettings(community.slug), 0);
+      }
     },
     onCommunityCreateRecoveryRequired: (founderSubscriptionId) => {
       suppressBuilderSetupSubscription(founderSubscriptionId, "attached");

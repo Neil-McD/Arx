@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { clearPlanOffer, readPlanOffer } from "../../../../shared/landingPlanChoice";
 import {
   WebCommunityAiAgentInstructionsEditor,
   type WebCommunityAiAgentInstructionsEditorProps,
@@ -34,6 +36,37 @@ export type WebCommunityAgentPlanProps = {
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   refresh: () => Promise<unknown> | void;
 };
+
+// The plan the host picked on the public pricing section, offered first until
+// they start it or say not now (shared/landingPlanChoice.ts).
+function ChosenPlanOffer(props: {
+  communityId: string;
+  guideTierAvailable: boolean;
+  guidePriceLabel: string;
+  chiefOfStaffPriceLabel: string;
+  isActing: boolean;
+  onStart: (tier: FounderPlanTier) => void;
+}) {
+  const [offer, setOffer] = useState<FounderPlanTier | null>(() => readPlanOffer(props.communityId));
+  if (!offer || (offer === "guide" && !props.guideTierAvailable)) return null;
+  const name = offer === "guide" ? "Guide" : "Chief of Staff";
+  const price = offer === "guide" ? props.guidePriceLabel : props.chiefOfStaffPriceLabel;
+  return (
+    <SettingsRow
+      label={`You picked ${name}`}
+      help={offer === "guide"
+        ? "Switch on your guide: it answers members and remembers what the community learns."
+        : "Switch on your chief of staff: a morning brief, member check-ins and reply drafts, on top of the guide."}
+    >
+      <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 8 }}>
+        <SettingsButton variant="primary" disabled={props.isActing} onClick={() => props.onStart(offer)}>
+          {props.isActing ? "Opening…" : `Start ${name} — ${price}`}
+        </SettingsButton>
+        <SettingsButton variant="secondary" onClick={() => { clearPlanOffer(props.communityId); setOffer(null); }}>Not now</SettingsButton>
+      </span>
+    </SettingsRow>
+  );
+}
 
 function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
   const community = plan.community;
@@ -189,6 +222,7 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
   // Free community (or incomplete checkout): show the 3-tier ladder cleanly.
   const pendingTier = community.checkout_pending ? community.pending_checkout_plan_tier ?? null : null;
   const startPlan = (tier: FounderPlanTier) => {
+    clearPlanOffer(community.community_id);
     if (plan.startCheckout) {
       void plan.startCheckout(community.community_id, tier);
     } else {
@@ -198,13 +232,21 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
 
   return (
     <SettingsGroup label="Plan">
+      <ChosenPlanOffer
+        communityId={community.community_id}
+        guideTierAvailable={guideTierAvailable}
+        guidePriceLabel={guidePriceLabel}
+        chiefOfStaffPriceLabel={chiefOfStaffPriceLabel}
+        isActing={plan.isActing}
+        onStart={startPlan}
+      />
       <SettingsRow
         label="Free — $0/month"
         help={
           plan.error ? (
             <span className="settings-v1-error">{plan.error}</span>
           ) : (
-            "Current plan. Unlimited members, channels, courses, pods, events, DMs, zero-AI weekly digests, and official Polynet MCP."
+            "Current plan. Unlimited members, channels, messages, courses, events and pods, weekly digest emails, and your own Claude or ChatGPT."
           )
         }
       >
