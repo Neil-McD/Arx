@@ -16,7 +16,10 @@ import {
   readCommunityActiveMemberCount,
   requireCommunityManager,
 } from "./communityCore";
-import { communityHasProactiveAgentTier } from "./founderInferenceCore";
+import {
+  communityHasProactiveAgentTier,
+  resolveCommunityInferenceFundingAdmission,
+} from "./founderInferenceCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { factVisibleToHost, moneyFor, planFor } from "../shared/communityMemberRecords";
 import type { CommunityMemberJourneySelfSummary } from "../shared/communityMemberSelfContext";
@@ -653,11 +656,16 @@ export const getCommunityMemberJourneyBoard = query({
       communityId: args.communityId,
       userId: actorUserId,
     });
-    const board = await computeCommunityMemberJourneyBoard(ctx, {
-      communityId: args.communityId,
-      community,
-      nowMs: Date.now(),
-    });
+    const nowMs = Date.now();
+    const [board, agentOn, fundingAdmission] = await Promise.all([
+      computeCommunityMemberJourneyBoard(ctx, {
+        communityId: args.communityId,
+        community,
+        nowMs,
+      }),
+      communityAgentIsOn(ctx, args.communityId),
+      resolveCommunityInferenceFundingAdmission(ctx, args.communityId, nowMs),
+    ]);
     return {
       stages: board.stages,
       auto_advance_enabled: board.auto_advance_enabled,
@@ -666,6 +674,8 @@ export const getCommunityMemberJourneyBoard = query({
       ),
       total_active_members: board.total_active_members,
       capped: board.capped,
+      hosted_ai_tier: (fundingAdmission.ok ? fundingAdmission.planTier : "free") as "free" | "guide" | "chief_of_staff",
+      hosted_agent_on: agentOn,
     };
   },
 });

@@ -32,9 +32,9 @@ export function useWebCommunityAgentSurfaceController(params: {
           version: 1,
           kind: "community",
           community_slug: community.slug,
-          // A pod is a room, so the guide hears "chat" on the Pods page; the
-          // Members page has no section of its own for the guide either.
-          section: params.communityTab === "pods" || params.communityTab === "members" || params.communityTab === "inbox" || params.communityTab === "discover" ? "chat" : params.communityTab,
+          // A pod is a room, so the guide hears "chat" on the Pods page; Members
+          // sends "members" so the Member Board playbook auto-loads for hosts.
+          section: params.communityTab === "pods" || params.communityTab === "inbox" || params.communityTab === "discover" ? "chat" : params.communityTab,
         }
       : null;
   const isVisible =

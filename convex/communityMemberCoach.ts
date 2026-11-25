@@ -71,6 +71,7 @@ import {
   type MemberTemperatureCounts,
 } from "../shared/agentHeartbeat";
 import {
+  BOARD_NOTE_FRESH_MAX_AGE_MS,
   COURSE_STALL_MAX_AGE_MS,
   COURSE_STALL_MIN_AGE_MS,
   MEMBER_COACH_DAILY_COMMUNITY_CAP,
@@ -86,6 +87,7 @@ import {
   QUIET_NEWCOMER_MAX_AGE_MS,
   QUIET_NEWCOMER_MIN_AGE_MS,
   evaluateMemberCoachGate,
+  instructionRequestsPause,
   normalizeMemberCoachReasons,
   parseMemberCoachJudgeResponse,
   type MemberCoachDraftView,
@@ -107,6 +109,7 @@ const UNSEEN_EMAIL_BATCH_LIMIT = 50;
 
 const reasonValidator = v.union(
   v.literal("commitment_followup"),
+  v.literal("board_coaching"),
   v.literal("quiet_newcomer"),
   v.literal("course_stall"),
   v.literal("quiet_member"),
@@ -627,13 +630,19 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
 
       const joinedAt = Number(membership.activatedAt ?? membership.createdAt ?? 0);
       const memberAgeMs = args.nowMs - joinedAt;
-      const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, memberMemoryRow] = await Promise.all([
+      const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, memberMemoryRow, journeyCardRow] = await Promise.all([
         readLatestMemberChannelActivityAt(ctx, args.communityId, membership.userId),
         readLastUserAgentMessageAt(ctx, args.communityId, membership.userId),
         readRecentCoachHistoryForMember(ctx, args.communityId, membership.userId),
         readMemberCourseProgress(ctx, args.communityId, membership.userId),
         ctx.db
           .query("memberMemories")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", membership.userId),
+          )
+          .unique(),
+        ctx.db
+          .query("communityMemberJourneyCards")
           .withIndex("by_community_user", (q: any) =>
             q.eq("communityId", args.communityId).eq("userId", membership.userId),
           )
@@ -662,6 +671,12 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
       if (heartbeatTemp.handoffToSystem) {
         continue;
       }
+
+      const cardInstruction =
+        typeof journeyCardRow?.founderInstruction === "string"
+          ? journeyCardRow.founderInstruction.trim()
+          : "";
+      const cardRequestsPause = instructionRequestsPause(cardInstruction);
 
       // Signal 0 (priority 0): Personal Commitment follow-up (strictly private auto mode).
       const commitmentEntry = (memberMemoryRow?.entries ?? [])
@@ -698,6 +713,78 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
             signalSummary: `Active commitment shared with guide ${daysAgo} ${daysAgo === 1 ? "day" : "days"} ago`,
             signalDetail: `The member shared a personal commitment ${daysAgo} days ago: "${String(commitmentEntry.text ?? "")}". Check in warmly on how it is going and offer one small next step.`,
             mode: "auto",
+          });
+          continue;
+        }
+      }
+
+      // Signal 0.5 (priority 0.5 / 0.8): Member Board coaching trigger —
+      // either a fresh founder coaching note saved on the member's Board card,
+      // or a member explicitly flagged as "stuck" on the Board. Never initiates
+      // outreach when the note itself asks to pause or skip check-ins.
+      const cardNoteAt = Number(journeyCardRow?.founderInstructionUpdatedAt ?? journeyCardRow?.updatedAt ?? 0);
+      if (
+        !cardRequestsPause &&
+        cardInstruction &&
+        Number.isFinite(cardNoteAt) &&
+        cardNoteAt > 0 &&
+        args.nowMs - cardNoteAt >= 0 &&
+        args.nowMs - cardNoteAt <= BOARD_NOTE_FRESH_MAX_AGE_MS
+      ) {
+        const dedupeKey = `board_note:${cardNoteAt}`;
+        const gate = evaluateMemberCoachGate({
+          nowMs: args.nowMs,
+          isOwner: false,
+          memberMuted: false,
+          reason: "board_coaching",
+          dedupeKey,
+          lastUserThreadMessageAt: lastUserAgentAt,
+          recentHistory,
+          autoReasonEnabled: autoSet.has("board_coaching"),
+          communityTimeZone: tz,
+          memberTemperature: heartbeatTemp.temperature,
+          consecutiveUnanswered,
+        });
+        if (gate.allowed) {
+          candidates.push({
+            priority: 0.5,
+            memberUserId: membership.userId,
+            reason: "board_coaching",
+            dedupeKey,
+            signalSummary: "Follow-up from your coaching note on their Board card",
+            signalDetail:
+              "The host left a fresh coaching instruction on this member's Board card. Follow it warmly and naturally with one concrete next step, without mentioning any card, board, or host note.",
+            mode: gate.mode,
+          });
+          continue;
+        }
+      }
+      if (!cardRequestsPause && journeyCardRow?.statusOverride === "stuck") {
+        const stageKey = String(journeyCardRow.stageKey ?? "default");
+        const dedupeKey = `board_stuck:${stageKey}:${monthKey(args.nowMs)}`;
+        const gate = evaluateMemberCoachGate({
+          nowMs: args.nowMs,
+          isOwner: false,
+          memberMuted: false,
+          reason: "board_coaching",
+          dedupeKey,
+          lastUserThreadMessageAt: lastUserAgentAt,
+          recentHistory,
+          autoReasonEnabled: autoSet.has("board_coaching"),
+          communityTimeZone: tz,
+          memberTemperature: heartbeatTemp.temperature,
+          consecutiveUnanswered,
+        });
+        if (gate.allowed) {
+          candidates.push({
+            priority: 0.8,
+            memberUserId: membership.userId,
+            reason: "board_coaching",
+            dedupeKey,
+            signalSummary: "Flagged as stuck on the Member Board",
+            signalDetail:
+              "This member is marked as stuck in their current stage. Reach out warmly to unblock them on one concrete next step from their stage goal/checkpoints, without mentioning any board or status label.",
+            mode: gate.mode,
           });
           continue;
         }
@@ -1014,7 +1101,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
       await recordMemberJourneyCoachOutcome(ctx, {
         communityId: args.communityId,
         memberUserId: args.memberUserId,
-        outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[args.reason] ?? "check-in"}`,
+        outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[args.reason]?.shortTag ?? "check-in"}`,
         nowMs: args.nowMs,
       });
       return { ok: true as const, outcome: "sent_auto" as const, draftId: String(draftId) };
@@ -1477,7 +1564,7 @@ export const sendMemberCoachDraft = mutation({
     await recordMemberJourneyCoachOutcome(ctx, {
       communityId: args.communityId,
       memberUserId: draft.memberUserId,
-      outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[draft.reason as MemberCoachReason] ?? "check-in"} (approved)`,
+      outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[draft.reason as MemberCoachReason]?.shortTag ?? "check-in"} (approved)`,
       nowMs,
     });
     return { ok: true, thread_id: delivered.threadId };

@@ -461,6 +461,8 @@ export function KitMembersPage(props: {
           onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
           journeyStages={board?.stages ?? null}
           journeyCard={record.membership_id ? board?.cards.find((card) => card.membership_id === record.membership_id) ?? null : null}
+          hostedAiTier={board?.hosted_ai_tier ?? null}
+          hostedAgentOn={board?.hosted_agent_on ?? null}
           onUpdateJourney={record.membership_id && !record.out ? async (patch) => {
             if (!scope || !record.membership_id) return;
             await updateCloudMemberJourneyCard({
@@ -509,6 +511,8 @@ function MemberRecordView(props: {
   payments: CloudCommunityMemberBillingHistory | null;
   journeyStages?: JourneyStageDefinition[] | null;
   journeyCard?: CloudMemberJourneyCard | null;
+  hostedAiTier?: "free" | "guide" | "chief_of_staff" | null;
+  hostedAgentOn?: boolean | null;
   onUpdateJourney?: (patch: {
     stageKey?: string;
     statusOverride?: JourneyCardStatus | "auto";
@@ -763,6 +767,15 @@ function MemberRecordView(props: {
                 placeholder="e.g. Check if they finished onboarding, or pause nudges this week"
                 onChange={(event) => setInstructionDraft(event.target.value)}
               />
+              {props.hostedAiTier ? (
+                <p className="members-board-card-outcome" style={{ marginTop: 4 }}>
+                  {props.hostedAiTier === "free" || props.hostedAgentOn === false
+                    ? "Your connected AI can read this note now. Turn on Guide or Chief of Staff in Settings for hosted member coaching."
+                    : props.hostedAiTier === "guide"
+                      ? "Your Guide follows this privately when this member chats. Chief of Staff also runs automatic check-ins."
+                      : "Your Guide follows this privately in chat, and Chief of Staff picks up fresh notes on its next check-in."}
+                </p>
+              ) : null}
             </div>
             {instructionDraft.trim() !== (props.journeyCard.founder_instruction ?? "") ? (
               <div style={{ display: "flex", gap: 6, marginTop: 6 }}>

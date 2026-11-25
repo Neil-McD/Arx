@@ -9,6 +9,7 @@ import type {
 
 export const MEMBER_COACH_REASONS = [
   "commitment_followup",
+  "board_coaching",
   "quiet_newcomer",
   "course_stall",
   "quiet_member",
@@ -28,6 +29,12 @@ export const MEMBER_COACH_REASON_LABELS: Record<
       "Checks in privately when a member shared a goal or next step with their guide 2+ days ago. Sends directly to their private thread so their goals stay private.",
     shortTag: "Commitment check-in",
     privateAutoOnly: true,
+  },
+  board_coaching: {
+    label: "Follow up on Member Board notes & stuck stages",
+    description:
+      "Acts once when you leave a fresh Guide instruction on a member's Board card, or checks in when a member is flagged as stuck.",
+    shortTag: "Board check-in",
   },
   quiet_newcomer: {
     label: "Welcome quiet newcomers",

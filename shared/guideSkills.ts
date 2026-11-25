@@ -32,6 +32,18 @@ export const COURSE_BUILDING_SKILL_MD = [
   "- In your reply use titles, not ids: what changed, which courses are still drafts, what members can see.",
 ].join("\n");
 
+export const MEMBER_BOARD_SKILL_MD = [
+  "Managing the Member Board",
+  "",
+  "- Read builder/journey.json once before changing anything on the board. It shows every stage, its goal and checkpoints, and where active members sit along with their statuses, completed steps, wins, and coaching notes.",
+  "- Also check builder/community.json when you need to know the community's current plan tier (free, guide, or chief_of_staff) and whether hosted AI is turned on.",
+  "- Never guess a person's handle or a stage key; copy them from builder/journey.json or the members listing.",
+  "- When the host asks for a specific update (move someone to a stage, pin or reset a status, check off a milestone, log a win, or save a coaching note), do it directly and report back using names and stage titles rather than raw keys.",
+  "- To rename, reorder, or add stages or checkpoints, pass the full ordered list to polynet_update_journey_stages and keep every existing stage key.",
+  "- Removing a stage uses polynet_remove_journey_stage, which always asks the host Yes or No first and moves anyone on that stage to their chosen fallback stage.",
+  "- Coaching notes steer how the guide helps a member privately without ever telling the member a note exists. Never expose a member's private one-on-one conversation words when summarizing the board.",
+].join("\n");
+
 export const GUIDE_SKILLS: readonly GuideSkill[] = [
   {
     name: "course-building",
@@ -39,6 +51,13 @@ export const GUIDE_SKILLS: readonly GuideSkill[] = [
     tool: "polynet_change_courses",
     loadedOn: ["resources", "knowledge"],
     text: COURSE_BUILDING_SKILL_MD,
+  },
+  {
+    name: "member-board",
+    about: "inspecting and updating the Member Board (stages, checkpoints, statuses, wins, and coaching notes).",
+    tool: "polynet_move_member_stage",
+    loadedOn: ["members"],
+    text: MEMBER_BOARD_SKILL_MD,
   },
 ];
 

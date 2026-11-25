@@ -3,6 +3,7 @@ export const COMMUNITY_AGENT_COMMUNITY_SECTIONS = [
   "agent",
   "resources",
   "events",
+  "members",
   "settings",
   "polynet",
   "ai_agent",
