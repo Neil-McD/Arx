@@ -107,7 +107,8 @@ function KnowledgeV1({ resources, context }: Props) {
           <KitBrainPage session={context.session} communityId={context.communityId!} canManage={canManage}
             content={{ courses: resources.state.modules, lessons: resources.state.resources,
               community: { oneLiner: context.communityOneLiner ?? null, about: context.communityAbout ?? null } }}
-            onOpenCourse={(courseId) => { resources.actions.handleSelectModule(courseId); }} />
+            onOpenCourse={(courseId) => { resources.actions.handleSelectModule(courseId); }}
+            onOpenGuideMemory={canManage ? () => setGuideMemoryOpen(true) : undefined} />
         ) : null}
         {inBrain ? null : <KitClassroom communityId={context.communityId!}
           onOpenBrain={() => setBrainOpen(true)} communityName={context.communityName ?? "This community"} session={context.session}
