@@ -504,7 +504,7 @@
   .pn-landing .feat-list ul + ul { padding-left: 24px; }
   .pn-landing .footer-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pn-landing .footer-identity { grid-column: 1 / -1; }
-  .pn-landing .topbar-links { display: none; }
+  .pn-landing .topbar nav.topbar-links { display: none; }
   .pn-landing .shot-side,
   .pn-landing .shot-rail { display: none; }
   .pn-landing main section { padding-bottom: 72px; }
@@ -546,4 +546,61 @@
   .pn-landing .compare thead th button { display: none; }
   .pn-landing .compare tbody th small { display: none; }
   .pn-landing .compare tr.group th { padding: 20px 6px 8px; }
+}
+
+/* The phone menu: hidden while the top-bar links fit. */
+.pn-landing .phone-menu { display: none; }
+.pn-landing .phone-menu-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+}
+.pn-landing .phone-menu-button.open { background: #17181b; }
+.pn-landing .phone-menu-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 20px;
+  border: 1px solid var(--line-default);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+}
+.pn-landing .topbar nav .phone-menu-row,
+.pn-landing .phone-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  margin: 0 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
+  text-decoration: none;
+}
+.pn-landing .phone-menu-row:hover { background: #17181b; }
+.pn-landing .phone-menu-row span { color: var(--quiet); font-size: 18px; }
+.pn-landing .phone-menu-sub { display: flex; flex-direction: column; margin: 0 8px 6px; padding-left: 14px; }
+.pn-landing .topbar nav .phone-menu-sub a { display: flex; align-items: center; min-height: 42px; padding: 0 14px; color: var(--muted); font-size: 15px; }
+.pn-landing .phone-menu-foot { display: flex; flex-direction: column; gap: 10px; margin: 12px 22px 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.pn-landing .topbar nav .phone-menu-foot a { display: flex; align-items: center; justify-content: center; min-height: 44px; color: var(--text); font-size: 15px; }
+.pn-landing .phone-menu-foot .cta { width: 100%; }
+
+@media (max-width: 900px) {
+  .pn-landing .phone-menu { display: block; }
+}
+@media (max-width: 560px) {
+  .pn-landing .topbar nav > .cta-small { display: none; }
+  .pn-landing .topbar nav .phone-menu-panel a { display: flex; }
 }
