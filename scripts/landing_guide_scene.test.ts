@@ -36,3 +36,20 @@ test("the guide section leads with the pain, has no plan chip, and lists only wh
   expect(html).not.toContain("plan-tag");
   expect(html).not.toMatch(/Answers with their source|Follow-ups in active threads|cites? (its|their) sources?/i);
 });
+
+test("the brain scene is the preview's own community, and only claims what's true", async () => {
+  const { BrainScene, sceneBrain } = await import("../apps/web/src/components/polynetLanding/BrainScene");
+  const { buildClubBrain } = await import("../apps/web/src/components/polynetLanding/RealAppPreview");
+  const now = Date.UTC(2026, 10, 25, 12);
+  const map = sceneBrain(now);
+  // Same map as the preview at the top.
+  expect(map.points.map((point) => point.id)).toEqual(buildClubBrain(now).points.map((point) => point.id));
+  const html = renderToStaticMarkup(React.createElement(BrainScene)).replace(/&#x27;/g, "'");
+  expect(html).toContain("What your community knows");
+  expect(html).toContain("you can correct any of it");
+  // The guide learns from posts; courses are where notes are filed.
+  expect(html).not.toMatch(/learn(s|ed)? from (your )?courses/i);
+  const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
+  expect(page).toContain("Good answers get<br/>buried in old threads.");
+  expect(page).not.toMatch(/Learned from courses and posts|Memory for each member/);
+});
