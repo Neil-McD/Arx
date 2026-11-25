@@ -61,6 +61,7 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   const [connectingApp, setConnectingApp] = useState(false);
   const [connectAppError, setConnectAppError] = useState<string | null>(null);
   const [appSecretCopied, setAppSecretCopied] = useState(false);
+  const [webhookSecretCopied, setWebhookSecretCopied] = useState(false);
   const [appPromptCopied, setAppPromptCopied] = useState(false);
   const ensureSessionRef = useRef(props.ensureSession);
   ensureSessionRef.current = props.ensureSession;
@@ -174,6 +175,7 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
         name: input.name,
         appUrl: input.appUrl || null,
         secret: result.secret,
+        webhookSigningSecret: result.webhook_signing_secret ?? null,
       });
       announceCommunityAppLinksChanged();
     } catch (failure) {
@@ -194,6 +196,12 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
     const ok = await tryCopyTextToClipboard(connectedApp.secret);
     setAppSecretCopied(ok);
     if (ok) window.setTimeout(() => setAppSecretCopied(false), 2200);
+  };
+  const copyWebhookSecret = async () => {
+    if (!connectedApp?.webhookSigningSecret) return;
+    const ok = await tryCopyTextToClipboard(connectedApp.webhookSigningSecret);
+    setWebhookSecretCopied(ok);
+    if (ok) window.setTimeout(() => setWebhookSecretCopied(false), 2200);
   };
   const copyAppPrompt = async () => {
     if (!connectedApp) return;
@@ -263,9 +271,11 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
         connectingApp={connectingApp}
         connectAppError={connectAppError}
         appSecretCopied={appSecretCopied}
+        webhookSecretCopied={webhookSecretCopied}
         appPromptCopied={appPromptCopied}
         onConnectApp={connectApp}
         onCopyAppSecret={() => void copyAppSecret()}
+        onCopyWebhookSecret={() => void copyWebhookSecret()}
         onCopyAppPrompt={() => void copyAppPrompt()}
         onOpen={() => void open()}
       />

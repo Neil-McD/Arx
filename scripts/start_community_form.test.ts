@@ -99,4 +99,42 @@ test("step 3 launch renders the AI harness logos, universal copy prompt button, 
   }
   expect(html).toContain("Have a software product? Connect your app");
   expect(html).toContain("Open community");
+
+  // When an app is connected inline, both one-time secrets stay visible for copying.
+  const connectedHtml = renderToStaticMarkup(React.createElement(KitStartLaunch, {
+    titleId: "launch-title",
+    card: {
+      slug: "sunrise-climbing",
+      name: "Sunrise Climbing",
+      oneLiner: "Morning climbers.",
+      avatarUrl: null,
+      bannerUrl: null,
+      monthlyCents: null,
+      hostName: "Neil",
+      hostAvatarUrl: null,
+    },
+    listed: false,
+    saving: false,
+    note: null,
+    error: null,
+    opening: false,
+    copied: false,
+    onCopy: () => {},
+    onCopyAiSetup: () => {},
+    onConnectApp: () => {},
+    connectedApp: {
+      appId: "app_123",
+      name: "Acme Studio",
+      appUrl: "https://acme.example",
+      secret: "psk_test_secret",
+      webhookSigningSecret: "whsec_test_signing",
+    },
+    onCopyAppSecret: () => {},
+    onCopyWebhookSecret: () => {},
+    onCopyAppPrompt: () => {},
+    onOpen: () => {},
+  }));
+  expect(connectedHtml).toContain("psk_test_secret");
+  expect(connectedHtml).toContain("whsec_test_signing");
+  expect(connectedHtml).toContain("Webhook signing secret");
 });

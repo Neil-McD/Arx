@@ -249,6 +249,7 @@ export type LaunchConnectedAppResult = {
   name: string;
   appUrl: string | null;
   secret: string;
+  webhookSigningSecret?: string | null;
 };
 
 // Step 3, shown for the community once it exists.
@@ -269,9 +270,11 @@ export function KitStartLaunch(props: {
   connectingApp?: boolean;
   connectAppError?: string | null;
   appSecretCopied?: boolean;
+  webhookSecretCopied?: boolean;
   appPromptCopied?: boolean;
   onConnectApp?: (input: { name: string; appUrl: string }) => Promise<void> | void;
   onCopyAppSecret?: () => void;
+  onCopyWebhookSecret?: () => void;
   onCopyAppPrompt?: () => void;
   onOpen: () => void;
 }) {
@@ -335,6 +338,21 @@ export function KitStartLaunch(props: {
                       <Btn small onClick={props.onCopyAppSecret}>{props.appSecretCopied ? "Copied" : "Copy"}</Btn>
                     </div>
                   </div>
+                  {props.connectedApp.webhookSigningSecret ? (
+                    <div className={cx("startc-field")}>
+                      <span>Webhook signing secret <em>· shown once</em></span>
+                      <div className={cx("startc-link")}>
+                        <input
+                          type="text"
+                          readOnly
+                          value={props.connectedApp.webhookSigningSecret}
+                          aria-label="Webhook signing secret"
+                          onFocus={(event) => event.target.select()}
+                        />
+                        <Btn small onClick={props.onCopyWebhookSecret}>{props.webhookSecretCopied ? "Copied" : "Copy"}</Btn>
+                      </div>
+                    </div>
+                  ) : null}
                   {props.onCopyAppPrompt ? (
                     <div className={cx("startc-app-acts")}>
                       <Btn small onClick={props.onCopyAppPrompt}>{props.appPromptCopied ? "Copied" : "Copy app prompt"}</Btn>
