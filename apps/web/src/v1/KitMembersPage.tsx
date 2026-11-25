@@ -387,6 +387,7 @@ export function KitMembersPage(props: {
             ) : (
             <>
             <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => setView(id as MembersView)}
+              admission={props.admission} waiting={waiting}
               onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />
             {(!loaded && loading) || (loaded && view !== "past" && loading && rows.length === 0) ? (
               <TableRowsSkeleton />

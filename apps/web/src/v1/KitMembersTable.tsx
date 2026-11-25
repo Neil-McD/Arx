@@ -48,23 +48,42 @@ export function MembersToolbar(props: {
   filters: MembersFilter[];
   filter: string;
   onFilter: (id: string) => void;
+  admission?: CommunityAdmissionControl;
+  waiting?: number;
   onExport: () => void;
   exporting: boolean;
   canExport: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [confirmMode, setConfirmMode] = useState<"open" | "approval" | null>(null);
   const menu = useRef<HTMLDivElement | null>(null);
+  const accessMenu = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!open) return;
-    const away = (event: MouseEvent) => { if (!menu.current?.contains(event.target as Node)) setOpen(false); };
-    const esc = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    if (!open && !accessOpen) return;
+    const away = (event: MouseEvent) => {
+      if (open && !menu.current?.contains(event.target as Node)) setOpen(false);
+      if (accessOpen && !accessMenu.current?.contains(event.target as Node)) {
+        setAccessOpen(false);
+        setConfirmMode(null);
+      }
+    };
+    const esc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setAccessOpen(false);
+        setConfirmMode(null);
+      }
+    };
     document.addEventListener("mousedown", away);
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
-  }, [open]);
+  }, [open, accessOpen]);
   const first = props.filters[0];
   const chosen = props.filters.find((entry) => entry.id === props.filter);
   const filtered = Boolean(chosen && first && chosen.id !== first.id);
+  const admission = props.admission;
+  const canManageAdmission = Boolean(admission?.canManage && admission.mode);
   return (
     <div className={cx("mbar")}>
       <label className={cx("msearch")}>
@@ -87,6 +106,79 @@ export function MembersToolbar(props: {
           </div>
         ) : null}
       </div>
+      {canManageAdmission && admission?.mode ? (
+        <div className={cx("mfilter")} ref={accessMenu}>
+          <button
+            type="button"
+            className={cx("mbtn")}
+            aria-haspopup="menu"
+            aria-expanded={accessOpen}
+            onClick={() => {
+              setAccessOpen((prev) => !prev);
+              setConfirmMode(null);
+            }}
+          >
+            Access: {admission.mode === "open" ? "Open" : "Approval"}
+          </button>
+          {accessOpen ? (
+            <div className={cx("mmenu")} role="menu" aria-label="Who can join" style={{ minWidth: 230 }}>
+              {confirmMode ? (
+                <div style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <span style={{ fontSize: 12, lineHeight: 1.4 }}>{whoCanJoinAsk(confirmMode, props.waiting ?? 0)}</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Btn
+                      small
+                      go
+                      disabled={admission.pending}
+                      onClick={() => {
+                        void Promise.resolve(admission.onChange(confirmMode)).finally(() => {
+                          setConfirmMode(null);
+                          setAccessOpen(false);
+                        });
+                      }}
+                    >
+                      {admission.pending ? "…" : confirmMode === "open" ? "Let anyone join" : "Ask first"}
+                    </Btn>
+                    <Btn small txt disabled={admission.pending} onClick={() => setConfirmMode(null)}>Cancel</Btn>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={admission.mode === "open"}
+                    onClick={() => {
+                      if (admission.mode === "open") setAccessOpen(false);
+                      else setConfirmMode("open");
+                    }}
+                  >
+                    <span>Open</span>
+                    {admission.mode === "open" ? <em>Active</em> : null}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={admission.mode === "approval"}
+                    onClick={() => {
+                      if (admission.mode === "approval") setAccessOpen(false);
+                      else setConfirmMode("approval");
+                    }}
+                  >
+                    <span>Approval required</span>
+                    {admission.mode === "approval" ? <em>Active</em> : null}
+                  </button>
+                  {admission.error ? (
+                    <span style={{ display: "block", padding: "4px 10px 6px", fontSize: 11.5, color: "#fca5a5" }}>
+                      {admission.error}
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <button type="button" className={cx("mbtn mexport")} onClick={props.onExport} disabled={!props.canExport || props.exporting} aria-label="Export everyone as a spreadsheet" title="Export everyone">
         <Download size={15} strokeWidth={1.8} aria-hidden="true" />{props.exporting ? <span>Exporting…</span> : null}
       </button>
