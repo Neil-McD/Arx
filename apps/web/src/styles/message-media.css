@@ -19,9 +19,6 @@
 .chat-media-item-error span { font-size: 12px; color: var(--text-muted, inherit); }
 @keyframes chat-media-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
 .message-media-grid > .chat-media-player { min-width: 0; }
-.community-dm-panel-message-stack .message-link-media,
-.community-dm-panel-message-bubble .message-link-media { width: min(100%, 560px); min-width: min(300px, 100%); }
-.community-dm-panel-message .community-dm-panel-media-only:has(.chat-media-grid:not(.count-1)) { max-width: min(300px, 100%); }
 .message-pdf-card { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; min-width: 0; max-width: 640px; padding: 14px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--bg-card); color: var(--text-primary); cursor: pointer; }
 .message-pdf-card > svg { flex-shrink: 0; color: var(--text-muted); }
 .message-pdf-card > span { min-width: 0; display: grid; gap: 4px; }

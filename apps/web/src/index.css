@@ -331,8 +331,7 @@
 /* Web retained surfaces: center against the rail control edge (not the rail column edge). */
 @media (min-width: 921px) {
   .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
-  .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid,
-  .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .public-funnel-shell {
+  .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid {
     position: relative;
     left: var(--web-rail-balance-shift);
   }
@@ -800,29 +799,6 @@
 }
 
 /* Web: discovery page skeleton cards (nicer than the generic spinner). */
-
-.system-prompt-input {
-  width: 100%;
-  border: 1px solid var(--border-muted);
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.45;
-  resize: vertical;
-  min-height: 120px;
-  font-family: var(--font-mono);
-}
-
-.system-prompt-input:focus {
-  outline: none;
-  border-color: var(--stroke-focus);
-}
-
-.system-prompt-input::placeholder {
-  color: var(--text-faint);
-}
 
 .streaming-placeholder {
   display: inline-flex;
@@ -2031,150 +2007,6 @@
   .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
     transition: none;
   }
-}
-
-.mobile-bottom-rail-inner {
-  width: min(100%, 520px);
-  height: calc(var(--mobile-bottom-rail-height) - 2px);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
-}
-
-.mobile-bottom-rail-action {
-  min-width: 0;
-  height: 48px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  color: var(--text-faint);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font: inherit;
-  cursor: pointer;
-  transition:
-    color 140ms ease,
-    background-color 120ms ease;
-}
-
-.mobile-bottom-rail-action > svg,
-.mobile-bottom-rail-icon-wrap > svg {
-  width: 23px;
-  height: 23px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition:
-    fill 140ms ease,
-    stroke 140ms ease;
-}
-
-.mobile-bottom-rail-action.active {
-  color: var(--text-primary);
-}
-
-.mobile-bottom-rail-action.active .mobile-bottom-rail-icon-wrap > svg {
-  fill: currentColor;
-}
-
-.mobile-bottom-rail-community-cutout {
-  position: absolute;
-  inset: 0;
-  display: none;
-  pointer-events: none;
-}
-
-.mobile-bottom-rail-community.active .mobile-bottom-rail-icon-wrap > .mobile-bottom-rail-community-cutout {
-  display: block;
-  fill: none;
-}
-
-.mobile-bottom-rail-community.active .mobile-bottom-rail-community-cutout > path:first-child {
-  fill: var(--mobile-bottom-rail-surface);
-  stroke: var(--mobile-bottom-rail-surface);
-}
-
-.mobile-bottom-rail-action:active {
-  background: var(--hover-overlay);
-}
-
-.mobile-bottom-rail-action:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--focus-ring);
-}
-
-.mobile-bottom-rail-action:disabled {
-  background: transparent;
-  color: var(--text-faint);
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-
-.mobile-bottom-rail-icon-wrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.mobile-bottom-rail-unread {
-  position: absolute;
-  top: -6px;
-  right: -10px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: var(--accent-global-attention);
-  color: var(--text-on-global-attention);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
-  font-weight: 800;
-}
-
-.mobile-bottom-rail-dot {
-  position: absolute;
-  top: -4px;
-  right: -7px;
-  width: 7px;
-  height: 7px;
-  border: 2px solid var(--mobile-bottom-rail-surface);
-  border-radius: 999px;
-  background: var(--accent-global-attention);
-}
-
-.mobile-bottom-rail-ai {
-  color: var(--accent-selection);
-}
-
-.mobile-bottom-rail-ai.active {
-  color: var(--accent-selection);
-}
-
-.mobile-bottom-rail-ai-icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mobile-bottom-rail-ai-icon svg {
-  width: 25px;
-  height: 25px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-}
-
-.mobile-bottom-rail-ai.active .mobile-bottom-rail-ai-icon svg {
-  fill: currentColor;
 }
 
 .mobile-community-selector {

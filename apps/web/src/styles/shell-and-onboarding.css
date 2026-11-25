@@ -340,10 +340,6 @@ body {
 }
 
 
-.session-list {
-  flex: 1;
-}
-
 .community-nav {
   display: flex;
   flex-direction: column;
@@ -931,17 +927,6 @@ body {
   stroke-linejoin: round;
 }
 
-.nav-icon-emphasis {
-  width: 19px;
-  height: 19px;
-}
-
-.nav-icon-emphasis svg {
-  width: 19px;
-  height: 19px;
-  stroke-width: 1.75;
-}
-
 .nav-item.active .nav-icon {
   color: var(--text-primary);
 }
@@ -972,17 +957,6 @@ body {
   padding-top: 12px;
   display: grid;
   gap: 6px;
-}
-
-.community-nav-site {
-  margin-bottom: 0;
-  justify-content: center;
-  gap: 8px;
-  font-weight: 500;
-  border-radius: 10px;
-  text-decoration: none;
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle, color-mix(in srgb, currentColor 14%, transparent));
 }
 
 .community-nav-invite-loading {
