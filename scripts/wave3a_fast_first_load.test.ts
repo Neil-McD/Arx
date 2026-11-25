@@ -5,12 +5,15 @@ const read = (relativePath: string) =>
   readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 
 describe("Wave 3A: fast first load & on-demand screen boundaries", () => {
-  it("keeps heavy markdown/highlight assets out of the root App bundle", () => {
+  it("keeps heavy markdown/highlight/math assets lazy-loaded and out of the root App bundle", () => {
     const app = read("apps/web/src/App.tsx");
     expect(app).not.toMatch(/from\s+["'][^"']*markdownUi["']/);
     expect(app).not.toMatch(/highlight\.js\/styles\/github-dark\.css/);
     const markdownUi = read("shared/markdownUi.tsx");
-    expect(markdownUi).toContain('import "highlight.js/styles/github-dark.css";');
+    expect(markdownUi).not.toMatch(/highlight\.js\/styles\/github-dark\.css/);
+    expect(markdownUi).not.toMatch(/katex\/dist\/katex\.min\.css/);
+    expect(markdownUi).toContain('import("./markdownHighlight")');
+    expect(markdownUi).toContain('import("./markdownMath")');
   });
 
   it("defers Sentry and PostHog off the critical startup path via tree-shakable dynamic imports", () => {
@@ -47,7 +50,9 @@ describe("Wave 3A: fast first load & on-demand screen boundaries", () => {
     expect(compositionRoot).toMatch(/const WebDirectMessagesHost = lazy/);
     expect(dmHost).toMatch(/const WebDirectMessageInboxPanel = lazy\(/);
     expect(dmHost).toMatch(/const WebDirectMessagePanel = lazy\(/);
-    expect(landing).toMatch(/const WebPlatformLegalReaderModal = lazy\(/);
+    expect(landing).not.toContain("WebPlatformLegalReaderModal");
+    expect(landing).toContain('href="/privacy"');
+    expect(landing).toContain('href="/terms"');
     expect(accountForm).toMatch(/const WebPlatformLegalReaderModal = lazy\(/);
   });
 });

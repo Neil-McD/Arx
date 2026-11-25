@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
@@ -8,16 +8,6 @@ import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
 import { buildPolynetMcpSetupForOrigin } from "../../../../../shared/polynetMcpSetup";
 import { tryCopyTextToClipboard } from "../../../../../shared/chatUi";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
-import {
-  PRIVACY_AI_DATA_POLICY_ENTRY,
-  TERMS_OF_SERVICE_ENTRY,
-  type LegalDocumentEntry,
-} from "../../docs/legalDocumentsContent";
-const WebPlatformLegalReaderModal = lazy(() =>
-  import("../WebPlatformLegalReaderModal").then((module) => ({
-    default: module.WebPlatformLegalReaderModal,
-  })),
-);
 
 type JoinProps = { onJoin: () => void };
 
@@ -194,10 +184,8 @@ function Showcase(props: { communities: DiscoverCommunitySnapshot[] }) {
   );
 }
 
-// Header, footer and legal readers shared by every public page.
+// Header and footer shared by every public page.
 export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) {
-  const [activeLegalDocument, setActiveLegalDocument] =
-    useState<LegalDocumentEntry | null>(null);
   return (
     <div className="pn-landing">
       <div className="page">
@@ -219,19 +207,11 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
           <nav className="footer-links" aria-label="Footer navigation">
             <a href="/discover" onClick={trackFind("footer")}>Find a community</a>
             <a href="/login">Sign in</a>
-            <button type="button" onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}>Privacy</button>
-            <button type="button" onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}>Terms</button>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
           </nav>
         </footer>
       </div>
-      {activeLegalDocument ? (
-        <Suspense fallback={null}>
-          <WebPlatformLegalReaderModal
-            document={activeLegalDocument}
-            onClose={() => setActiveLegalDocument(null)}
-          />
-        </Suspense>
-      ) : null}
     </div>
   );
 }

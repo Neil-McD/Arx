@@ -1,43 +1,42 @@
-import { Children, isValidElement, type ReactNode, useMemo, useRef, useState } from "react";
+import { Children, isValidElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import "katex/dist/katex.min.css";
-import "highlight.js/styles/github-dark.css";
 import { parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed } from "./linkEmbedUi";
 import { lessonCallout, lessonCalloutType, LESSON_CALLOUT_MARKER } from "./lessonCallouts";
 import { LessonCalloutIcon } from "./lessonCalloutUi";
 import { StrongOrChip, plainTextOf } from "./entityChipsUi";
-import hljs from "highlight.js/lib/core";
-import bash from "highlight.js/lib/languages/bash";
-import css from "highlight.js/lib/languages/css";
-import go from "highlight.js/lib/languages/go";
-import java from "highlight.js/lib/languages/java";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import markdown from "highlight.js/lib/languages/markdown";
-import python from "highlight.js/lib/languages/python";
-import rust from "highlight.js/lib/languages/rust";
-import sql from "highlight.js/lib/languages/sql";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
 
-hljs.registerLanguage("bash", bash);
-hljs.registerLanguage("css", css);
-hljs.registerLanguage("go", go);
-hljs.registerLanguage("java", java);
-hljs.registerLanguage("javascript", javascript);
-hljs.registerLanguage("json", json);
-hljs.registerLanguage("markdown", markdown);
-hljs.registerLanguage("python", python);
-hljs.registerLanguage("rust", rust);
-hljs.registerLanguage("sql", sql);
-hljs.registerLanguage("typescript", typescript);
-hljs.registerLanguage("xml", xml);
-hljs.registerLanguage("yaml", yaml);
+type MarkdownHighlightModule = typeof import("./markdownHighlight");
+type MarkdownMathModule = typeof import("./markdownMath");
+
+let loadedHighlightModule: MarkdownHighlightModule | null = null;
+let pendingHighlightModule: Promise<MarkdownHighlightModule> | null = null;
+
+function loadMarkdownHighlight(): Promise<MarkdownHighlightModule> {
+  if (loadedHighlightModule) return Promise.resolve(loadedHighlightModule);
+  if (!pendingHighlightModule) {
+    pendingHighlightModule = import("./markdownHighlight").then((mod) => {
+      loadedHighlightModule = mod;
+      return mod;
+    });
+  }
+  return pendingHighlightModule;
+}
+
+let loadedMathModule: MarkdownMathModule | null = null;
+let pendingMathModule: Promise<MarkdownMathModule> | null = null;
+
+export function loadMarkdownMath(): Promise<MarkdownMathModule> {
+  if (loadedMathModule) return Promise.resolve(loadedMathModule);
+  if (!pendingMathModule) {
+    pendingMathModule = import("./markdownMath").then((mod) => {
+      loadedMathModule = mod;
+      return mod;
+    });
+  }
+  return pendingMathModule;
+}
 
 const HIGHLIGHT_LANGUAGE_ALIAS: Record<string, string> = {
   html: "xml",
@@ -411,20 +410,6 @@ function MarkdownTable({
   );
 }
 
-/** The highlighted HTML for a code block, as the reader shows it. The lesson
- * editor colours its code blocks from this too, so both look the same.
- * (From Rashid's lesson editor, PR #290.) */
-export function highlightCodeHtml(code: string, language?: string | null): string | null {
-  const normalizedLanguage = normalizeCodeLanguage(language ?? undefined);
-  if (normalizedLanguage && PLAIN_TEXT_LANGUAGES.has(normalizedLanguage)) return null;
-  try {
-    if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) return hljs.highlight(code, { language: normalizedLanguage }).value;
-    return hljs.highlightAuto(code).value;
-  } catch {
-    return null;
-  }
-}
-
 function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const normalizedLanguage = useMemo(() => {
@@ -437,17 +422,27 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
     if (isPlainText || normalizedLanguage === "markdown") return "artifact";
     return "code";
   }, [isPlainText, normalizedLanguage]);
+  const [highlightModule, setHighlightModule] = useState<MarkdownHighlightModule | null>(
+    () => (isPlainText ? null : loadedHighlightModule),
+  );
+
+  useEffect(() => {
+    if (isPlainText || highlightModule) return;
+    let cancelled = false;
+    void loadMarkdownHighlight()
+      .then((mod) => {
+        if (!cancelled) setHighlightModule(mod);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [highlightModule, isPlainText]);
+
   const highlighted = useMemo(() => {
-    if (isPlainText) return null;
-    if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) {
-      try {
-        return hljs.highlight(code, { language: normalizedLanguage }).value;
-      } catch {
-        return hljs.highlightAuto(code).value;
-      }
-    }
-    return hljs.highlightAuto(code).value;
-  }, [code, isPlainText, normalizedLanguage]);
+    if (isPlainText || !highlightModule) return null;
+    return highlightModule.highlightCodeHtml(code, normalizedLanguage);
+  }, [code, highlightModule, isPlainText, normalizedLanguage]);
 
   const handleCopy = async () => {
     await copyCodeToClipboard(code, onCopyCode);
@@ -464,12 +459,12 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
         </button>
       </div>
       <pre className="md-code-block">
-        {isPlainText ? (
+        {isPlainText || highlighted === null ? (
           <code>{code}</code>
         ) : (
           <code
             className={language ? `language-${language} hljs` : "hljs"}
-            dangerouslySetInnerHTML={{ __html: highlighted ?? "" }}
+            dangerouslySetInnerHTML={{ __html: highlighted }}
           />
         )}
       </pre>
@@ -657,25 +652,105 @@ function markdownComponentsFor(headingLevelOffset: number, options?: MarkdownRen
   return components;
 }
 
+const MARKDOWN_BASE_REMARK_PLUGINS = [remarkGfm, remarkLessonCallouts];
+let cachedMathRehypePlugins: [MarkdownMathModule["rehypeKatex"]] | null = null;
+let cachedMathRemarkPlugins: [typeof remarkGfm, MarkdownMathModule["remarkMath"], typeof remarkLessonCallouts] | null = null;
+
+function getLoadedMathPlugins(mathModule: MarkdownMathModule) {
+  if (!cachedMathRehypePlugins || !cachedMathRemarkPlugins) {
+    cachedMathRehypePlugins = [mathModule.rehypeKatex];
+    cachedMathRemarkPlugins = [remarkGfm, mathModule.remarkMath, remarkLessonCallouts];
+  }
+  return {
+    rehypePlugins: cachedMathRehypePlugins,
+    remarkPlugins: cachedMathRemarkPlugins,
+  };
+}
+
+function containsMathExpression(normalized: string): boolean {
+  if (!normalized.includes("$")) return false;
+  return /\$\$|(?<!\\)\$[^$\n]+\$/.test(normalized);
+}
+
+function LazyMathMarkdown(props: {
+  components: Components;
+  normalizedText: string;
+}) {
+  const [mathModule, setMathModule] = useState<MarkdownMathModule | null>(() => loadedMathModule);
+
+  useEffect(() => {
+    if (mathModule) return;
+    let cancelled = false;
+    void loadMarkdownMath()
+      .then((mod) => {
+        if (!cancelled) setMathModule(mod);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [mathModule]);
+
+  if (mathModule) {
+    const { rehypePlugins, remarkPlugins } = getLoadedMathPlugins(mathModule);
+    return (
+      <ReactMarkdown
+        components={props.components}
+        rehypePlugins={rehypePlugins}
+        remarkPlugins={remarkPlugins}
+        skipHtml
+      >
+        {props.normalizedText}
+      </ReactMarkdown>
+    );
+  }
+
+  return (
+    <ReactMarkdown
+      components={props.components}
+      remarkPlugins={MARKDOWN_BASE_REMARK_PLUGINS}
+      skipHtml
+    >
+      {props.normalizedText}
+    </ReactMarkdown>
+  );
+}
+
 export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
   const requestedHeadingLevelOffset = options?.headingLevelOffset ?? 0;
   const headingLevelOffset = Number.isFinite(requestedHeadingLevelOffset)
     ? Math.max(0, Math.min(5, Math.floor(requestedHeadingLevelOffset)))
     : 0;
+  const components = markdownComponentsFor(headingLevelOffset, options);
+  const normalized = normalizeMathMarkdown(text);
+
+  if (containsMathExpression(normalized)) {
+    if (loadedMathModule) {
+      const { rehypePlugins, remarkPlugins } = getLoadedMathPlugins(loadedMathModule);
+      return (
+        <ReactMarkdown
+          components={components}
+          rehypePlugins={rehypePlugins}
+          remarkPlugins={remarkPlugins}
+          skipHtml
+        >
+          {normalized}
+        </ReactMarkdown>
+      );
+    }
+    return <LazyMathMarkdown components={components} normalizedText={normalized} />;
+  }
+
   return (
     <ReactMarkdown
-      components={markdownComponentsFor(headingLevelOffset, options)}
-      rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+      components={components}
+      remarkPlugins={MARKDOWN_BASE_REMARK_PLUGINS}
       skipHtml
     >
-      {normalizeMathMarkdown(text)}
+      {normalized}
     </ReactMarkdown>
   );
 }
-
-const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex];
-const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath, remarkLessonCallouts];
 
 function buildMarkdownComponents(headingLevelOffset: number, options?: MarkdownRenderOptions): Components {
   const renderHeading = (level: number, children: ReactNode) => (

@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-10-28
+last_verified: 2026-11-25
 ---
 
 # Builder Quickstart
@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent job, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Creating and running a community is free. Its agent (Polynet-hosted AI) needs the community's own Agent plan: $79 a month, with $20 of AI included. Without it the community runs as usual and only the agent is off. The canonical platform operator receives included funding. There is no account-wide plan, community BYOK option, personal Premium plan, or paid tool tier.
+Creating and running a community is free (up to 10 unfunded live communities per owner, unlimited members). When you want Polynet-hosted AI for a community, choose **Guide** ($20/month with $3/month AI included for reactive 1:1 chats, `@mentions`, active-thread follow-ups, and living memory) or **Chief of Staff** ($100/month with $20/month AI included plus Daily Briefs, proactive Member & Builder Check-Ins, unanswered-question auto-replies, and optional usage boosts). Without a paid AI plan, the community runs as usual and only hosted AI is off. There is no account-wide plan, community BYOK option, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -30,8 +30,8 @@ If those answers are vague, more settings will not fix the product.
 ## Core Steps
 
 1. Finish account setup, then choose Create Community and name your community, its purpose and public profile. No payment is needed.
-2. Turn on the agent with the Agent plan ($79 a month) when you want Polynet-hosted AI: from the agent, Billing or Account, at any time.
-3. Keep shaping the community; the agent plan can be added before or after.
+2. Turn on hosted AI with **Guide** ($20/month) or **Chief of Staff** ($100/month) from the community's Guide settings whenever you're ready.
+3. Keep shaping the community; an AI plan can be added or upgraded at any time.
 4. Write the community agent's instructions.
 5. Add resources that represent durable community knowledge.
 6. Configure member access, billing, and roles.
@@ -80,12 +80,10 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Every community operates free; hosted AI requires an Agent plan per community.
-- Each community that uses Polynet-hosted AI needs its own verified $79 monthly Agent plan.
-- An owner may have one live free community (archived ones don't count); every further one needs its own Agent plan, and one created with its plan is never capped. Communities an owner already had before this rule stay.
-- Create Community goes straight to setup. A plan bought first is attached to the community created next, exactly once.
-- Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
-- A community without an Agent plan can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its agent is off.
+- Every community operates free; hosted AI requires a per-community Guide ($20/month) or Chief of Staff ($100/month) plan.
+- An owner may have up to 10 live free communities (archived ones don't count); funded communities are never capped.
+- Create Community goes straight to setup, and each community manages its AI plan directly from Settings → Guide.
+- A community without a paid AI plan can be configured, published, listed in Discover, accept public joins, send zero-AI weekly digests, and collect paid-member revenue. Only hosted AI is off.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.

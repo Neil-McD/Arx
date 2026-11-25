@@ -3,7 +3,7 @@ id: product.polynet_mcp
 title: Polynet MCP
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-10-28
+last_verified: 2026-11-25
 ---
 
 # Polynet MCP
@@ -11,28 +11,24 @@ last_verified: 2026-10-28
 ## Definition
 
 Polynet MCP is the official OAuth-protected provider that lets anyone's
-external AI harness (Claude Code, Codex, or another compatible client) work in
-the communities they belong to, in the lens their role there allows:
+external AI harness (Claude, ChatGPT, Claude Code, Codex, Cursor, or another
+compatible client) work in the communities they belong to, in the lens their
+role there allows:
 
 - **Members** read what they can see in the community and write their own
   things: posts and replies, edits to their own posts, reactions, lesson
   progress.
-- **Moderators** also review join requests (`builder/join-requests/`) and
-  remove anyone's post (`community.interaction.remove`).
-- **Owners and admins** also get the builder lens: the community itself
-  (`builder/community.json`: name, address, one-liner, about, visibility, how
-  people join, the agent's instructions, the handbook), staging course
-  changes, workflow decisions and site deploys. Name, address and visibility
-  are the owner's alone. They also tag people and change roles, remove, ban
-  and unban on a selection; removing or banning a paying member is left to
-  Studio, because it cancels their subscription. Moderators read the tags;
-  members never see them.
+- **Moderators** also review join requests and remove posts.
+- **Owners and admins** also get the builder lens: managing community settings,
+  courses, events, handbook/knowledge, and member roles or removals (removing or
+  banning a paying member stays in Studio because it cancels their
+  subscription). Name, address, and visibility are the owner's alone.
 
 Actions that decide about people or posts take a selection: up to 50 items,
 each decided on its own with its own receipt.
 
-Writes through your own AI and your community's site share a budget of 60 a
-minute; past it, a call is refused with `rate_limited` and says when to retry.
+Writes through your own AI share a rate budget of 60 a minute; past it, a call
+is refused with `rate_limited` and says when to retry.
 
 ## Mental Model
 
@@ -46,28 +42,27 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 
 - The canonical endpoint is `/runtime/mcp`.
 - The external harness authenticates the Polynet user through OAuth.
-- The provider exposes exactly `polynet_list`, `polynet_read`,
-  `polynet_search`, `polynet_write`, and `polynet_call`.
+- Reading uses three general tools (`polynet_list`, `polynet_read`,
+  `polynet_search`), and each allowed action is exposed as its own named tool
+  scoped to the caller's role.
 - The harness begins at `/` and selects communities through canonical
   repository paths.
 - Every request revalidates membership, entitlement, role, and capability.
 - Tool arguments are selectors, never authority.
 - The community context used by a call is auditable.
-- Calls into a community where the caller lacks builder authority are refused.
-- Builders can also deploy their community site through the MCP.
+- Calls into a community where the caller lacks membership or required role
+  authority fail closed.
 
 ## Rules
 
 1. Keep the official provider separate from third-party MCP consumption.
-2. Fail closed when builder authority, community access, or entitlement is
+2. Fail closed when community access, role authority, or entitlement is
    missing.
 3. Revalidate access on every request.
 4. Do not expose local filesystem or shell authority through the web provider.
 5. Do not add third-party MCP credentials, mounts, or passthrough tools.
-6. Preserve the stable external `workspace` wire vocabulary only where the v0
-   compatibility contract requires it.
-7. Capability overlays such as web research do not expand or fork the five-tool
-   Polynet contract.
+6. Every named action tool routes through the same canonical executor,
+   authorization, rate limits, and idempotent receipts.
 
 ## Related Concepts
 

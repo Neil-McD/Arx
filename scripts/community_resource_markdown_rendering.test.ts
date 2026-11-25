@@ -1,11 +1,11 @@
 // @vitest-environment node
 
 import { createRequire } from "node:module";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("katex/dist/katex.min.css", () => ({}));
 
-import { renderMarkdown } from "../shared/markdownUi";
+import { loadMarkdownMath, renderMarkdown } from "../shared/markdownUi";
 import { WebCommunityResourceViewerContent } from "../apps/web/src/components/WebCommunityResourceViewerContent";
 import type { CommunityResource } from "../apps/web/src/components/communityResourcesContracts";
 
@@ -20,6 +20,10 @@ function renderResourceMarkdown(markdown: string): string {
 }
 
 describe("community resource markdown rendering", () => {
+  beforeAll(async () => {
+    await loadMarkdownMath();
+  });
+
   it("leaves the shared renderer hierarchy unchanged unless a surface opts in", () => {
     const markup = renderToStaticMarkup(
       createElement("div", null, renderMarkdown("# Original heading")),

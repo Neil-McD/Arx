@@ -62,11 +62,10 @@ The active surface includes:
 - gated access through each community's join page (`/c/<slug>`)
 - community chat, resources, events, members, settings, and voice input
 - billing and builder payouts
-- the community agent on the Agent page and through @mentions
-- accepted community memory
-- the official OAuth-protected Polynet MCP for builders
-- the canonical `polynet_list`, `polynet_read`, `polynet_search`,
-  `polynet_write`, and `polynet_call` operations
+- the community agent on the Home page and through @mentions
+- living community memory notes and founder handbook
+- the official OAuth-protected Polynet MCP for everyone, scoped to each person's role
+- three read tools (`polynet_list`, `polynet_read`, `polynet_search`) plus role-scoped named action tools
 
 Community sites on `polynet.page` are built and running on Polynet's staging
 environment; production sites are not live yet.

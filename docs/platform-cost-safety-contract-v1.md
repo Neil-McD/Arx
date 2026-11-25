@@ -119,20 +119,15 @@ One-second elapsed-time and typing-expiry display timers do not call a backend
 and are excluded. Focus/animation/toast/image-cleanup timers are also excluded.
 #### Fixed-interval source inventory
 
-CI admits exactly these seven first-party `setInterval` call sites:
+First-party `setInterval` call sites must stay explicitly classified with cadence, isolation, overlap, and cleanup bounds:
 
 | Canonical call site | Classification | Required lifetime bound |
 | --- | --- | --- |
 | `apps/web/src/components/RuntimeLiveTimeline.tsx` | UI-only elapsed clock | active unfinished run; cleared by effect teardown |
-| `apps/web/src/components/ChannelRosterPanel.tsx` | UI-only 30-second presence-lease expiry clock; no network calls | mounted channel roster; cleared by effect teardown |
 | `shared/useCommunityTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
 | `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
-
-The executable contract scans the first-party source corpus. A new interval or
-a second interval in an allowlisted file fails CI until it is deleted or
-explicitly classified with cadence, isolation, overlap, and cleanup bounds.
 
 #### Execution-scoped runtime work
 
@@ -145,33 +140,29 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 9 jobs:
+`convex/crons.ts` declares 15 scheduled jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
-| Process pending email outbox | 5 minutes | 10 | delivery repair; keep only with indexed due-work lookup |
-| Recover distribution attribution deliveries | 5 minutes | 25 | delivery repair; keep only with indexed due-work lookup |
+| Process pending email outbox | 5 minutes | 25 | delivery repair; indexed due-work lookup (`by_status_priority_scheduledAt`) |
+| Recover distribution attribution deliveries | 5 minutes | 25 | delivery repair; indexed due-work lookup |
 | Recover archived community billing cleanup | 5 minutes | 3 | billing repair; keep |
-| Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; verify due-window indexes and fanout accounting |
-| Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
-| Advance due workflow milestones | 1 minute | 25 due timers | member-workflow job; goes when member workflows are removed |
-| Send due founder briefs | 15 minutes | 25 due briefs (`MAX_BRIEFS_PER_RUN`) | AI-triggering job: one founder-funded model call per brief, deterministic brief when funding or the model is unavailable |
-| Stop billing for unreachable pods | 60 minutes | pages of 100 pod payments (`SWEEP_PAGE`) per granting status, to the end; 100 abandoned checkouts per round | billing safety net (the same check also runs at once, scoped, when access ends): indexed by status, one Stripe cancel per unreachable payment, idempotent; empty runs read only paying rows |
+| Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; due-window indexed |
+| Stop billing for unreachable pods | 60 minutes | pages of 100 pod payments (`SWEEP_PAGE`) per granting status | billing safety net; indexed by status, idempotent |
+| Process pending mention emails | 15 minutes | 25 recipients per round (up to 4 rounds) | notification job; O(1) cooldown index |
+| Send due founder briefs | 15 minutes | 25 due briefs (`MAX_BRIEFS_PER_RUN`) | AI-triggering job (Chief of Staff only); deterministic fallback when unavailable |
+| Process due member coach scans | 60 minutes | bounded per-community scan | AI-triggering job (Chief of Staff only); draft mode by default |
+| Process due weekly community digests | 30 minutes | 5 communities, 50/community, 100 total recipients, 8 items | zero-AI product engagement job; indexed schedule rows & outbox dedupe |
+| Repair lost memory reviews | 24 hours | bounded schedule repair | reliability safety net for `agentWork` |
+| Backfill community member search index | 15 minutes | paginated batch | backfill; no-op once all communities indexed |
+| Backfill course progress projections | 15 minutes | paginated batch | backfill; no-op once all courses indexed |
+| Refresh community member view counts | 15 minutes | paginated batch | read-cache refresh for large communities |
+| Refresh community analytics rollups | 15 minutes | paginated batch | daily rollup & billing summary refresh |
+| Refresh discover activity stats | 15 minutes | paginated batch | Discover activity cache refresh |
 
 The existence of a batch limit does not prove cost safety. Each job still needs
 an indexed due-work query, bounded downstream fanout, idempotency where it
 writes, and evidence that empty runs are cheap.
-
-Weekly community digests are a protected MVP engagement requirement, but their
-previous broad-scan scheduler remains retired. Restoration is gated on one
-indexed schedule row per community, lifecycle fencing, finite leases and
-retries, paginated recipient continuation, outbox deduplication, and these hard
-per-run ceilings:
-
-- at most 5 communities claimed;
-- at most 50 recipients from one community batch;
-- at most 100 recipients across the entire run;
-- at most 8 rendered content items.
 
 The schedule foundation, historical member-email renderer, and bounded worker
 are present. Lifecycle enrollment is wired atomically to the canonical

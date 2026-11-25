@@ -11,7 +11,6 @@ import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
 import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
-import { WebSettingsSidebar } from "./WebSettingsSidebar";
 import { KitConfirm } from "../v1/KitConfirm";
 import { WebGlobalNavV1 } from "./WebGlobalNavV1";
 import type {
@@ -147,9 +146,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       {mobileGlobalShellContent}
     </WebMobileGlobalShell>
   ) : props.mainSurface;
-  const desktopSettingsSidebar = (
-    <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
-  );
   // Design system v1: inside a community there is one left column and no rail.
   // Switching community lives in that column's banner (WebCommunitySwitcher).
   // Discover and your own settings get the same frame, with their own left
@@ -222,7 +218,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           <div
             className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}
           >
-            {desktopFrameMode === "settings" ? desktopSettingsSidebar : null}
             {desktopCommunityNav}
             {mainSurface}
           </div>
@@ -242,10 +237,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
             {mainSurface}
           </div>
         ) : (
-          <>
-            {desktopSettingsSidebar}
-            {mainSurface}
-          </>
+          mainSurface
         )}
       </div>
 

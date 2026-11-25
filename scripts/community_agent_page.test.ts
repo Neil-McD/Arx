@@ -43,9 +43,8 @@ test("DM overlays preserve the desktop Agent page while retaining mobile and voi
 test("floating controls and their exclusive styles stay retired", () => {
   const read = (path: string) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
   const component = read("apps/web/src/components/WebCommunityAgentDock.tsx");
-  expect(component).not.toMatch(/setIsOpen|community-agent-dock-launcher/);
+  expect(component).not.toMatch(/setIsOpen|community-agent-dock-launcher|startResourceBuild/);
   expect(component).toContain("Boolean(props.mobileShellActive && props.mobileRoot)");
-  expect(component).toContain("props.onRequestOpen?.()");
   expect(component).toContain("Start fresh conversation");
   const styles = read("apps/web/src/components/WebCommunityAgentDock.css");
   expect(styles).not.toMatch(/launcher|working-pulse/);

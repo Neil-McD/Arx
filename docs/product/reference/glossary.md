@@ -3,20 +3,20 @@ id: product.reference.glossary
 title: Glossary
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-10-28
+last_verified: 2026-11-25
 ---
 
 # Glossary
 
-## Accepted Community Memory
+## Community Memory
 
-Community-owned intelligence admitted through the evidence, compiler, and
-community-cognition boundary, always with a source citation.
+Community-owned living notes saved with source citations alongside the
+founder's handbook, separate from raw chat and private conversations.
 
-## Agent Page
+## Home Page (formerly Agent Page)
 
-The community's page (Agent tab on mobile) where a member has a private
-conversation with the community agent.
+The community's Home page (`/c/<slug>/home`, Home tab on mobile) where a member
+has a private conversation with the community agent and sees community updates.
 
 ## Builder
 

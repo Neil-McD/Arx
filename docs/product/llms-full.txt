@@ -102,11 +102,10 @@ The active surface includes:
 - gated access through each community's join page (`/c/<slug>`)
 - community chat, resources, events, members, settings, and voice input
 - billing and builder payouts
-- the community agent on the Agent page and through @mentions
-- accepted community memory
-- the official OAuth-protected Polynet MCP for builders
-- the canonical `polynet_list`, `polynet_read`, `polynet_search`,
-  `polynet_write`, and `polynet_call` operations
+- the community agent on the Home page and through @mentions
+- living community memory notes and founder handbook
+- the official OAuth-protected Polynet MCP for everyone, scoped to each person's role
+- three read tools (`polynet_list`, `polynet_read`, `polynet_search`) plus role-scoped named action tools
 
 Community sites on `polynet.page` are built and running on Polynet's staging
 environment; production sites are not live yet.
@@ -446,11 +445,11 @@ Summary: Accepted community-owned intelligence and its evidence boundary.
 
 ## Definition
 
-Community memory is accepted, community-owned intelligence derived from
-authorized community evidence.
+Community memory is living, community-owned knowledge kept as cited notes by
+the community agent, alongside the founder's handbook and curated resources.
 
-It is distinct from raw chat, private member-agent conversations, resources,
-and temporary retrieval results.
+It is distinct from raw chat, private member conversations, and temporary
+retrieval results.
 
 ## Why It Exists
 
@@ -459,16 +458,14 @@ message as truth or forcing members to repeat established knowledge.
 
 ## System Mental Model
 
-Community activity produces evidence. The compiler can create bounded
-candidates. Community cognition evaluates candidates. Only accepted
-intelligence enters the community memory directory.
+Community activity produces shared public discussions and lessons. The
+community agent curates living memory notes with citations to their source
+evidence, and owners can inspect, add, or remove notes at any time.
 
 ```text
-activity
-  -> evidence
-  -> candidate knowledge
-  -> community cognition
-  -> accepted community memory
+shared community activity
+  -> cited source evidence
+  -> community memory notes
 ```
 
 Memory remains a permission-filtered projection over canonical cloud records.
@@ -646,28 +643,24 @@ Summary: The official gateway for anyone's external AI harness into the Polynet 
 ## Definition
 
 Polynet MCP is the official OAuth-protected provider that lets anyone's
-external AI harness (Claude Code, Codex, or another compatible client) work in
-the communities they belong to, in the lens their role there allows:
+external AI harness (Claude, ChatGPT, Claude Code, Codex, Cursor, or another
+compatible client) work in the communities they belong to, in the lens their
+role there allows:
 
 - **Members** read what they can see in the community and write their own
   things: posts and replies, edits to their own posts, reactions, lesson
   progress.
-- **Moderators** also review join requests (`builder/join-requests/`) and
-  remove anyone's post (`community.interaction.remove`).
-- **Owners and admins** also get the builder lens: the community itself
-  (`builder/community.json`: name, address, one-liner, about, visibility, how
-  people join, the agent's instructions, the handbook), staging course
-  changes, workflow decisions and site deploys. Name, address and visibility
-  are the owner's alone. They also tag people and change roles, remove, ban
-  and unban on a selection; removing or banning a paying member is left to
-  Studio, because it cancels their subscription. Moderators read the tags;
-  members never see them.
+- **Moderators** also review join requests and remove posts.
+- **Owners and admins** also get the builder lens: managing community settings,
+  courses, events, handbook/knowledge, and member roles or removals (removing or
+  banning a paying member stays in Studio because it cancels their
+  subscription). Name, address, and visibility are the owner's alone.
 
 Actions that decide about people or posts take a selection: up to 50 items,
 each decided on its own with its own receipt.
 
-Writes through your own AI and your community's site share a budget of 60 a
-minute; past it, a call is refused with `rate_limited` and says when to retry.
+Writes through your own AI share a rate budget of 60 a minute; past it, a call
+is refused with `rate_limited` and says when to retry.
 
 ## Mental Model
 
@@ -681,28 +674,27 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 
 - The canonical endpoint is `/runtime/mcp`.
 - The external harness authenticates the Polynet user through OAuth.
-- The provider exposes exactly `polynet_list`, `polynet_read`,
-  `polynet_search`, `polynet_write`, and `polynet_call`.
+- Reading uses three general tools (`polynet_list`, `polynet_read`,
+  `polynet_search`), and each allowed action is exposed as its own named tool
+  scoped to the caller's role.
 - The harness begins at `/` and selects communities through canonical
   repository paths.
 - Every request revalidates membership, entitlement, role, and capability.
 - Tool arguments are selectors, never authority.
 - The community context used by a call is auditable.
-- Calls into a community where the caller lacks builder authority are refused.
-- Builders can also deploy their community site through the MCP.
+- Calls into a community where the caller lacks membership or required role
+  authority fail closed.
 
 ## Rules
 
 1. Keep the official provider separate from third-party MCP consumption.
-2. Fail closed when builder authority, community access, or entitlement is
+2. Fail closed when community access, role authority, or entitlement is
    missing.
 3. Revalidate access on every request.
 4. Do not expose local filesystem or shell authority through the web provider.
 5. Do not add third-party MCP credentials, mounts, or passthrough tools.
-6. Preserve the stable external `workspace` wire vocabulary only where the v0
-   compatibility contract requires it.
-7. Capability overlays such as web research do not expand or fork the five-tool
-   Polynet contract.
+6. Every named action tool routes through the same canonical executor,
+   authorization, rate limits, and idempotent receipts.
 
 ## Related Concepts
 
@@ -948,7 +940,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent job, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Creating and running a community is free. Its agent (Polynet-hosted AI) needs the community's own Agent plan: $79 a month, with $20 of AI included. Without it the community runs as usual and only the agent is off. The canonical platform operator receives included funding. There is no account-wide plan, community BYOK option, personal Premium plan, or paid tool tier.
+Creating and running a community is free (up to 10 unfunded live communities per owner, unlimited members). When you want Polynet-hosted AI for a community, choose **Guide** ($20/month with $3/month AI included for reactive 1:1 chats, `@mentions`, active-thread follow-ups, and living memory) or **Chief of Staff** ($100/month with $20/month AI included plus Daily Briefs, proactive Member & Builder Check-Ins, unanswered-question auto-replies, and optional usage boosts). Without a paid AI plan, the community runs as usual and only hosted AI is off. There is no account-wide plan, community BYOK option, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -964,8 +956,8 @@ If those answers are vague, more settings will not fix the product.
 ## Core Steps
 
 1. Finish account setup, then choose Create Community and name your community, its purpose and public profile. No payment is needed.
-2. Turn on the agent with the Agent plan ($79 a month) when you want Polynet-hosted AI: from the agent, Billing or Account, at any time.
-3. Keep shaping the community; the agent plan can be added before or after.
+2. Turn on hosted AI with **Guide** ($20/month) or **Chief of Staff** ($100/month) from the community's Guide settings whenever you're ready.
+3. Keep shaping the community; an AI plan can be added or upgraded at any time.
 4. Write the community agent's instructions.
 5. Add resources that represent durable community knowledge.
 6. Configure member access, billing, and roles.
@@ -1014,12 +1006,10 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Every community operates free; hosted AI requires an Agent plan per community.
-- Each community that uses Polynet-hosted AI needs its own verified $79 monthly Agent plan.
-- An owner may have one live free community (archived ones don't count); every further one needs its own Agent plan, and one created with its plan is never capped. Communities an owner already had before this rule stay.
-- Create Community goes straight to setup. A plan bought first is attached to the community created next, exactly once.
-- Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
-- A community without an Agent plan can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its agent is off.
+- Every community operates free; hosted AI requires a per-community Guide ($20/month) or Chief of Staff ($100/month) plan.
+- An owner may have up to 10 live free communities (archived ones don't count); funded communities are never capped.
+- Create Community goes straight to setup, and each community manages its AI plan directly from Settings → Guide.
+- A community without a paid AI plan can be configured, published, listed in Discover, accept public joins, send zero-AI weekly digests, and collect paid-member revenue. Only hosted AI is off.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.
@@ -1458,20 +1448,12 @@ and removes posts; an owner or admin also gets the builder lens.
 7. Call `polynet_list` at `/`, follow the returned `communities/` path, and
    explicitly open a community you belong to.
 
-## Canonical Tools
+## Tool Surface
 
-The official provider exposes exactly:
-
-```text
-polynet_list
-polynet_read
-polynet_search
-polynet_write
-polynet_call
-```
-
-Optional premium tools belong to the external harness or a separate Polynet
-overlay. They do not change the base Polynet MCP contract.
+The official provider exposes three general read tools (`polynet_list`,
+`polynet_read`, `polynet_search`) plus named action tools scoped to the
+authenticated person's role. Every tool routes through the same canonical
+authorization, rate limits, and idempotent receipts.
 
 ## Authority Boundary
 
@@ -2243,56 +2225,52 @@ Summary: The authority model for paid access, checkout, and subscriptions.
 
 Polynet has two live money rails:
 
-1. Communities are free. A builder pays $79 USD monthly for the Agent plan on each community that uses Polynet-hosted AI.
-2. Polynet keeps a 2.9% application fee from paid-member community revenue.
+1. Communities are free to create and run. Polynet-hosted AI is funded per community through two monthly tiers:
+   - **Guide ($20/month per community):** reactive 1:1 chats, `@mentions`, active-thread follow-ups, and living memory, with a **$3/month** included AI allowance.
+   - **Chief of Staff ($100/month per community):** everything in Guide plus proactive Daily Briefs, Member & Builder Check-Ins, unanswered-question auto-replies, and optional prepaid usage boosts (**$30 → +$20 AI** within a founder-set monthly safety cap, off by default), with a **$20/month** included AI allowance. Legacy `$79/month` subscriptions are grandfathered as Chief of Staff.
+2. Polynet keeps a 2.9% application fee from paid-member community revenue across all tiers.
 
-The Agent plan is not an account-wide tier. One subscription belongs to one community. Visibility, membership, roles, paid-member commerce, Agent plan payment, AI allowance, and lifecycle remain separate canonical facts. (The code and older records call the Agent plan "Builder"; it is the same subscription.)
+Founder AI plans are per-community, not account-wide. One subscription belongs to one community. Visibility, membership, roles, paid-member commerce, AI funding, AI allowance, and lifecycle remain separate canonical facts.
 
 ## Lifecycle And Community Operation
 
 Community operation is resolved in this order:
 
 1. Lifecycle: a community operates unless it is archived, regardless of payment, membership, or operator status.
-2. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Agent plan). Community operation never does.
+2. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Guide or Chief of Staff subscription). Community operation never does.
 3. Membership and role: only after the community is operational do membership and role determine what a user may do.
 
-Every community operates free; there is no per-community plan requirement (the old `free`/`grandfathered`/`subscription_required` modes were retired Nov 7). Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities created free; a community created with its own Agent plan is never capped, the operator is exempt, and archived ones don't count.
+Every community operates free; there is no per-community plan requirement. Hosted AI requires a funded Guide or Chief of Staff plan attached to that community. An owner may have at most **10 live unfunded (free) communities**; communities with their own paid AI plan are never capped, the operator is exempt, and archived communities do not count.
 
-When an Agent plan lapses or its cycle's AI allowance is spent, hosted AI pauses; nothing else changes. A past-due plan keeps the community operating while Stripe retries within the period, but hosted AI pauses until payment succeeds. Funding never mutates or deletes the community, memberships, visibility, content, or history.
+When a plan lapses or its cycle's AI allowance is spent, hosted AI pauses; nothing else changes. A past-due plan keeps the community operating while Stripe retries within the period, but hosted AI pauses until payment succeeds. Funding never mutates or deletes the community, memberships, visibility, content, or history.
 
-## Creating A Community, And Adding The Agent Plan
+## Creating A Community, And Adding An AI Plan
 
-Creating a community needs no payment: Create Community goes straight to setup. The Agent plan can be bought for an existing community from the agent, Billing, or Account (`startFounderSubscriptionCheckout`), or bought first, as before:
+Creating a community needs no payment: Create Community goes straight to setup. A signed-in owner can add **Guide** ($20/month) or **Chief of Staff** ($100/month) for an existing community from the community's Guide settings (`startFounderSubscriptionCheckout`), and can switch tiers in place at any time.
 
-1. The public landing page starts anonymous Stripe checkout before authentication or community creation.
-2. The verified Stripe webhook creates durable paid receipt evidence. Redirect success is progress UI only.
-3. The buyer authenticates and claims the receipt through the browser secret or verified checkout-email recovery.
-4. The user completes display name, handle, avatar, current Terms, and current Privacy acceptance. Provider credentials are not account setup.
-5. Community creation atomically consumes one owned active unassigned subscription, creates the unlisted free community, attaches the subscription as its Agent plan, and opens its usage cycle.
-
-An unassigned subscription grants setup, not access to any existing community. The same subscription cannot be attached twice. Replays are idempotent and cross-user attachment fails closed.
+The verified Stripe webhook creates durable paid subscription truth. Redirect success is progress UI only. The same subscription cannot be attached twice; replays are idempotent and cross-user attachment fails closed.
 
 ## Archive And Restoration
 
 Archive is a lifecycle action, not a billing status. It immediately freezes ordinary runtime access and starts durable asynchronous billing cleanup. Cleanup completion is required before any restoration but grants no access by itself.
 
-- An owner may restore an archived community without payment after cleanup. Hosted AI remains off unless an Agent plan is separately current. A plan can't be bought for an archived community.
+- An owner may restore an archived community without payment after cleanup. Hosted AI remains off unless a funded plan is separately current. A plan can't be bought for an archived community.
 - The canonical operator may restore an operator-owned community after cleanup without simulated Stripe state.
 - Every restoration increments `lifecycleGeneration`. Checkout and webhook evidence from an earlier generation cannot restore or mutate the newer generation.
 
 ## Hosted AI
 
-Each `$79` monthly cycle includes up to `$20` in combined raw provider cost for hosted AI inference and paid web research or crawl tools in that community. Before a paid provider call begins, Polynet reserves a bounded worst-case amount and settles the actual or bounded evidenced cost afterward. Missing pricing, ambiguous cycle state, inactive payment, or exhausted allowance fails closed.
+Each monthly cycle includes up to **$3** (Guide) or **$20** (Chief of Staff) in combined raw provider cost for hosted AI inference and paid web research tools in that community. Chief of Staff owners can optionally enable prepaid **$30 → +$20 AI** usage boosts within a monthly safety cap. Before a paid provider call begins, Polynet reserves a bounded worst-case amount and settles the actual or bounded evidenced cost afterward. Missing pricing, ambiguous cycle state, inactive payment, or exhausted allowance fails closed.
 
-The same funding kernel covers the community agent under a server-validated community lens, direct community-agent mentions, autonomous community cognition, and AI-assisted setup. Members never provide community inference credentials. Community BYOK and requester ChatGPT are retired as authority; historical rows remain audit or migration evidence only.
+The same funding kernel covers private community-agent conversations, direct `@mention` replies, active-thread follow-ups, and (on Chief of Staff) proactive briefs and check-ins. Members never provide community inference credentials. Community BYOK and requester ChatGPT are retired as authority; historical rows remain audit or migration evidence only.
 
 The canonical operator grant derives only from one active `operatorRoles.owner` row. It creates no fake Stripe state and bypasses neither authorization, rate limits, usage receipts, nor provider-cost accounting.
 
-The operator grant waives payment, not cost bounds. Each operator-funded community has a UTC calendar-month ledger (`operatorGrantUsageCycles`) with the same `$20` raw-cost ceiling as Builder. Inference and paid tools reserve against it before provider start and settle actual cost afterwards; unknown provider usage consumes the full reservation. The same per-run headroom guard applies as for Builder, so a run cannot exceed its reservation. An exhausted month fails closed with `founder_usage_exhausted` until the next UTC month. Receipts created before this ledger existed carry no cycle and settle without one. `operatorGrantUsageCycles` deliberately parallels `founderUsageCycles` rather than sharing it: merging them would mean migrating live Builder billing rows, which is deferred until there is a concrete reason.
+The operator grant waives payment, not cost bounds. Each operator-funded community has a UTC calendar-month ledger (`operatorGrantUsageCycles`) with a `$20` raw-cost ceiling. Inference and paid tools reserve against it before provider start and settle actual cost afterwards; unknown provider usage consumes the full reservation. An exhausted month fails closed with `founder_usage_exhausted` until the next UTC month.
 
 ### Polynet home member allowance
 
-In the platform-home community (`polynet`), each member other than the owner gets 25 agent turns per UTC calendar month. Agent-page turns and direct community-agent mentions count; failed receipts, workflow actions, autonomous cognition, and retries of an existing receipt do not. The 26th turn fails closed with `platform_home_member_agent_limit_reached`. The Agent page, and the chat notice after a direct community-agent mention, show the reset date and offer the Builder plan: "Build your own community — $79/mo". The allowance and its upsell apply only to Polynet home; members of builder communities never see a Polynet upsell.
+In the platform-home community (`polynet`), each member other than the owner gets 25 agent turns per UTC calendar month. Private agent turns and direct community-agent mentions count; failed receipts, autonomous cognition, and retries of an existing receipt do not. The 26th turn fails closed with `platform_home_member_agent_limit_reached`. The Home page and chat notice show the reset date and invite the member to start their own community (free to build, Guide from $20/mo). The allowance and its prompt apply only to Polynet home; members of builder communities never see a Polynet upsell.
 
 ## Paid-Member Community Revenue
 
@@ -2301,7 +2279,7 @@ Paid-member pricing and payouts are independent from AI funding, but checkout re
 1. The owner completes Stripe Connect payout onboarding, on an account that can take card payments directly. Checkout charges on the owner's account, so a payouts-only account (Stripe's cross-border `recipient` service agreement, e.g. Kuwait) doesn't qualify even when Stripe reports it ready (`canReceiveCommunityRevenue`).
 2. The builder configures `paid_subscription` entry and an active price point.
 3. A member enters through the community's join page and completes `community_join` checkout on the builder's connected account.
-4. Provider/webhook verification creates the purchase claim, subscription lifecycle, membership, and access truth.
+4. Provider/webhook verification creates the subscription lifecycle, membership, and access truth.
 5. The connected account owns the customer, subscription, charge, processor fee, and payout. Polynet keeps its 2.9% application fee.
 
 While the owner's account can't take card payments, the community can't set a price, its join page offers no plan and says checkout is unavailable, checkout refuses with `community_checkout_unavailable`, and Studio tells the owner that members can't pay to join yet (free joining still works). Stripe refusing what the owner's account can sell (a currency or capability it lacks) is the same refusal, never a server error.
@@ -2310,16 +2288,16 @@ Stripe processing fees are separate from Polynet's 2.9% application fee. A commu
 
 ## Legal Acceptance
 
-Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain immutable historical evidence but do not satisfy current acceptance because v3 materially changes the Builder and restoration boundary. New and returning users must accept the current Terms through the canonical account/setup bridge before protected platform use.
+New and returning users must accept the current Terms of Service and Privacy & AI Data Policy before protected platform use. Prior acceptances remain immutable historical evidence.
 
 ## Rules
 
 1. Redirects are UX only; verified provider/webhook state is authoritative.
 2. Archive always wins over commercial and access state.
 3. Communities operate free unless archived.
-4. One `$79` Agent plan attaches to one community.
+4. One Guide ($20/mo) or Chief of Staff ($100/mo) subscription attaches to one community.
 5. Operating free grants platform operation, not hosted AI.
-6. Agent plan funding never widens member permissions.
+6. AI plan funding never widens member permissions.
 7. Restoration is cleanup-gated, generation-fenced, and idempotent.
 8. Paid-member revenue always uses the 2.9% application fee.
 9. Community BYOK and requester ChatGPT authorize no community AI execution.
@@ -2331,9 +2309,8 @@ Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain 
 - checking payment before lifecycle
 - making community operation depend on AI funding
 - allowing payment or operator status to bypass archive
-- treating an unassigned subscription as community access
 - storing a second `suspended` flag instead of resolving current truth
-- mutating membership or visibility when Agent plan funding lapses
+- mutating membership or visibility when AI funding lapses
 - restoring an archived community before billing cleanup completes
 - allowing a stale checkout generation to restore a community
 - letting frontend state reconstruct backend authority
@@ -2343,7 +2320,6 @@ Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain 
 
 - `community`
 - `community-lifecycle`
-- `builder-access-mode`
 - `entitlement`
 - `membership`
 - `join-page`
@@ -2398,15 +2374,15 @@ Summary: Stable terms for product, builder, member, and agent docs.
 
 # Glossary
 
-## Accepted Community Memory
+## Community Memory
 
-Community-owned intelligence admitted through the evidence, compiler, and
-community-cognition boundary, always with a source citation.
+Community-owned living notes saved with source citations alongside the
+founder's handbook, separate from raw chat and private conversations.
 
-## Agent Page
+## Home Page (formerly Agent Page)
 
-The community's page (Agent tab on mobile) where a member has a private
-conversation with the community agent.
+The community's Home page (`/c/<slug>/home`, Home tab on mobile) where a member
+has a private conversation with the community agent and sees community updates.
 
 ## Builder
 

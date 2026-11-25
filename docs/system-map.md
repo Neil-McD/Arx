@@ -538,11 +538,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [platform-cost-safety-contract-v1.md](platform-cost-safety-contract-v1.md),
   [product/reference/billing-entitlements.md](product/reference/billing-entitlements.md),
   [legal/](legal/).
-- **Direction:** community free, agent paid (about $49 a month with an included
-  budget), pending its spec. Today's code still sells the $79 founder plan.
-  Three kinds of builder (community only, building a product on Polynet,
-  already has a product) and the money rule (2.9% on Polynet's checkout only):
-  [specs/builder-modalities-v0.md](specs/builder-modalities-v0.md).
+- **Pricing (live Nov 2026):** Three tiers per community — **Free** ($0/month,
+  up to 10 unfunded live communities per owner, unlimited members, no hosted AI),
+  **Guide** ($20/month, $3/month AI allowance for reactive 1:1 chats, `@mentions`,
+  active-thread follow-ups, and living memory), and **Chief of Staff**
+  ($100/month, $20/month AI allowance plus Daily Briefs, Member & Builder
+  Check-Ins, unanswered-question auto-replies, and optional `$30 → +$20 AI`
+  prepaid usage boosts; legacy `$79` subscriptions grandfathered as Chief of
+  Staff). See [specs/agent-pricing-and-overage-v1.md](specs/agent-pricing-and-overage-v1.md).
+  Paid-member revenue carries a 2.9% platform fee across all tiers.
 - **Deleted Oct 28 (POL-24):** the `workspaceCredits` module. Voice transcription
   records its platform-absorbed provider cost through
   `voiceProviderCostAccounting.recordVoiceProviderCostInternal` into the shared
@@ -560,7 +564,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (Resend webhook),
   `communityWeeklyDigest*`, `communityMentionEmails`, `communityMentionEmailDelivery`.
 - **Crons:** "process pending email outbox" (5 min, batch limit `25`), "process
-  pending mention emails" (15 min). The weekly digest has no cron (see below).
+  pending mention emails" (15 min), and "process due weekly community digests"
+  (30 min, zero-AI digest).
 - **Delivery and scaling contract:** `emailOutbox` assigns `priorityRank` (`0`
   urgent/transactional, `1` mention notifications, `2` bulk event reminders and
   weekly digests) and claims due jobs in strict priority order via
@@ -575,9 +580,6 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   self-continues up to `4` rounds when a 25-recipient batch fills.
 - **Tables:** `emailOutbox`, `emailDeliveries`, `emailPreferences`,
   `communityWeeklyDigestSchedules`.
-- **Dormant by design:** the weekly digest worker
-  (`processDueCommunityWeeklyDigestsInternal`) has no cron; schedules are kept
-  but nothing sends until a cron is added.
 
 ### 14. Operator and diagnostics — Keep (internal)
 
@@ -639,10 +641,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 18. Release, CI and the factory — Keep
 
-- **Code:** `scripts/release_gate.mjs` (the release gate: guards, contract
-  proofs, every unit test, and `scripts/run_all_checks.mjs` for every remaining
-  `check:*` script), `scripts/` (proofs), `.github/workflows/` (`mvp-guards.yml`,
-  `secret-scan.yml`, `cla.yml`), `docs/receipts/`.
+- **Code:** `scripts/release_gate.mjs`, `scripts/run_invariants.mjs` (curated
+  security/money/integrity invariants), `scripts/deploy_production_ci.mjs`
+  (automatic Main = Production Convex-then-Vercel deploy), `.github/workflows/`
+  (`mvp-guards.yml`, `deploy-production.yml`, `secret-scan.yml`, `cla.yml`).
+  Manual markdown release receipts in `docs/receipts/` are retired.
 - **Contracts:** [alpha-release-workflow.md](alpha-release-workflow.md); factory
   rules in [AGENTS.md](../AGENTS.md) §9.
 
@@ -654,8 +657,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 | Recover distribution attribution deliveries | 5 min | `distributionAttribution` |
 | Recover archived community billing cleanup | 5 min | `communityColdArchive` |
 | Enqueue 24-hour event reminder emails | 15 min | `eventReminders` |
+| Stop billing for unreachable pods | 60 min | `communityPodPayments` |
 | Process pending mention emails | 15 min | `communityMentionEmails` |
 | Send due founder briefs | 15 min | `communityFounderBrief` |
+| Process due member coach scans | 60 min | `communityMemberCoach` |
+| Process due weekly community digests | 30 min | `communityWeeklyDigestWorker` |
+| Repair lost memory reviews | 24 hr | `agentWork` |
+| Backfill community member search index | 15 min | `communityMemberSearch` |
+| Backfill course progress projections | 15 min | `communityLessonProgress` |
+| Refresh community member view counts | 15 min | `communityMemberRecords` |
+| Refresh community analytics rollups | 15 min | `communityAnalyticsRollups` |
 | Refresh discover activity stats | 15 min | `communityAnalyticsRollups` |
 
 ## Cleanup plan this map drives
