@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { founderPlanTierHasProactiveAgent } from "../shared/founderPlan";
 import {
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
@@ -205,6 +206,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     ),
     expectedFounderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     surface: communityInferenceSurfaceValidator,
+    requireProactiveTier: v.optional(v.boolean()),
     claimToken: v.string(),
     nowMs: v.number(),
   },
@@ -238,6 +240,13 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     });
     if (!authorityMatches) {
       return { ok: false, errorCode: admission.ok === false ? admission.code : "funding_authority_changed" };
+    }
+    if (
+      (args.requireProactiveTier || args.surface === "community_founder_brief") &&
+      admission.ok &&
+      !founderPlanTierHasProactiveAgent(admission.planTier)
+    ) {
+      return { ok: false, errorCode: "founder_proactive_tier_required" };
     }
 
     const existing = await getUniqueFounderInferenceReceiptByKey(ctx, receiptKey);

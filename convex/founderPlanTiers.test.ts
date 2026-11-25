@@ -17,7 +17,7 @@ import {
   communityHasProactiveAgentTier,
   resolveCommunityInferenceFundingAdmission,
 } from "./founderInferenceCore";
-import { reserveFounderUsage } from "./founderPlanCore";
+import { reserveFounderUsage, settleFounderUsageReservation } from "./founderPlanCore";
 import { resolveFounderPlanTierFromPriceId } from "./founderPlanPricing";
 
 const modules = import.meta.glob([
@@ -325,6 +325,101 @@ describe("3-Tier Pricing ($0 Free / $20 Guide / $100 Chief of Staff) — Step 1"
         await communityHasProactiveAgentTier(ctx, fx.communityId, NOW + 21_000),
       );
       expect(hasProactiveAfterDowngrade).toBe(false);
+
+      // 6. Mid-flight downgrade revalidation at spend & delivery (P1):
+      //    claiming a proactive inference receipt on Guide returns founder_proactive_tier_required,
+      //    and member-coach / builder-heartbeat outcome delivery mutations fail closed too.
+      const blockedProactiveSpend: any = await t.mutation(
+        internal.founderInference.claimCommunityInferenceReceiptInternal,
+        {
+          receiptKey: "proactive_midflight_1",
+          sourceRunId: "run_proactive_midflight_1",
+          communityId: fx.communityId,
+          actorUserId: fx.ownerId,
+          expectedPayerUserId: fx.ownerId,
+          expectedFundingMode: "platform_subscription",
+          expectedFounderSubscriptionId: fx.subId,
+          surface: "community_autonomous_cognition",
+          requireProactiveTier: true,
+          claimToken: "claim_tok_1",
+          nowMs: NOW + 22_000,
+        },
+      );
+      expect(blockedProactiveSpend).toMatchObject({
+        ok: false,
+        errorCode: "founder_proactive_tier_required",
+      });
+
+      const blockedBuilderDeliver: any = await t.mutation(
+        internal.communityBuilderHeartbeat.recordBuilderHeartbeatOutcomeInternal,
+        {
+          communityId: fx.communityId,
+          builderUserId: fx.ownerId,
+          dedupeKey: "builder_midflight_1",
+          decision: "send",
+          text: "Checking in on your goal!",
+          nowMs: NOW + 22_000,
+        },
+      );
+      expect(blockedBuilderDeliver).toEqual({ ok: false, code: "community_unavailable" });
+
+      // 7. Temporary downgrade headroom shrinks back to $3.00 when in-flight reservation settles (P2):
+      //    Set $2.80 settled + $1.00 reserved on Chief of Staff -> downgrade to Guide clamps included to $3.80 ->
+      //    settling for $0.05 reclaims temporary headroom back down to $3.00!
+      await t.mutation(internal.founderBilling.syncFounderSubscriptionFromStripeInternal, {
+        providerSubscriptionId: "sub_tier_1",
+        providerCustomerId: "cus_tier_1",
+        providerPriceId: "price_cos_100",
+        subscriptionStatus: "active",
+        currentPeriodStartAt: NOW - 5 * DAY_MS,
+        currentPeriodEndAt: NOW + 25 * DAY_MS,
+        cancelAtPeriodEnd: false,
+        providerEventCreatedAt: NOW + 30_000,
+      });
+      await t.run(async (ctx: any) => {
+        await ctx.db.patch(guideSync.usageCycleId, {
+          settledCostMicros: 2_800_000,
+          reservedCostMicros: 1_000_000,
+        });
+      });
+      await t.mutation(internal.founderBilling.syncFounderSubscriptionFromStripeInternal, {
+        providerSubscriptionId: "sub_tier_1",
+        providerCustomerId: "cus_tier_1",
+        providerPriceId: "price_guide_20",
+        subscriptionStatus: "active",
+        currentPeriodStartAt: NOW - 5 * DAY_MS,
+        currentPeriodEndAt: NOW + 25 * DAY_MS,
+        cancelAtPeriodEnd: false,
+        providerEventCreatedAt: NOW + 31_000,
+      });
+      const clampedWhileReserved = await t.run(async (ctx: any) => ctx.db.get(guideSync.usageCycleId));
+      expect(clampedWhileReserved?.includedCostMicros).toBe(3_800_000);
+
+      await t.run(async (ctx: any) =>
+        await settleFounderUsageReservation({
+          ctx,
+          usageCycleId: guideSync.usageCycleId,
+          reservedCostMicros: 1_000_000,
+          settledCostMicros: 50_000,
+          nowMs: NOW + 32_000,
+        }),
+      );
+      const reclaimedAfterSettle = await t.run(async (ctx: any) => ctx.db.get(guideSync.usageCycleId));
+      expect(reclaimedAfterSettle).toMatchObject({
+        settledCostMicros: 2_850_000,
+        reservedCostMicros: 0,
+        includedCostMicros: 3_000_000,
+      });
+
+      // 8. Inactive / past-due Guide subscription is ALSO rejected by claimFounderBriefInternal (P2):
+      await t.run(async (ctx: any) => {
+        await ctx.db.patch(fx.subId, { status: "past_due" });
+      });
+      const briefWhilePastDue = await t.mutation(
+        internal.communityFounderBrief.claimFounderBriefInternal,
+        { communityId: fx.communityId, briefDate: "2026-11-25", nowMs: NOW + 40_000 },
+      );
+      expect(briefWhilePastDue).toBeNull();
     } finally {
       if (prevEnv.input === undefined) delete process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
       else process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = prevEnv.input;

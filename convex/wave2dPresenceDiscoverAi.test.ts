@@ -575,6 +575,22 @@ describe("Wave 2D: parallelized AI workers and bounded parallel founder briefs",
           createdAt: nowMs - 10 * DAY_MS,
           updatedAt: nowMs,
         } as any);
+        await ctx.db.insert("founderSubscriptions", {
+          ownerUserId: ownerId,
+          communityId,
+          provider: "stripe",
+          providerCustomerId: `cus_w2d_fb_${i}`,
+          providerSubscriptionId: `sub_w2d_fb_${i}`,
+          providerPriceId: "price_cos_100",
+          planTier: "chief_of_staff",
+          status: "active",
+          currentPeriodStartAt: nowMs - 5 * DAY_MS,
+          currentPeriodEndAt: nowMs + 25 * DAY_MS,
+          cancelAtPeriodEnd: false,
+          lastProviderEventCreatedAt: nowMs - 5 * DAY_MS,
+          createdAt: nowMs - 5 * DAY_MS,
+          updatedAt: nowMs - 5 * DAY_MS,
+        } as any);
         await ctx.db.insert("communityChannels", {
           communityId,
           systemRole: "general",

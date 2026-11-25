@@ -343,7 +343,13 @@ export const saveReplyDraftInternal = internalMutation({
       if (!run || run.kind !== "reply_draft") return { ok: false as const, code: "run_closed" };
     }
     const community: any = await ctx.db.get(args.communityId);
-    if (!community || !communityIsActive(community)) return { ok: false as const, code: "community_unavailable" };
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))
+    ) {
+      return { ok: false as const, code: "community_unavailable" };
+    }
     const rootId = ctx.db.normalizeId("communityInteractionRoots", args.rootId);
     const root: any = rootId ? await ctx.db.get(rootId) : null;
     if (!root || String(root.communityId) !== String(args.communityId)) return { ok: false as const, code: "question_gone" };

@@ -9,6 +9,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { communityAgentIsOn } from "./communityApps";
 import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
+import { founderPlanTierHasProactiveAgent } from "../shared/founderPlan";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import {
   communityMembershipRowIsActive,
@@ -450,7 +451,12 @@ export const recordBuilderHeartbeatOutcomeInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const community: any = await ctx.db.get(args.communityId);
-    if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, args.communityId))) {
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, args.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))
+    ) {
       return { ok: false as const, code: "community_unavailable" };
     }
     const builder = await resolveActiveBuilder(ctx, community, args.builderUserId);
@@ -701,7 +707,7 @@ async function runBuilderHeartbeatForCommunity(
     if (!candidate) return "no_candidate";
 
     const funding = await resolveCommunityInferenceFundingForAction(ctx, claim.communityId);
-    if (!funding.ok) return "unfunded";
+    if (!funding.ok || !founderPlanTierHasProactiveAgent(funding.planTier)) return "unfunded";
 
     let run;
     try {
@@ -713,6 +719,7 @@ async function runBuilderHeartbeatForCommunity(
         receiptKey: `builder_heartbeat:${String(claim.communityId)}:${String(candidate.builderUserId)}:${candidate.dedupeKey}:${nowMs}`,
         sourceRunId: `builder-heartbeat:${String(claim.communityId)}:${nowMs}`,
         admission: funding,
+        requireProactiveTier: true,
       });
     } catch {
       return "budget_blocked";

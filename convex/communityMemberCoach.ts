@@ -47,6 +47,7 @@ import { utcMonthWindow } from "../shared/founderInference";
 import {
   POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
   founderPlanTierAllowsUsageBoosts,
+  founderPlanTierHasProactiveAgent,
   normalizeFounderPlanTier,
 } from "../shared/founderPlan";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
@@ -885,7 +886,12 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const community: any = await ctx.db.get(args.communityId);
-    if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, args.communityId))) {
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, args.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))
+    ) {
       return { ok: false as const, code: "community_unavailable" };
     }
     const eligibility = await checkMemberEligibleForCoach(ctx, community, args.memberUserId);
@@ -1042,7 +1048,7 @@ async function runCoachForCommunity(
     if (!candidate) return "no_candidate";
 
     const funding = await resolveCommunityInferenceFundingForAction(ctx, claim.communityId);
-    if (!funding.ok) return "unfunded";
+    if (!funding.ok || !founderPlanTierHasProactiveAgent(funding.planTier)) return "unfunded";
 
     let run;
     try {
@@ -1054,6 +1060,7 @@ async function runCoachForCommunity(
         receiptKey: `member_coach:${String(claim.communityId)}:${String(candidate.memberUserId)}:${candidate.dedupeKey}:${nowMs}`,
         sourceRunId: `member-coach:${String(claim.communityId)}:${nowMs}`,
         admission: funding,
+        requireProactiveTier: true,
       });
     } catch {
       return "budget_blocked";

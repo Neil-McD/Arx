@@ -1,5 +1,6 @@
 import {
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+  founderPlanTierIncludedCostMicros,
   founderSubscriptionStatusGrantsAccess,
   isAllowedFounderPlanIncludedCostMicros,
   type FounderPlanTier,
@@ -375,9 +376,38 @@ export async function settleFounderUsageReservation(args: {
   ) {
     throw new Error("founder_usage_cycle_ledger_invalid");
   }
+  // If a mid-cycle tier downgrade temporarily raised `includedCostMicros` above
+  // the new tier's target while reservations were open, reclaim that unused
+  // temporary headroom as reservations settle or are released.
+  let nextIncludedCostMicros = cycle.includedCostMicros;
+  let nextMaxRunReservationCostMicros = cycle.maxRunReservationCostMicros;
+  const subscription = (await args.ctx.db.get(
+    cycle.founderSubscriptionId as any,
+  )) as FounderSubscriptionRow | null;
+  if (subscription) {
+    const tierTargetIncluded = founderPlanTierIncludedCostMicros(subscription.planTier);
+    if (cycle.includedCostMicros > tierTargetIncluded) {
+      const paidBoost = Math.max(0, Math.floor(Number(cycle.paidBoostCostMicros ?? 0)));
+      const minRequiredIncluded = Math.max(
+        0,
+        nextReservedCostMicros + nextSettledCostMicros - paidBoost,
+      );
+      nextIncludedCostMicros = Math.max(tierTargetIncluded, minRequiredIncluded);
+      nextMaxRunReservationCostMicros = Math.min(
+        cycle.maxRunReservationCostMicros,
+        nextIncludedCostMicros,
+      );
+    }
+  }
   await args.ctx.db.patch(cycle._id as any, {
     reservedCostMicros: nextReservedCostMicros,
     settledCostMicros: nextSettledCostMicros,
+    ...(nextIncludedCostMicros !== cycle.includedCostMicros
+      ? {
+          includedCostMicros: nextIncludedCostMicros,
+          maxRunReservationCostMicros: nextMaxRunReservationCostMicros,
+        }
+      : {}),
     updatedAt: args.nowMs,
   });
 }

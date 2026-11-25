@@ -16,8 +16,7 @@ import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
-import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
-import { founderPlanTierHasProactiveAgent } from "../shared/founderPlan";
+import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
@@ -572,9 +571,9 @@ export const claimFounderBriefInternal = internalMutation({
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }
-    // Guide ($20/mo) is reactive-only; Daily Founder Briefs belong to Chief of Staff ($100/mo).
-    const admission = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId, args.nowMs);
-    if (admission.ok && !founderPlanTierHasProactiveAgent(admission.planTier)) {
+    // Daily Founder Briefs require an active Chief of Staff tier (or operator grant).
+    // Free, Guide ($20/mo), past-due, expired, and risk-revoked communities fail closed.
+    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))) {
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }

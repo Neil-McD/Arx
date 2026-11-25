@@ -89,6 +89,13 @@ async function fixture(t: ReturnType<typeof convexTest>, nowMs: number) {
       emailVerifiedAt: nowMs, createdAt: nowMs, updatedAt: nowMs,
     });
     const ownerId = await user("Owner");
+    await ctx.db.insert("operatorRoles", {
+      userId: ownerId,
+      role: "owner",
+      active: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    } as any);
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "dawn-patrol", name: "Dawn Patrol", lifecycleStatus: "active", lifecycleGeneration: 0,
       visibility: "published", inferenceFundingPolicy: "managed_required", entryPolicy: "open",
