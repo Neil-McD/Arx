@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { BarChart2, Boxes, CalendarDays, CalendarPlus, ChevronDown, ChevronRight, Hash, House, Inbox, Library, MapPin, Plus, Repeat, Search, UserPlus, Users, Video, X } from "lucide-react";
+import { AtSign, BarChart2, Boxes, CalendarDays, CalendarPlus, ChevronDown, ChevronRight, Hash, House, Inbox, Library, MapPin, Mic, Paperclip, Plus, Repeat, Search, Smile, UserPlus, Users, Video, X } from "lucide-react";
 
 import type { BrainAttach, BrainMap, BrainPoint } from "../../../../../shared/communityBrain";
 import { brainFact, latestLearned } from "../../../../../shared/communityBrain";
@@ -222,11 +222,16 @@ function Feed(props: { items: Array<Message | string>; onNote: (id: string) => v
 }
 
 function Composer(props: { value: string; placeholder: string; sent: boolean; glow?: boolean; onSend?: () => void }) {
+  const ready = Boolean(props.onSend) && !props.sent && props.value.trim().length > 0;
   return (
     <form className="rpw-composer" onSubmit={(event) => { event.preventDefault(); if (!props.sent) props.onSend?.(); }}>
       <input type="text" readOnly value={props.sent ? "" : props.value} placeholder={props.placeholder} aria-label={props.placeholder} />
-      <span className="rpw-composer-tools" aria-hidden="true"><Plus size={15} /><span>@</span><Icon name="mic" /></span>
-      <button type="submit" className={props.glow && !props.sent ? "rpw-send rp-glow" : "rpw-send"} aria-label="Send" disabled={props.sent || !props.onSend}><Icon name="up" /></button>
+      <span className="rpw-composer-tools" aria-hidden="true"><Paperclip size={15} /><AtSign size={15} /><Smile size={15} /><Mic size={15} /></span>
+      {/* The app's send: quiet with nothing to send, blue once there is. */}
+      <button type="submit" className={["rpw-send", ready ? "ready" : "", props.glow && ready ? "rp-glow" : ""].filter(Boolean).join(" ")}
+        aria-label="Send" title="Send" disabled={!ready}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" /></svg>
+      </button>
     </form>
   );
 }
@@ -456,10 +461,11 @@ function dayFor(iso: string | null): string | null {
   return iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 }
 
-// The kit's avatar tones (a1 to a6), so faces match the rest of the app.
-const TONES = ["#5B6CF0", "#E0788C", "#3DAE8C", "#C58B3A", "#7A6FF0", "#3D8FD6"];
+// Faces everywhere look like the channel's: the kit's six muted tones (a1 to
+// a6; the gradient is laid over in the page styles) and one initial.
+const TONES = ["#39414F", "#4A4038", "#2F4446", "#463A4D", "#3E4636", "#4B3B3E"];
 const colour = (id: string) => TONES[Number(id.replace(/\D/g, "") || 0) % TONES.length];
-const initials = (name: string) => name.split(" ").map((part) => part[0]).join("").slice(0, 2);
+const initials = (name: string) => name.trim().charAt(0).toUpperCase();
 
 // ---------- pods ----------
 

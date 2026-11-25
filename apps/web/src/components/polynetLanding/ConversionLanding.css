@@ -713,11 +713,17 @@
 }
 .pn-landing .rpw-composer input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--ink); font: inherit; font-size: 14px; }
 .pn-landing .rpw-composer input::placeholder { color: var(--faint); }
-.pn-landing .rpw-composer-tools { display: inline-flex; align-items: center; gap: 12px; color: var(--faint); }
+.pn-landing .rpw-composer-tools { display: inline-flex; align-items: center; gap: 14px; color: var(--faint); }
 .pn-landing .rpw-composer-tools svg { width: 15px; height: 15px; }
-.pn-landing .rpw-send { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: #6f78d8; color: #fff !important; cursor: pointer; }
-.pn-landing .rpw-send:disabled { background: rgba(238, 240, 244, .09); color: var(--faint) !important; cursor: default; }
-.pn-landing .rpw-send svg { width: 15px; height: 15px; }
+/* The app's send (design-v1 "the mock's send"): a 34px rounded square, quiet
+   until there's something to send, then blue. */
+.pn-landing .rpw-send {
+  display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0;
+  border: 0; border-radius: 10px; background: var(--hover); color: var(--faint) !important; cursor: default;
+}
+.pn-landing .rpw-send svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pn-landing .rpw-send.ready { background: linear-gradient(180deg, #1077d2, #0b69c4); color: #fff !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28); cursor: pointer; }
+.pn-landing .rpw-send.ready:hover { background: linear-gradient(180deg, #0e74ce, #0a66c2); }
 .pn-landing .rpw-record-top { margin-bottom: 14px; }
 .pn-landing .rpw-record-top button { padding: 0; border: 0; background: none; color: var(--muted) !important; font-size: 13px; cursor: pointer; }
 .pn-landing .rpw-convo { display: flex; flex-direction: column; gap: 14px; height: 100%; }
@@ -742,8 +748,21 @@
 .pn-landing .rpw-pod:hover { background: var(--hover); color: var(--ink); }
 .pn-landing .rpw-pod.on { background: var(--sel); color: var(--ink); }
 .pn-landing .rpw-pod:has(.rpw-dot) span:first-child { color: var(--ink); font-weight: 500; }
-/* Faces, as the app draws them: round, initials in white on the person's tone. */
-.pn-landing .rpw .community-dm-kit-avatar { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; border-radius: 50%; color: rgba(255, 255, 255, .9); font-size: 11px; font-weight: 600; }
+/* Faces: one style everywhere in the preview, the channel's. A muted tone
+   darkening to one corner, a faint ring, one initial. */
+.pn-landing .rpw .community-dm-kit-avatar {
+  display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; border-radius: 50%;
+  background-image: linear-gradient(140deg, transparent 10%, rgba(0, 0, 0, .5));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .10);
+  color: rgba(255, 255, 255, .86) !important; font-size: 11px; font-weight: 600;
+}
+/* The panels' face stacks pick their own colours; give them the channel's tones in turn. */
+.pn-landing .rpw-rail [title]:nth-child(6n+1) .community-dm-kit-avatar { background-color: #39414F !important; }
+.pn-landing .rpw-rail [title]:nth-child(6n+2) .community-dm-kit-avatar { background-color: #4A4038 !important; }
+.pn-landing .rpw-rail [title]:nth-child(6n+3) .community-dm-kit-avatar { background-color: #2F4446 !important; }
+.pn-landing .rpw-rail [title]:nth-child(6n+4) .community-dm-kit-avatar { background-color: #463A4D !important; }
+.pn-landing .rpw-rail [title]:nth-child(6n+5) .community-dm-kit-avatar { background-color: #3E4636 !important; }
+.pn-landing .rpw-rail [title]:nth-child(6n) .community-dm-kit-avatar { background-color: #4B3B3E !important; }
 /* The Inbox conversation fits its column: the reply box keeps only send. */
 .pn-landing .rpw-convo .rpw-composer-tools { display: none; }
 .pn-landing .rpw-convo .rpw-composer { min-height: 42px; }
@@ -752,3 +771,8 @@
 /* Scrolling over the preview: a part that can scroll does, and once it's at
    its end the page carries on. Nothing in the preview holds the page still. */
 .pn-landing .rpw, .pn-landing .rpw * { overscroll-behavior: auto !important; }
+/* On narrow screens the preview runs off the right edge of the screen, like a
+   desktop screenshot: it keeps its left margin and stretches past the right. */
+@media (max-width: 900px) {
+  .pn-landing .hero > .product .rp { align-self: flex-start; width: calc(100% + (100vw - 100%) / 2); }
+}
