@@ -14,7 +14,8 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
-import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
+import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
+import { communityAgentIsOn } from "./communityApps";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
@@ -850,5 +851,56 @@ export const sendFounderBriefNowInternal = internalAction({
     const nowMs = Date.now();
     const timeZone = args.timeZone && validTimeZone(args.timeZone) ? args.timeZone : "UTC";
     return await writeAndDeliver(ctx, { communityId: args.communityId, briefDate: localDateAndHour(nowMs, timeZone).date, nowMs });
+  },
+});
+
+// Latest sent Daily Founder Brief for owners and admins through Official Polynet
+// MCP and Studio Guide Chat (builder/brief.md). Never reads private member chats.
+export const readLatestFounderBriefForTrustedManagerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const nowMs = Date.now();
+    const [latest, agentOn, proactiveTier] = await Promise.all([
+      ctx.db
+        .query("communityFounderBriefs")
+        .withIndex("by_community_status_windowEnd", (q) =>
+          q.eq("communityId", args.communityId).eq("status", "sent"),
+        )
+        .order("desc")
+        .first(),
+      communityAgentIsOn(ctx, args.communityId),
+      communityHasProactiveAgentTier(ctx, args.communityId, nowMs),
+    ]);
+    if (!latest || !latest.delivery?.markdown) {
+      const note = !proactiveTier
+        ? "Daily Founder Briefs run on the Chief of Staff plan ($100/mo). Upgrade in Settings to enable automatic morning briefs."
+        : !agentOn
+          ? "The community Guide is currently turned off. Turn it on in Settings to receive Daily Founder Briefs."
+          : "No Daily Founder Brief has been sent yet. The first morning brief will arrive on the next scheduled morning run.";
+      return {
+        has_brief: false as const,
+        markdown: `# Daily Founder Brief — ${String(community.name ?? "Community")}\n\n${note}`,
+      };
+    }
+    const header = [
+      `# Daily Founder Brief — ${String(community.name ?? "Community")}`,
+      `Date: ${latest.briefDate} · Sent: ${new Date(latest.sentAt ?? latest.updatedAt).toISOString()}`,
+      "",
+      latest.delivery.markdown,
+    ].join("\n");
+    return {
+      has_brief: true as const,
+      brief_date: latest.briefDate,
+      sent_at: new Date(latest.sentAt ?? latest.updatedAt).toISOString(),
+      markdown: header,
+    };
   },
 });

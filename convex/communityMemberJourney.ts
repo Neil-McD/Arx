@@ -680,13 +680,25 @@ export const getCommunityMemberJourneyBoard = query({
   },
 });
 
-// Canonical builder/journey.json snapshot for owners and admins through the
-// Official Polynet MCP and Studio Guide chat. Re-enforces requireCommunityManager
-// directly; never exposes any member's private 1:1 conversation words.
+// Canonical builder/journey.json (and filtered builder/journey/stage|status/*.json)
+// snapshot for owners and admins through Official Polynet MCP and Studio Guide
+// chat. Re-enforces requireCommunityManager directly; never exposes any member's
+// private 1:1 conversation words.
 export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internalQuery({
   args: {
     userId: v.id("users"),
     communityId: v.id("communities"),
+    filterStageKey: v.optional(v.string()),
+    filterStatus: v.optional(
+      v.union(
+        v.literal("needs_you"),
+        v.literal("stuck"),
+        v.literal("ready_to_advance"),
+        v.literal("on_track"),
+        v.literal("quiet"),
+        v.literal("done"),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     const { community } = await requireCommunityManager({
@@ -700,6 +712,9 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       community,
       nowMs,
     });
+    if (args.filterStageKey && !board.stages.some((stage) => stage.key === args.filterStageKey)) {
+      throw new Error("journey_stage_not_found");
+    }
     const byStage: Record<string, number> = Object.fromEntries(board.stages.map((stage) => [stage.key, 0]));
     const byStatus: Record<JourneyCardStatus, number> = {
       needs_you: 0,
@@ -710,6 +725,11 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
     };
     const firstStageKey = board.stages[0]?.key ?? null;
     const lastStageKey = board.stages[board.stages.length - 1]?.key ?? null;
+    const isCardReadyToAdvance = (card: (typeof board.cards)[number]) =>
+      card.checkpoints_total > 0 &&
+      card.checkpoints_done >= card.checkpoints_total &&
+      card.stage_key !== lastStageKey &&
+      card.dismissed_advance_for_stage_key !== card.stage_key;
     let readyToAdvanceCount = 0;
     let activatedCount = 0;
     for (const card of board.cards) {
@@ -717,32 +737,33 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       const cardStatus = card.status as JourneyCardStatus;
       byStatus[cardStatus] = (byStatus[cardStatus] ?? 0) + 1;
       if (firstStageKey && card.stage_key !== firstStageKey) activatedCount += 1;
-      if (
-        card.checkpoints_total > 0 &&
-        card.checkpoints_done >= card.checkpoints_total &&
-        card.stage_key !== lastStageKey
-      ) {
+      if (isCardReadyToAdvance(card)) {
         readyToAdvanceCount += 1;
       }
     }
     const activatedPct = board.cards.length > 0 ? Math.round((activatedCount / board.cards.length) * 100) : 0;
+    const filteredCards = board.cards.filter((card) => {
+      if (args.filterStageKey && card.stage_key !== args.filterStageKey) return false;
+      if (args.filterStatus === "ready_to_advance") {
+        return isCardReadyToAdvance(card);
+      }
+      if (args.filterStatus && card.status !== args.filterStatus) return false;
+      return true;
+    });
     // Sort cards by highest actionability first (needs_you -> stuck -> ready_to_advance -> on_track -> done -> quiet)
     // so large communities always surface the highest-priority members within the 24 KB canonical JSON budget.
-    const sortedCards = [...board.cards].sort((left, right) => {
+    const sortedCards = [...filteredCards].sort((left, right) => {
       const leftRank = JOURNEY_CARD_STATUS_SORT_RANK[left.status as JourneyCardStatus] ?? 9;
       const rightRank = JOURNEY_CARD_STATUS_SORT_RANK[right.status as JourneyCardStatus] ?? 9;
       if (leftRank !== rightRank) return leftRank - rightRank;
-      const leftReady = left.checkpoints_total > 0 && left.checkpoints_done >= left.checkpoints_total && left.stage_key !== lastStageKey ? 0 : 1;
-      const rightReady = right.checkpoints_total > 0 && right.checkpoints_done >= right.checkpoints_total && right.stage_key !== lastStageKey ? 0 : 1;
+      const leftReady = isCardReadyToAdvance(left) ? 0 : 1;
+      const rightReady = isCardReadyToAdvance(right) ? 0 : 1;
       if (leftReady !== rightReady) return leftReady - rightReady;
       return String(right.last_active_at ?? "").localeCompare(String(left.last_active_at ?? ""));
     });
 
     const projectedCards = sortedCards.map((card) => {
-      const readyToAdvance =
-        card.checkpoints_total > 0 &&
-        card.checkpoints_done >= card.checkpoints_total &&
-        card.stage_key !== lastStageKey;
+      const readyToAdvance = isCardReadyToAdvance(card);
       return {
         member_ref: `user:${card.db_user_id}`,
         handle: card.handle,
@@ -776,11 +797,19 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
     // Enforce a hard budget safely below CANONICAL_JSON_DOCUMENT_MAX_CHARS (24,000)
     // so builder/journey.json ALWAYS stays valid, parseable JSON even with 200 members.
     const BUILDER_JOURNEY_JSON_BUDGET_CHARS = 22_000;
+    const filterMeta =
+      args.filterStageKey
+        ? { filter: { kind: "stage" as const, stage_key: args.filterStageKey } }
+        : args.filterStatus
+          ? { filter: { kind: "status" as const, status: args.filterStatus } }
+          : {};
     const buildPayload = (cardsSlice: typeof projectedCards, cardsTruncated: boolean) => ({
       read_at: new Date(nowMs).toISOString(),
+      ...filterMeta,
       stages: board.stages,
       summary: {
         total_active_members: board.total_active_members,
+        matched_members: projectedCards.length,
         shown_members: cardsSlice.length,
         capped: board.capped || cardsTruncated,
         cards_truncated: cardsTruncated,
@@ -791,7 +820,7 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       },
       cards: cardsSlice,
       ...(cardsTruncated
-        ? { note: "Showing highest-priority members first. Read members/<handle>.json for full journey details on any specific member." }
+        ? { note: "Showing highest-priority members first. Read builder/journey/stage/<key>.json, builder/journey/status/<status>.json, or members/<handle>.json for specific members." }
         : {}),
     });
 
@@ -813,6 +842,69 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       payload = buildPayload(projectedCards.slice(0, kept), kept < projectedCards.length);
     }
     return payload;
+  },
+});
+
+export const listBuilderJourneySliceEntriesForTrustedManagerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const { stages } = await readStagesForCommunity(ctx, args.communityId);
+    return {
+      stages: stages.map((stage) => ({ key: stage.key, name: stage.name })),
+    };
+  },
+});
+
+export const listStageAdvanceProposalsForTrustedManagerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const nowMs = Date.now();
+    const [agentOn, proactiveTier] = await Promise.all([
+      communityAgentIsOn(ctx, args.communityId),
+      communityHasProactiveAgentTier(ctx, args.communityId, nowMs),
+    ]);
+    if (!agentOn || !proactiveTier) {
+      return {
+        is_owner: String(community.ownerId) === String(args.userId),
+        hosted_agent_on: agentOn,
+        proactive_tier_active: proactiveTier,
+        proposals: [] as Array<JourneyStageAdvanceProposalView & { member_ref: string }>,
+      };
+    }
+    const board = await computeCommunityMemberJourneyBoard(ctx, {
+      communityId: args.communityId,
+      community,
+      nowMs,
+    });
+    const userRefByMembershipId = new Map(
+      board.cards.map((card) => [card.membership_id, `user:${card.db_user_id}`]),
+    );
+    const proposals = extractStageAdvanceProposalsFromBoard(board, STAGE_ADVANCE_PROPOSALS_LIMIT).map((proposal) => ({
+      ...proposal,
+      member_ref: userRefByMembershipId.get(proposal.membership_id) ?? "",
+    }));
+    return {
+      is_owner: String(community.ownerId) === String(args.userId),
+      hosted_agent_on: agentOn,
+      proactive_tier_active: proactiveTier,
+      proposals,
+    };
   },
 });
 
@@ -1605,6 +1697,143 @@ export const applyJourneyOperationForTrustedManagerInternal = internalMutation({
         moved_to_stage_name: fallback.name,
         moved_cards_count: movedCardsCount,
         stages: remaining,
+      };
+    }
+
+    if (args.operation === "community.journey.decide_stage_move") {
+      const [agentOn, proactiveTier] = await Promise.all([
+        communityAgentIsOn(ctx, args.communityId),
+        communityHasProactiveAgentTier(ctx, args.communityId, nowMs),
+      ]);
+      if (!agentOn || !proactiveTier) {
+        throw new Error("chief_of_staff_plan_required");
+      }
+      const memberRef = typeof input.member === "string" ? input.member : "";
+      const decision = input.decision === "approve" || input.decision === "dismiss" ? input.decision : null;
+      if (!decision) throw new Error("invalid_tool_args");
+      const targetUserId = parseUserRef(memberRef);
+      if (!targetUserId) throw new Error("community_member_not_found");
+      if (String(targetUserId) === String(community.ownerId)) {
+        throw new Error("community_owner_not_on_board");
+      }
+      const membership: any = await getUniqueCommunityMembershipByPair({
+        ctx,
+        communityId: args.communityId,
+        userId: targetUserId,
+      });
+      if (!membership || !communityMembershipRowIsActive(membership)) {
+        throw new Error("community_member_not_found");
+      }
+      const validKeys = new Set(stages.map((stage) => stage.key));
+      const existing = await ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", args.communityId).eq("userId", targetUserId),
+        )
+        .unique();
+      const currentStageKey =
+        existing && validKeys.has(existing.stageKey)
+          ? String(existing.stageKey)
+          : await resolveDerivedStageKeyForMember(ctx, {
+              communityId: args.communityId,
+              userId: targetUserId,
+              stages,
+              membership,
+              nowMs,
+            });
+      const expectedFrom =
+        typeof input.expected_from_stage === "string" && input.expected_from_stage.trim()
+          ? resolveStageSelector(stages, input.expected_from_stage.trim())?.key ?? input.expected_from_stage.trim()
+          : null;
+      if (expectedFrom && currentStageKey !== expectedFrom) {
+        return { member: memberRef, decision, status: "already_moved" as const, stage_key: currentStageKey };
+      }
+
+      if (decision === "dismiss") {
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            stageKey: currentStageKey,
+            dismissedAdvanceForStageKey: currentStageKey,
+            updatedByUserId: args.userId,
+            updatedAt: nowMs,
+          });
+        } else {
+          await ctx.db.insert("communityMemberJourneyCards", {
+            communityId: args.communityId,
+            userId: targetUserId,
+            stageKey: currentStageKey,
+            dismissedAdvanceForStageKey: currentStageKey,
+            updatedByUserId: args.userId,
+            createdAt: nowMs,
+            updatedAt: nowMs,
+          });
+        }
+        return {
+          member: memberRef,
+          decision: "dismiss" as const,
+          status: "dismissed" as const,
+          stage_key: currentStageKey,
+        };
+      }
+
+      // Approve: re-evaluate live checkpoint completion and next-stage eligibility.
+      const liveBoard = await computeCommunityMemberJourneyBoard(ctx, {
+        communityId: args.communityId,
+        community,
+        nowMs,
+      });
+      const liveProposal = extractStageAdvanceProposalsFromBoard(
+        liveBoard,
+        Math.max(liveBoard.cards.length, 1),
+      ).find(
+        (proposal) =>
+          proposal.membership_id === String(membership._id) &&
+          proposal.from_stage_key === currentStageKey,
+      );
+      const requestedTarget =
+        typeof input.target_stage === "string" && input.target_stage.trim()
+          ? resolveStageSelector(stages, input.target_stage.trim())?.key ?? input.target_stage.trim()
+          : null;
+      if (!liveProposal || (requestedTarget && liveProposal.to_stage_key !== requestedTarget)) {
+        return {
+          member: memberRef,
+          decision: "approve" as const,
+          status: "no_longer_ready" as const,
+          stage_key: currentStageKey,
+        };
+      }
+      const outcomeNote = `Moved to ${liveProposal.to_stage_name} after finishing ${liveProposal.from_stage_name} checkpoints`.slice(
+        0,
+        MAX_AGENT_OUTCOME_CHARS,
+      );
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          stageKey: liveProposal.to_stage_key,
+          dismissedAdvanceForStageKey: undefined,
+          agentOutcomeNote: outcomeNote,
+          agentOutcomeAt: nowMs,
+          updatedByUserId: args.userId,
+          updatedAt: nowMs,
+        });
+      } else {
+        await ctx.db.insert("communityMemberJourneyCards", {
+          communityId: args.communityId,
+          userId: targetUserId,
+          stageKey: liveProposal.to_stage_key,
+          agentOutcomeNote: outcomeNote,
+          agentOutcomeAt: nowMs,
+          updatedByUserId: args.userId,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+      return {
+        member: memberRef,
+        decision: "approve" as const,
+        status: "moved" as const,
+        from_stage_key: liveProposal.from_stage_key,
+        stage_key: liveProposal.to_stage_key,
+        stage_name: liveProposal.to_stage_name,
       };
     }
 

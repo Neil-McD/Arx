@@ -388,6 +388,29 @@ export const ACTION_TOOLS: ActionTool[] = [
       move_to_stage: TEXT("Optional stage key or name for members currently on the removed stage; defaults to the first remaining stage.", 64) },
     ["community", "stage"],
     (a) => call("community.journey.remove_stage", a, { stage: a.stage, ...only(a, ["move_to_stage"]) })),
+  tool("polynet_decide_stage_move", "community.journey.decide_stage_move", "Approve or dismiss a stage move",
+    "Approve or dismiss a waiting Chief of Staff stage-move suggestion from builder/suggestions.json (re-verifies live checkpoints on approval). Owners and admins on the Chief of Staff plan.",
+    { community: COMMUNITY, member: MEMBER,
+      decision: { type: "string", enum: ["approve", "dismiss"], description: "approve moves the member to the next stage; dismiss keeps them in their current stage without nagging again." },
+      expected_from_stage: TEXT("Optional stage key from builder/suggestions.json to verify the member has not already moved.", 64),
+      target_stage: TEXT("Optional next stage key from builder/suggestions.json when approving.", 64) },
+    ["community", "member", "decision"],
+    (a) => call("community.journey.decide_stage_move", a, { member: a.member, decision: a.decision, ...only(a, ["expected_from_stage", "target_stage"]) })),
+  tool("polynet_send_guide_draft", "community.guide_draft.send", "Send a waiting guide draft",
+    "Send a waiting Chief of Staff member check-in draft or unanswered-question channel reply draft from builder/suggestions.json (community owner only). Optionally edit the words first. The person is shown the exact words and asked first, every time.",
+    { community: COMMUNITY,
+      draft_kind: { type: "string", enum: ["check_in", "reply"], description: "check_in for a private member check-in draft, or reply for a channel reply draft." },
+      draft_id: TEXT("The draft's id from builder/suggestions.json.", 120),
+      text: TEXT("Optional edited message or reply words (up to 1,500 characters).", 1_500) },
+    ["community", "draft_kind", "draft_id"],
+    (a) => call("community.guide_draft.send", a, { draft_kind: a.draft_kind, draft_id: a.draft_id, ...only(a, ["text"]) })),
+  tool("polynet_skip_guide_draft", "community.guide_draft.skip", "Skip a waiting guide draft",
+    "Dismiss a waiting Chief of Staff member check-in draft or channel reply draft from builder/suggestions.json without sending anything (community owner only).",
+    { community: COMMUNITY,
+      draft_kind: { type: "string", enum: ["check_in", "reply"], description: "check_in for a private member check-in draft, or reply for a channel reply draft." },
+      draft_id: TEXT("The draft's id from builder/suggestions.json.", 120) },
+    ["community", "draft_kind", "draft_id"],
+    (a) => call("community.guide_draft.skip", a, { draft_kind: a.draft_kind, draft_id: a.draft_id })),
   // The operations are spelled out here: left to "as builder/resources/
   // describes", the guide guessed at names (create_lesson) and was refused.
   tool("polynet_publish_course", "community.course.publish", "Publish or unpublish a course",
@@ -547,6 +570,7 @@ export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
   "polynet_add_lesson", "polynet_edit_lesson", "polynet_edit_course", "polynet_order_lessons", "polynet_order_courses",
   "polynet_move_member_stage", "polynet_set_member_status", "polynet_set_member_milestone",
   "polynet_record_member_win", "polynet_set_member_guide_note", "polynet_update_journey_stages",
+  "polynet_decide_stage_move", "polynet_send_guide_draft", "polynet_skip_guide_draft",
 ]);
 // Tools whose effect leaves the chat: by email (event reminders, cancellations,
 // announcements, the "you're in" email), or to the public (a community's name,
@@ -554,7 +578,7 @@ export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
 // shared). Labelled as reaching the outside world.
 export const ACTION_TOOLS_THAT_EMAIL = new Set([
   "polynet_create_event", "polynet_update_event", "polynet_cancel_event", "polynet_announce",
-  "polynet_approve_join_requests", "polynet_update_community",
+  "polynet_approve_join_requests", "polynet_update_community", "polynet_send_guide_draft",
 ]);
 
 // Tools that make something new each time they run: calling one twice makes

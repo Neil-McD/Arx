@@ -334,7 +334,7 @@ describe("what reviewers and their scanners check, on every tool an outside AI i
   });
   it("what emails people is labelled as reaching beyond the chat; the rest isn't", () => {
     const open = (shown() as any[]).filter((tool) => tool.annotations.openWorldHint).map((tool) => tool.name).sort();
-    expect(open).toEqual(["polynet_announce", "polynet_approve_join_requests", "polynet_cancel_event", "polynet_create_event", "polynet_update_community", "polynet_update_event"]);
+    expect(open).toEqual(["polynet_announce", "polynet_approve_join_requests", "polynet_cancel_event", "polynet_create_event", "polynet_send_guide_draft", "polynet_update_community", "polynet_update_event"]);
   });
   it("an outside AI is told a DM reply is sent, never that the person is asked", () => {
     const dm = actionToolDefinition(ACTION_TOOLS.find((tool) => tool.name === "polynet_reply_message")!);

@@ -378,7 +378,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (`shared/guideSkills.ts`, Nov 18 2026): host-only skill documents under skills/
   (`course-building.md` loaded on Knowledge; `member-board.md` loaded on Members/Board).
   Builder `builder/community.json` also includes `ai_plan` (Free / Guide / Chief of Staff
-  and hosted AI status), and Chief of Staff proactive check-ins include `board_coaching`
+  and hosted AI status); builders can read `builder/brief.md`, `builder/suggestions.json`
+  (owner-only Guide check-in/reply drafts omitted for non-owner admins), and filtered
+  `builder/journey/stage|status/*.json` slices, and act via `community.journey.decide_stage_move`
+  plus owner-only `community.guide_draft.send` (Yes/No confirmation every time) and
+  `community.guide_draft.skip`. Chief of Staff proactive check-ins include `board_coaching`
   for fresh Board coaching notes and members flagged as stuck.
 
 ### 9. Proactive agent — Keep, growing

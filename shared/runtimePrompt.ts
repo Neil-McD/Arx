@@ -310,10 +310,9 @@ function buildCommunityMapPrompt(params: {
     ...(params.handbook ? ["- handbook.md : the handbook the host wrote for members."] : []),
     ...(reviewsJoins ? ["- builder/join-requests/ : people asking to join."] : []),
     ...(host ? [
-      "- builder/community.json : the community's settings.",
+      "- builder/community.json (settings & AI plan), builder/brief.md (Daily Brief), builder/suggestions.json (Home suggestions), builder/resources/ (courses & drafts).",
       "- builder/analytics.json : the community's numbers, as the Analytics page shows them.",
-      "- builder/journey.json : the Member Board (stages, checkpoints, where each member sits, statuses, wins, and coaching notes).",
-      "- builder/resources/ : every course and lesson, drafts included. A course there also says who has started and finished it; each member's file also shows their course progress.",
+      "- builder/journey.json : the Member Board (builder/journey/ for slices); each member's file also shows their course progress.",
     ] : []),
     "- /messages/ : this person's own direct messages. Private to this talk.",
     ...(params.skills.length ? [
