@@ -83,6 +83,18 @@ export function validTimeZone(timeZone: string): boolean {
   }
 }
 
+export function formatEventStartInTimeZone(startsAtMs: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(new Date(startsAtMs));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("weekday")} ${get("hour")}:${get("minute")} ${get("dayPeriod")}`.trim();
+}
+
 // ---------- snapshot (deterministic, bounded) ----------
 
 function clip(raw: unknown, max: number): string {
@@ -95,7 +107,7 @@ export async function buildSnapshot(
   community: any,
   windowStartMs: number,
   nowMs: number,
-  options?: { includeFounderOnly?: boolean; includeChiefOfStaff?: boolean },
+  options?: { includeFounderOnly?: boolean; includeChiefOfStaff?: boolean; timeZone?: string | null },
 ): Promise<FounderBriefSnapshot> {
   const includeFounderOnly = options?.includeFounderOnly !== false;
   const includeChiefOfStaff = includeFounderOnly && options?.includeChiefOfStaff === true;
@@ -260,7 +272,14 @@ export async function buildSnapshot(
     unanswered,
     quietNewcomers: includeFounderOnly ? { count: quiet.length, names: quietNewcomerNames } : { count: 0, names: [] },
     joinRequestsPending: pendingJoinRequests.length,
-    upcomingEvents: communityWideEvents(events).map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
+    upcomingEvents: communityWideEvents(events).map((event: any) => {
+      const startsAtMs = Number(event.startsAt);
+      const timeZone = options?.timeZone && validTimeZone(options.timeZone) ? options.timeZone : null;
+      return {
+        title: clip(event.title, 120),
+        startsAt: timeZone ? formatEventStartInTimeZone(startsAtMs, timeZone) : new Date(startsAtMs).toISOString(),
+      };
+    }),
     ...(chiefOfStaff ? { chiefOfStaff } : {}),
   };
 }
@@ -373,7 +392,7 @@ export const FOUNDER_BRIEF_PROMPT = [
   "Write like a sharp chief of staff: short, specific, warm, no filler.",
   "Use only facts in the snapshot. Never invent people, numbers or events, and never quote or speculate about members' private chats or private pod messages.",
   "Lead with what needs the founder (join requests, waiting guide drafts on Home, unanswered posts), then what the guide did, then people signals (quiet paying members at churn risk, stalled course learners, rising contributors, new and quiet newcomers), then activity/pod health and what's coming up.",
-  "Name people. Times are UTC ISO; say them as relative days (\"tomorrow\"), not raw timestamps.",
+  "Name people. Event start times are already formatted in the founder's local time (e.g. \"Sat 7:00 AM\"); include them naturally without raw UTC timestamps.",
   "End with one concrete suggested next step the founder can do in two minutes.",
   "Reply with JSON only: {\"headline\": string (max 90 chars), \"sections\": [{\"title\": string (max 30 chars), \"items\": [string (max 220 chars)]}] (1-5 sections, 1-5 items each), \"next_step\": string (max 160 chars)}.",
 ].join("\n");
@@ -625,10 +644,12 @@ export const readFounderBriefSnapshotInternal = internalQuery({
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
     if (!community || !communityIsActive(community)) return null;
+    const settings = await readSettings(ctx, args.communityId);
     return {
       snapshot: await buildSnapshot(ctx, community, args.windowStartMs, args.nowMs, {
         includeFounderOnly: true,
         includeChiefOfStaff: true,
+        timeZone: settings?.timeZone ?? null,
       }),
       communitySlug: String(community.slug ?? ""),
       communityLifecycleGeneration: normalizeCommunityLifecycle(community).generation,

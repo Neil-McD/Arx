@@ -44,11 +44,6 @@ member authority.
 Explicit server-validated community context used for a subsequent agent turn.
 It does not grant access or change agent identity.
 
-## Community Site
-
-A community's own website on `polynet.page`, built by its founder with
-`@polynet/cli` or the MCP. Staging only for now.
-
 ## Entitlement
 
 Backend access truth for a product, community, capability, or plan.

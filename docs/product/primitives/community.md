@@ -92,7 +92,6 @@ billing verification, or privacy boundaries.
 
 - `agent`
 - `join-page`
-- `community-site`
 - `resource`
 - `role`
 - `entitlement`

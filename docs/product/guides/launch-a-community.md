@@ -137,7 +137,6 @@ Before sharing the join page, test:
 
 - `community`
 - `join-page`
-- `community-site`
 - `entitlement`
 - `role`
 - `billing-entitlements`

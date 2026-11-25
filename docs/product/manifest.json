@@ -93,7 +93,7 @@
         "aliases": ["community funnel", "funnel", "join link", "community landing page"],
         "keywords": ["join page", "join", "entry", "gate", "checkout", "approval", "landing page"],
         "queries": ["what is the join page", "where do members join", "community funnel link"],
-        "relatedSlugs": ["guides/joining-communities", "primitives/community-site"],
+        "relatedSlugs": ["guides/joining-communities", "guides/connect-your-app"],
         "boost": 1.1
       }
     },
@@ -121,23 +121,6 @@
         "keywords": ["mcp", "oauth", "external harness", "claude code", "codex", "member lens", "polynet_list", "polynet_call"],
         "queries": ["what is the polynet mcp", "how do I connect Polynet MCP", "can members use the mcp"],
         "relatedSlugs": ["guides/connect-polynet-mcp", "primitives/agent"],
-        "boost": 1.1
-      }
-    },
-    {
-      "id": "product.community_site",
-      "slug": "primitives/community-site",
-      "title": "Community Site",
-      "section": "Primitives",
-      "summary": "A community's own website on polynet.page, built with @polynet/cli; staging only for now.",
-      "audience": ["builder", "member", "llm"],
-      "status": "planned",
-      "source": "docs/product/primitives/community-site.md",
-      "search": {
-        "aliases": ["community site", "polynet.page", "website", "vibe-coded site", "polynet cli"],
-        "keywords": ["site", "website", "cli", "deploy", "standard pages", "private twin", "frame", "staging"],
-        "queries": ["how do I build a community site", "what is polynet.page", "deploy a community website"],
-        "relatedSlugs": ["primitives/join-page", "primitives/polynet-mcp"],
         "boost": 1.1
       }
     },

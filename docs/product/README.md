@@ -36,7 +36,8 @@ The product combines:
   by the backend
 - one canonical five-operation Polynet repository contract, shared by the
   community agent and the official Polynet MCP
-- community sites on `polynet.page` (staging only for now)
+- connected apps ("Your app"), letting a founder's own software product share
+  access and plans with their community
 
 ## Documentation Rules
 
@@ -69,15 +70,14 @@ LLMs should read product docs in this order:
 8. `primitives/memory.md`
 9. `primitives/voice.md`
 10. `primitives/polynet-mcp.md`
-11. `primitives/community-site.md`
-12. `primitives/resource.md`
-13. `primitives/entitlement.md`
-14. `primitives/role.md`
-15. `reference/access-model.md`
-16. `reference/context-model.md`
-17. `reference/prompt-context-model.md`
-18. `reference/security-privacy.md`
-19. `reference/glossary.md`
+11. `primitives/resource.md`
+12. `primitives/entitlement.md`
+13. `primitives/role.md`
+14. `reference/access-model.md`
+15. `reference/context-model.md`
+16. `reference/prompt-context-model.md`
+17. `reference/security-privacy.md`
+18. `reference/glossary.md`
 
 ## Human Reading Paths
 
@@ -89,7 +89,7 @@ Builder path:
 4. `guides/manage-resources.md`
 5. `guides/manage-access-billing-and-roles.md`
 6. `guides/connect-polynet-mcp.md`
-7. `primitives/community-site.md`
+7. `guides/connect-your-app.md`
 
 Member path:
 
