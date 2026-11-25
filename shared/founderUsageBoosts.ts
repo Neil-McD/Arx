@@ -117,17 +117,30 @@ export type BoostCheckoutReturnStatus = "success" | "canceled" | null;
 
 // Builds clean canonical Stripe return URLs for prepaid usage boosts, stripping
 // any stale boost/session query params so repeated purchases stay clean.
-export function buildBoostCheckoutReturnUrls(currentHref: string): {
+// Optionally carries the pre-checkout paidBoostMicros baseline so the return
+// screen recognizes boosts whose Stripe webhook settled before redirect return.
+export function buildBoostCheckoutReturnUrls(
+  currentHref: string,
+  previousPaidBoostMicros?: number | null,
+): {
   successUrl: string;
   cancelUrl: string;
 } {
   const base = new URL(currentHref);
   base.searchParams.delete("boost_checkout");
+  base.searchParams.delete("boost_prev");
   base.searchParams.delete("session_id");
   base.searchParams.delete("checkout_canceled");
 
   const success = new URL(base.toString());
   success.searchParams.set("boost_checkout", "success");
+  if (
+    typeof previousPaidBoostMicros === "number" &&
+    Number.isSafeInteger(previousPaidBoostMicros) &&
+    previousPaidBoostMicros >= 0
+  ) {
+    success.searchParams.set("boost_prev", String(previousPaidBoostMicros));
+  }
   const cancel = new URL(base.toString());
   cancel.searchParams.set("boost_checkout", "canceled");
   return {
@@ -136,10 +149,11 @@ export function buildBoostCheckoutReturnUrls(currentHref: string): {
   };
 }
 
-// Reads `boost_checkout` from the return URL and returns a cleaned relative URL
-// (pathname + search + hash) with transient Stripe query parameters removed.
+// Reads `boost_checkout` (and optional `boost_prev` baseline) from the return
+// URL and returns a cleaned relative URL with transient Stripe query params removed.
 export function consumeBoostCheckoutReturnStatus(currentHref: string): {
   status: BoostCheckoutReturnStatus;
+  previousPaidBoostMicros: number | null;
   cleanedRelativeUrl: string | null;
 } {
   try {
@@ -148,16 +162,23 @@ export function consumeBoostCheckoutReturnStatus(currentHref: string): {
     const status: BoostCheckoutReturnStatus =
       raw === "success" ? "success" : raw === "canceled" ? "canceled" : null;
     if (!status) {
-      return { status: null, cleanedRelativeUrl: null };
+      return { status: null, previousPaidBoostMicros: null, cleanedRelativeUrl: null };
     }
+    const rawPrev = parsed.searchParams.get("boost_prev");
+    const parsedPrev = rawPrev !== null && /^\d+$/.test(rawPrev) ? Number(rawPrev) : null;
+    const previousPaidBoostMicros =
+      parsedPrev !== null && Number.isSafeInteger(parsedPrev) && parsedPrev >= 0
+        ? parsedPrev
+        : null;
     parsed.searchParams.delete("boost_checkout");
+    parsed.searchParams.delete("boost_prev");
     parsed.searchParams.delete("session_id");
     parsed.searchParams.delete("checkout_canceled");
     const search = parsed.searchParams.toString();
     const cleanedRelativeUrl = `${parsed.pathname}${search ? `?${search}` : ""}${parsed.hash}`;
-    return { status, cleanedRelativeUrl };
+    return { status, previousPaidBoostMicros, cleanedRelativeUrl };
   } catch {
-    return { status: null, cleanedRelativeUrl: null };
+    return { status: null, previousPaidBoostMicros: null, cleanedRelativeUrl: null };
   }
 }
 

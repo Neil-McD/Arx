@@ -63,14 +63,25 @@ export function CommunityMemberCoachSettingsSection(props: {
         setSettings(loaded);
 
         if (returnState.status === "success" && session) {
-          const initialBoostMicros = loaded?.impact?.paid_boost_micros ?? 0;
+          const loadedBoostMicros = loaded?.impact?.paid_boost_micros ?? 0;
+          if (
+            returnState.previousPaidBoostMicros !== null &&
+            loadedBoostMicros > returnState.previousPaidBoostMicros
+          ) {
+            setBoostNotice("Boost applied — your extra +$20.00 AI allowance is live for this billing cycle.");
+            return;
+          }
+          const baselineBoostMicros = returnState.previousPaidBoostMicros ?? loadedBoostMicros;
+          let applied = false;
           const scheduleRefresh = (delayMs: number) => {
             const id = window.setTimeout(() => {
+              if (cancelled || applied) return;
               void getCloudMemberCoachSettings({ session, communityId: props.communityId })
                 .then((refreshed) => {
                   if (cancelled) return;
                   setSettings(refreshed);
-                  if ((refreshed?.impact?.paid_boost_micros ?? 0) > initialBoostMicros) {
+                  if ((refreshed?.impact?.paid_boost_micros ?? 0) > baselineBoostMicros) {
+                    applied = true;
                     setBoostNotice("Boost applied — your extra +$20.00 AI allowance is live for this billing cycle.");
                   }
                 })
@@ -133,7 +144,10 @@ export function CommunityMemberCoachSettingsSection(props: {
     try {
       const session = await props.ensureSession(props.session);
       if (!session) throw new Error("not_signed_in");
-      const { successUrl, cancelUrl } = buildBoostCheckoutReturnUrls(window.location.href);
+      const { successUrl, cancelUrl } = buildBoostCheckoutReturnUrls(
+        window.location.href,
+        settings?.impact?.paid_boost_micros ?? 0,
+      );
       const result = await startFounderUsageBoostCheckout({
         session,
         communityId: props.communityId,

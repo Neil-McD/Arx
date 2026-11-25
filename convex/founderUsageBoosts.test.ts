@@ -84,20 +84,22 @@ describe("Agent pricing & prepaid usage boost ledger foundation (Step 1)", () =>
 
     // Clean Stripe return URL building, consumption, and human error messages.
     const urls = buildBoostCheckoutReturnUrls(
-      "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=canceled&session_id=old_1",
+      "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=canceled&boost_prev=0&session_id=old_1",
+      20_000_000,
     );
     expect(urls.successUrl).toBe(
-      "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=success",
+      "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=success&boost_prev=20000000",
     );
     expect(urls.cancelUrl).toBe(
       "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=canceled",
     );
     expect(
       consumeBoostCheckoutReturnStatus(
-        "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=success&session_id=boost_123",
+        "https://www.polynet.ai/c/boost-club/settings?pane=agent&boost_checkout=success&boost_prev=20000000&session_id=boost_123",
       ),
     ).toEqual({
       status: "success",
+      previousPaidBoostMicros: 20_000_000,
       cleanedRelativeUrl: "/c/boost-club/settings?pane=agent",
     });
     expect(formatBoostCheckoutErrorMessage(new Error("founder_usage_boost_payment_settling"))).toContain(
