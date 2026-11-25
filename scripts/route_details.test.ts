@@ -29,6 +29,8 @@ describe("every community address survives a refresh", () => {
     "/c/a/events/e1",
     "/c/a/events/e1_1794000000000",
     "/c/a/members",
+    "/c/a/members/board",
+    "/c/a/members/board/m1",
     "/c/a/members/m1",
     "/c/a/members/requests",
     "/c/a/inbox",
@@ -140,4 +142,27 @@ it("the brain map's \"Open the lesson\" goes to that lesson in its course", asyn
   const route: any = parseAppRouteFromPathname(pushed[0]);
   expect(JSON.stringify(route)).toContain("mod1");
   expect(JSON.stringify(route)).toContain("les2");
+});
+
+describe("Board is part of Members' address", () => {
+  it("reads and writes Board view independently of an open member record, on phone too", () => {
+    expect(readRouteDetailAt("/c/a/members/board", "membersView")).toBe("board");
+    expect(readRouteDetailAt("/c/a/members/board", "member")).toBeNull();
+    expect(readRouteDetailAt("/c/a/members/board/m1", "membersView")).toBe("board");
+    expect(readRouteDetailAt("/c/a/members/board/m1", "member")).toBe("m1");
+    expect(readRouteDetailAt("/m/c/a/members/board", "membersView")).toBe("board");
+    expect(readRouteDetailAt("/c/a/members/m1", "membersView")).toBeNull();
+    expect(pathWithRouteDetail("/c/a/members", "membersView", "board")).toBe("/c/a/members/board");
+    expect(pathWithRouteDetail("/c/a/members/board", "member", "m1")).toBe("/c/a/members/board/m1");
+    expect(pathWithRouteDetail("/c/a/members/board/m1", "member", null)).toBe("/c/a/members/board");
+    expect(pathWithRouteDetail("/c/a/members/board/m1", "membersView", null)).toBe("/c/a/members/m1");
+    expect(pathWithRouteDetail("/m/c/a/members/board", "membersView", null)).toBe("/m/c/a/members");
+  });
+
+  it("is kept when the app rewrites Members' address, and dropped on another page", () => {
+    expect(carryRouteDetails("/c/a/members", "/c/a/members/board")).toBe("/c/a/members/board");
+    expect(carryRouteDetails("/c/a/members", "/c/a/members/board/m1")).toBe("/c/a/members/board/m1");
+    expect(carryRouteDetails("/m/c/a/members", "/c/a/members/board")).toBe("/m/c/a/members/board");
+    expect(carryRouteDetails("/c/a/events", "/c/a/members/board")).toBe("/c/a/events");
+  });
 });

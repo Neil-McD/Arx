@@ -19,7 +19,7 @@ import {
 // Before Nov 17 these rode on the query (?thread=, ?lesson=, ?view=). Those
 // links still open the same place, and are rewritten to the path.
 
-export type RouteDetailKey = "thread" | "lesson" | "view" | "member" | "conversation" | "event" | "homeView";
+export type RouteDetailKey = "thread" | "lesson" | "view" | "membersView" | "member" | "conversation" | "event" | "homeView";
 const LEGACY_TAGS: RouteDetailKey[] = ["thread", "lesson", "view"];
 const CHANGE_EVENT = "polynet:route-detail";
 
@@ -65,6 +65,7 @@ function detailOf(route: AppRoutePathState | null, key: RouteDetailKey): string 
   if (!route) return null;
   if (key === "thread") return route.communityThreadId ?? null;
   if (key === "lesson") return route.communityLessonId ?? null;
+  if (key === "membersView") return route.communityMembersView ?? null;
   if (key === "member") return route.communityMemberKey ?? null;
   if (key === "conversation") return route.communityConversationId ?? null;
   if (key === "event") return route.communityEventKey ?? null;
@@ -85,6 +86,7 @@ export function pathWithRouteDetail(path: string, key: RouteDetailKey, value: st
   const next: AppRoutePathState = { ...route };
   if (key === "thread") next.communityThreadId = readRouteId(value);
   else if (key === "lesson") next.communityLessonId = readRouteId(value);
+  else if (key === "membersView") next.communityMembersView = value === "board" ? "board" : null;
   else if (key === "member") next.communityMemberKey = readRouteId(value);
   else if (key === "conversation") next.communityConversationId = readRouteId(value);
   else if (key === "event") next.communityEventKey = readRouteId(value);
@@ -111,6 +113,7 @@ export function carryRouteDetails(nextPath: string, currentPath: string): string
     communityThreadId: current.communityThreadId ?? null,
     communityLessonId: current.communityLessonId ?? null,
     communityKnowledgeView: current.communityKnowledgeView ?? null,
+    communityMembersView: current.communityMembersView ?? null,
     communityMemberKey: current.communityMemberKey ?? null,
     communityConversationId: current.communityConversationId ?? null,
     communityEventKey: current.communityEventKey ?? null,
