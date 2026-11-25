@@ -11,6 +11,7 @@ import {
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
 import { brainScene, chiefScene, FeatureSection, guideScene, StatementFigures } from "./LandingScenes";
+import { ProductPreview } from "./ProductPreview";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -179,75 +180,6 @@ function OrbitScene() {
       <circle cx="720" cy="690" r="7.5" fill="#FFFFFF" />
       <rect width="1440" height="900" fill="url(#pnFade)" />
     </svg>
-  );
-}
-
-// What the community knows, as the app draws it: clusters around a bright centre.
-function BrainPicture(props: { small?: boolean }) {
-  const spokes: Array<[number, number, Array<[number, number]>]> = [
-    [130, 60, [[96, 38], [90, 72], [140, 28], [164, 46], [112, 94]]],
-    [346, 64, [[320, 38], [358, 30], [384, 48], [382, 84], [326, 96]]],
-    [222, 184, [[182, 170], [176, 200], [200, 216], [236, 218], [268, 206], [270, 176]]],
-  ];
-  return (
-    <svg className={props.small ? "brain small" : "brain"} viewBox="60 14 380 216" role="img" aria-label="A map of what the community knows, in clusters around a glowing centre">
-      <defs><radialGradient id={props.small ? "pnBrainS" : "pnBrain"} cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#C2A9FF" stopOpacity=".75" /><stop offset="1" stopColor="#7C5CF0" stopOpacity="0" /></radialGradient></defs>
-      <g fill="none" stroke="#3A3D46" strokeWidth="1.2">
-        {spokes.map(([x, y, leaves], index) => (
-          <Fragment key={index}>
-            <line x1="240" y1="112" x2={x} y2={y} />
-            {leaves.map(([lx, ly], leaf) => <line key={leaf} x1={x} y1={y} x2={lx} y2={ly} />)}
-          </Fragment>
-        ))}
-        <path d="M240 112 Q352 162 416 150" />
-      </g>
-      <circle cx="240" cy="112" r="42" fill={`url(#${props.small ? "pnBrainS" : "pnBrain"})`} />
-      <circle cx="240" cy="112" r="7.5" fill="#FFFFFF" />
-      {spokes.map(([x, y, leaves], index) => (
-        <Fragment key={index}>
-          {leaves.map(([lx, ly], leaf) => <circle key={leaf} cx={lx} cy={ly} r="3.6" fill={index === 1 ? "#EEF0F4" : "#8A8F98"} />)}
-          <circle cx={x} cy={y} r="6" fill="#EEF0F4" />
-        </Fragment>
-      ))}
-      <circle cx="416" cy="150" r="4.5" fill="#C4B5FD" />
-    </svg>
-  );
-}
-
-function BriefCard(props: { action: ReactNode; line: string; big?: boolean }) {
-  return (
-    <>
-      <span className="shot-eyebrow">Your guide · 9:24 am</span>
-      <strong className={props.big ? "shot-hello big" : "shot-hello"}>Good morning.</strong>
-      <span className="shot-text">{props.line}</span>
-      <div className="shot-ask">
-        <div><b>Check in with Josh</b><span>Quiet for 25 days · next call is Friday</span></div>
-        <div className="shot-acts">{props.action}</div>
-      </div>
-    </>
-  );
-}
-
-// The app itself, drawn small: left menu, the morning brief, the brain beside it.
-function ProductShot() {
-  return (
-    <div className="shot" role="img" aria-label="Polynet's Home: the left menu, the guide's morning brief, and the community brain">
-      <div className="shot-side" aria-hidden="true">
-        <b>Polynet</b>
-        <span className="on">Home</span><span>Inbox</span>
-        <em>Channels</em><span># General</span><span># wins</span>
-        <em>Community</em><span>Knowledge</span><span>Events</span><span>Members</span>
-      </div>
-      <div className="shot-main" aria-hidden="true">
-        <BriefCard big line="Two people finished Start here. Dev asked about pricing overnight and got an answer. One person needs you." action={<i>Review</i>} />
-        <div className="shot-box">Ask your guide anything</div>
-      </div>
-      <div className="shot-rail" aria-hidden="true">
-        <em>The community brain</em>
-        <BrainPicture small />
-        <span>1 learned · 1 new this week</span>
-      </div>
-    </div>
   );
 }
 
@@ -645,8 +577,8 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         </section>
 
         <section className="product" id="how" aria-label="The product" data-rv>
-          <ProductShot />
-          <p className="caption">One workspace for your members, your courses, your events and your community's memory.</p>
+          <ProductPreview />
+          <p className="caption">Try it: review the morning brief, ask the guide in #general, open a member.</p>
         </section>
 
         <StatementFigures />
