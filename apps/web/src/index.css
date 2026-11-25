@@ -1690,6 +1690,7 @@
 .mobile-global-shell {
   display: grid;
   grid-template-columns: var(--mobile-community-rail-width) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 100dvh;
   height: 100dvh;
@@ -1698,6 +1699,8 @@
 }
 
 .mobile-global-shell-surface {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   height: auto;
@@ -1722,9 +1725,11 @@
 .app-root.mobile-shell.mobile-global-shell-active
   .mobile-global-shell-surface
   > .workspace.community-mode {
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
   min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
 }
 

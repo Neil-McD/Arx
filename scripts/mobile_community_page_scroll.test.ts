@@ -30,6 +30,30 @@ describe("Mobile community page scroll, bottom bar, and one-step back contracts"
     );
   });
 
+  it("bounds mobile-global-shell and Settings panels so both personal and community Settings scroll on phones", () => {
+    const indexCss = read("apps/web/src/index.css");
+    const designV1 = read("apps/web/src/styles/design-v1.css");
+
+    expect(indexCss).toMatch(
+      /\.mobile-global-shell\s*\{[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);/,
+    );
+    expect(indexCss).toMatch(
+      /\.mobile-global-shell-surface\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;/,
+    );
+    expect(indexCss).toMatch(
+      /\.mobile-global-shell-surface\s*>\s*\.workspace\.community-mode\s*\{[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\) auto;/,
+    );
+    expect(designV1).toMatch(
+      /:root\[data-design="v1"\]:where\(\[data-layout="phone"\]\) \.app-root\.mobile-shell \.workspace\s*\{[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\) auto;/,
+    );
+    expect(designV1).toMatch(
+      /:root\[data-design="v1"\]:where\(\[data-layout="phone"\]\) \.app-root\.mobile-settings-shell \.settings-panel\s*\{[\s\S]*?overflow-y:\s*auto;/,
+    );
+    expect(designV1).toMatch(
+      /:root\[data-design="v1"\]:where\(\[data-layout="phone"\]\) \.app-root\.mobile-shell \.community-settings-panel\s*\{[\s\S]*?overflow:\s*visible;/,
+    );
+  });
+
   it("clears the bottom bar for Members list and Member record panels on phone", () => {
     const designV1 = read("apps/web/src/styles/design-v1.css");
 
