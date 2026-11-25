@@ -18,7 +18,7 @@ const gateway = (names) =>
     )
     .join("\n");
 const mocks = {
-  "shared/cloudFounderBillingGateway.ts": `export const EMPTY_FOUNDER_BILLING_OVERVIEW = { communities: [] };\n${gateway(["loadCloudFounderBillingOverview", "startCloudFounderBillingPortal", "startCloudFounderSubscriptionCheckout"])}`,
+  "shared/cloudFounderBillingGateway.ts": `export const EMPTY_FOUNDER_BILLING_OVERVIEW = { communities: [] };\n${gateway(["loadCloudFounderBillingOverview", "startCloudFounderBillingPortal", "startCloudFounderSubscriptionCheckout", "switchCloudFounderSubscriptionTier"])}`,
   "shared/cloudCommunityAdminGateway.ts": gateway([
     "archiveCloudCommunity",
     "restoreCloudCommunityWithoutPayment",

@@ -104,7 +104,7 @@ export function CommunityMemberCoachSettingsSection(props: {
       cancelled = true;
       for (const id of timers) window.clearTimeout(id);
     };
-  }, [props.communityId]);
+  }, [props.communityId, props.planTier]);
 
   const save = async (next: {
     enabled: boolean;

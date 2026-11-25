@@ -55,7 +55,7 @@ export function CommunityFounderBriefSection(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.communityId]);
+  }, [props.communityId, props.planTier]);
 
   const save = async (next: { enabled: boolean; localHour: number }) => {
     if (saving) return;
