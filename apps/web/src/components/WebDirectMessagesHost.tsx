@@ -541,9 +541,19 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     };
   }, [activeConversationId, isOpen, listStaysVisible, loadNetworkPeople, searchValue]);
 
+  const activeEngagedConversationId =
+    isOpen && activeConversationId && !directMessagePanel?.deferRead ? activeConversationId : null;
+
   useEffect(() => {
-    onUnreadCountChange?.(countDirectInboxUnread(conversations, true));
-  }, [conversations, onUnreadCountChange]);
+    const visibleForBadge = activeEngagedConversationId
+      ? conversations.map((conversation) =>
+          conversation.id === activeEngagedConversationId
+            ? { ...conversation, has_unread: false, unread_count: 0 }
+            : conversation,
+        )
+      : conversations;
+    onUnreadCountChange?.(countDirectInboxUnread(visibleForBadge, true));
+  }, [activeEngagedConversationId, conversations, onUnreadCountChange]);
 
   const markConversationRead = useCallback(
     async (conversationId: string, throughSeq: number) => {
@@ -1379,6 +1389,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           getAvatarColor={getAvatarColor}
           onSearchValueChange={setSearchValue}
           activeConversationId={activeConversationId}
+          activelyReadingConversationId={activeEngagedConversationId}
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
           kitPage={{ activeCommunityId: props.activeCommunityId ?? null }}

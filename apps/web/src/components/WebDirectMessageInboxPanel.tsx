@@ -6,7 +6,7 @@ import type {
   DirectMessageParticipant,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon, KitApp, Top, View, cx } from "../v1/kit";
 import { ConversationListSkeleton } from "./WebLoadingSkeleton";
 
@@ -31,6 +31,9 @@ type WebDirectMessageInboxPanelProps = {
   onSearchValueChange: (value: string) => void;
   // Design system v1: the conversation open beside the list, if any.
   activeConversationId?: string | null;
+  // The open conversation the viewer is actively reading right now (not deferred
+  // on initial auto-open), so live replies in that chat don't flash as unread.
+  activelyReadingConversationId?: string | null;
   onSelectConversation: (conversation: DirectMessageConversation) => void;
   onSelectPerson: (person: DirectMessageNetworkPerson) => void | Promise<void>;
   // Design system v1, the Inbox page on a wide window: drawn from the kit
@@ -39,6 +42,24 @@ type WebDirectMessageInboxPanelProps = {
 };
 
 type InboxFilter = "reply" | "all" | "here";
+
+export function isInboxConversationUnread(
+  conversation: Pick<DirectMessageConversation, "id" | "viewer_muted" | "has_unread" | "unread_count">,
+  activelyReadingConversationId?: string | null,
+): boolean {
+  if (conversation.viewer_muted) return false;
+  if (activelyReadingConversationId && conversation.id === activelyReadingConversationId) return false;
+  return Boolean(conversation.has_unread || Number(conversation.unread_count ?? 0) > 0);
+}
+
+export function initialInboxFilterFor(args: {
+  conversationsCount: number;
+  isLoading: boolean;
+  needsReply: number;
+}): InboxFilter | null {
+  if (args.isLoading || args.conversationsCount === 0) return null;
+  return args.needsReply > 0 ? "reply" : "all";
+}
 
 // The guide's line at the top of the Inbox, worked out from the list.
 export function inboxLeadFor(needsReply: number, newestFrom?: string | null): string {
@@ -118,9 +139,26 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
 
 function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { activeCommunityId: string | null } }) {
   const isUnread = (conversation: DirectMessageConversation) =>
-    !conversation.viewer_muted && Boolean(conversation.has_unread || Number(conversation.unread_count ?? 0) > 0);
+    isInboxConversationUnread(conversation, props.activelyReadingConversationId);
   const needsReply = props.conversations.filter(isUnread).length;
-  const [filter, setFilter] = useState<InboxFilter | null>(null);
+  // Pick the opening tab once when the list loads, then stay on whatever tab
+  // the viewer is using so live messages update the badge without flipping views.
+  const [filter, setFilter] = useState<InboxFilter | null>(() =>
+    initialInboxFilterFor({
+      conversationsCount: props.conversations.length,
+      isLoading: props.isLoading,
+      needsReply,
+    }),
+  );
+  useEffect(() => {
+    if (filter !== null) return;
+    const initial = initialInboxFilterFor({
+      conversationsCount: props.conversations.length,
+      isLoading: props.isLoading,
+      needsReply,
+    });
+    if (initial !== null) setFilter(initial);
+  }, [filter, needsReply, props.conversations.length, props.isLoading]);
   const [findingSomeone, setFindingSomeone] = useState(false);
   const activeFilter: InboxFilter = filter ?? (needsReply > 0 ? "reply" : "all");
   const here = props.kitPage.activeCommunityId;
