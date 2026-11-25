@@ -47,7 +47,10 @@ import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
+import { communityAgentIsOn } from "./communityApps";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import {
+  founderPlanTierHasProactiveAgent,
   founderSubscriptionStatusGrantsAccess,
   normalizeFounderPlanTier,
 } from "../shared/founderPlan";
@@ -958,11 +961,23 @@ export const readCommunitySettingsForTrustedManagerInternal = internalQuery({
 });
 
 async function builderSettingsView(ctx: any, community: CommunityLike) {
-  const snapshot = await mapCommunitySettingsSnapshot(ctx, community);
+  const [snapshot, agentOn, fundingAdmission] = await Promise.all([
+    mapCommunitySettingsSnapshot(ctx, community),
+    communityAgentIsOn(ctx, community._id),
+    resolveCommunityInferenceFundingAdmission(ctx, community._id, Date.now()),
+  ]);
+  const planTier = fundingAdmission.ok ? fundingAdmission.planTier : "free";
   return {
     name: snapshot.name, slug: snapshot.slug, one_liner: snapshot.one_liner, about: snapshot.about,
     visibility: snapshot.visibility, join_mode: resolveCommunityEntryPolicy(community),
     pricing_mode: snapshot.pricing.mode, avatar_url: snapshot.avatar_url, banner_url: snapshot.banner_url,
+    ai_plan: {
+      tier: planTier,
+      hosted_ai_funded: fundingAdmission.ok,
+      hosted_agent_on: agentOn,
+      proactive_chief_of_staff_active:
+        fundingAdmission.ok && agentOn && founderPlanTierHasProactiveAgent(planTier),
+    },
     settings_revision: snapshot.settings_revision, updated_at: snapshot.updated_at,
   };
 }

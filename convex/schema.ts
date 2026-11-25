@@ -2166,6 +2166,7 @@ export default defineSchema({
     autoReasons: v.array(
       v.union(
         v.literal("commitment_followup"),
+        v.literal("board_coaching"),
         v.literal("quiet_newcomer"),
         v.literal("course_stall"),
         v.literal("quiet_member"),
@@ -2223,6 +2224,7 @@ export default defineSchema({
     memberUserId: v.id("users"),
     reason: v.union(
       v.literal("commitment_followup"),
+      v.literal("board_coaching"),
       v.literal("quiet_newcomer"),
       v.literal("course_stall"),
       v.literal("quiet_member"),

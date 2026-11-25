@@ -129,18 +129,24 @@ test("the community's front page never lists a folder the lens can't open", asyn
 
 // The course-building skill (shared/guideSkills.ts) is for whoever is offered
 // the course tools: a host, through either door. A member finds no such place.
-test("a host reads skills/course-building.md, the same text the guide is given on Knowledge; a member finds nothing there", async () => {
-  const { COURSE_BUILDING_SKILL_MD } = await import("../shared/guideSkills");
+test("a host reads skills/course-building.md and skills/member-board.md; a member finds nothing there", async () => {
+  const { COURSE_BUILDING_SKILL_MD, MEMBER_BOARD_SKILL_MD } = await import("../shared/guideSkills");
   const w = await world();
   for (const kind of DOORS) {
     const owner = w.door("owner", kind);
     const listed: any = await owner("polynet_list", { path: `${ROOT}skills/` });
-    expect(pathsOf(listed.value)).toEqual([`${ROOT}skills/course-building.md`]);
+    expect(pathsOf(listed.value)).toEqual([
+      `${ROOT}skills/course-building.md`,
+      `${ROOT}skills/member-board.md`,
+    ]);
     const read: any = await owner("polynet_read", { path: `${ROOT}skills/course-building.md` });
     expect(read.value.body).toBe(COURSE_BUILDING_SKILL_MD);
+    const readBoard: any = await owner("polynet_read", { path: `${ROOT}skills/member-board.md` });
+    expect(readBoard.value.body).toBe(MEMBER_BOARD_SKILL_MD);
     const member = w.door("member", kind);
     expect(((await member("polynet_list", { path: `${ROOT}skills/` })) as any).ok).toBe(false);
     expect(((await member("polynet_read", { path: `${ROOT}skills/course-building.md` })) as any).ok).toBe(false);
+    expect(((await member("polynet_read", { path: `${ROOT}skills/member-board.md` })) as any).ok).toBe(false);
     expect(pathsOf(((await member("polynet_list", { path: ROOT })) as any).value)).not.toContain(`${ROOT}skills/`);
   }
 });

@@ -383,4 +383,144 @@ describe("Chief of Staff Home stage-move proposals & Daily Brief Board Pulse", (
     expect(md).not.toContain("SUPER_PRIVATE_SAM_CONFESSION_NEVER_LEAK");
     expect(md).not.toContain("PRIVATE_HOST_NOTE_NEVER_IN_BRIEF");
   });
+
+  test("fresh Board coaching notes and stuck status trigger Chief of Staff board_coaching check-ins, pause notes skip at $0 cost, and outcomes record clean labels", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const w = await seedWorld(t, { nowMs, planTier: "chief_of_staff" });
+    const asOwner = t.withIdentity({ subject: "owner" });
+
+    // Sam has a fresh founderInstruction ("PRIVATE_HOST_NOTE_NEVER_IN_BRIEF") updated 1 day ago -> triggers board_coaching!
+    const scan1: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+      communityId: w.communityId,
+      nowMs,
+      autoReasons: [],
+      scanCursorCreatedAt: null,
+    });
+    expect(scan1.candidate).toBeTruthy();
+    expect(scan1.candidate.memberUserId).toBe(w.samId);
+    expect(scan1.candidate.reason).toBe("board_coaching");
+    expect(scan1.candidate.mode).toBe("draft");
+    expect(scan1.candidate.signalSummary).toBe("Follow-up from your coaching note on their Board card");
+    expect(scan1.candidate.signalSummary).not.toContain("PRIVATE_HOST_NOTE_NEVER_IN_BRIEF");
+
+    // Save the draft and approve it -> verify the Board card outcome is a clean human string (never "[object Object]").
+    const savedDraft: any = await t.mutation(internal.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal, {
+      communityId: w.communityId,
+      memberUserId: w.samId,
+      reason: "board_coaching",
+      dedupeKey: scan1.candidate.dedupeKey,
+      signalSummary: scan1.candidate.signalSummary,
+      decision: "send",
+      text: "Hey Sam, how is your landing page launch coming along?",
+      requestedMode: "draft",
+      usedPrivateContext: false,
+      nowMs,
+    });
+    expect(savedDraft.ok).toBe(true);
+    expect(savedDraft.outcome).toBe("draft_waiting");
+
+    await asOwner.mutation(api.communityMemberCoach.sendMemberCoachDraft, {
+      communityId: w.communityId,
+      draftId: savedDraft.draftId,
+    });
+    const boardAfterSend = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: w.communityId,
+    });
+    const samCard = boardAfterSend.cards.find((c: any) => c.membership_id === String(w.samMembershipId));
+    expect(samCard?.agent_outcome).toBe("Guide sent check-in");
+    const storedSamCard = await t.run(async (ctx) =>
+      ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", w.communityId).eq("userId", w.samId),
+        )
+        .unique(),
+    );
+    expect(storedSamCard?.agentOutcomeNote).toBe("Sent Board check-in (approved)");
+    expect(storedSamCard?.agentOutcomeNote).not.toContain("[object Object]");
+    expect(boardAfterSend.hosted_ai_tier).toBe("chief_of_staff");
+    expect(boardAfterSend.hosted_agent_on).toBe(true);
+
+    // Pause instruction on Jules's card never initiates board_coaching outreach even when marked stuck.
+    // Keep Jules past the 14-day newcomer window (and warm via a recent Guide chat) so only board_coaching could fire.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(w.julesMembershipId, {
+        createdAt: nowMs - 20 * DAY_MS,
+        activatedAt: nowMs - 20 * DAY_MS,
+      });
+      const julesThreadId = await ctx.db.insert("threads", {
+        ownerId: w.julesId,
+        title: "Jules Guide chat",
+        titleSource: "auto",
+        communityId: String(w.communityId),
+        createdAt: nowMs - 3 * DAY_MS,
+        updatedAt: nowMs - 2 * DAY_MS,
+      });
+      await ctx.db.insert("cloudMessages", {
+        threadId: julesThreadId,
+        ownerId: w.julesId,
+        messageKey: "msg_jules_warm_1",
+        seq: 1,
+        role: "user",
+        contentJson: [{ type: "text", text: "Checking in on my setup" }],
+        createdAt: nowMs - 2 * DAY_MS,
+      });
+    });
+    await asOwner.mutation(api.communityMemberJourney.updateMemberJourneyCard, {
+      communityId: w.communityId,
+      membershipId: w.julesMembershipId,
+      statusOverride: "stuck",
+      founderInstruction: "Pause nudges this week while traveling",
+    });
+    const scanPaused: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+      communityId: w.communityId,
+      nowMs: nowMs + 60_000,
+      autoReasons: [],
+      scanCursorCreatedAt: null,
+    });
+    // Jules is skipped because of the pause note (the scanner falls back to other lower-priority signals like Maya).
+    expect(scanPaused.candidate?.memberUserId).not.toBe(w.julesId);
+    expect(scanPaused.candidate?.reason).not.toBe("board_coaching");
+
+    // Clearing the pause note while keeping Jules pinned as "stuck" immediately triggers board_coaching!
+    await asOwner.mutation(api.communityMemberJourney.updateMemberJourneyCard, {
+      communityId: w.communityId,
+      membershipId: w.julesMembershipId,
+      founderInstruction: "",
+    });
+    const scanStuck: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+      communityId: w.communityId,
+      nowMs: nowMs + 120_000,
+      autoReasons: [],
+      scanCursorCreatedAt: null,
+    });
+    expect(scanStuck.candidate).toBeTruthy();
+    expect(scanStuck.candidate.memberUserId).toBe(w.julesId);
+    expect(scanStuck.candidate.reason).toBe("board_coaching");
+    expect(scanStuck.candidate.signalSummary).toBe("Flagged as stuck on the Member Board");
+  });
+
+  test("builder/community.json and Board query expose accurate AI plan tier across Free, Guide, and Chief of Staff", async () => {
+    const nowMs = Date.now();
+    for (const tier of ["free", "guide", "chief_of_staff"] as const) {
+      const t = convexTest(schema, modules);
+      const w = await seedWorld(t, { nowMs, planTier: tier });
+      const settings: any = await t.query(internal.communityLifecycle.readCommunitySettingsForTrustedManagerInternal, {
+        userId: w.ownerId,
+        communityId: w.communityId,
+      });
+      expect(settings.ai_plan).toEqual({
+        tier,
+        hosted_ai_funded: tier !== "free",
+        hosted_agent_on: tier !== "free",
+        proactive_chief_of_staff_active: tier === "chief_of_staff",
+      });
+      const board = await t.withIdentity({ subject: "owner" }).query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+        communityId: w.communityId,
+      });
+      expect(board.hosted_ai_tier).toBe(tier);
+      expect(board.hosted_agent_on).toBe(tier !== "free");
+    }
+  });
 });

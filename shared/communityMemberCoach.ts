@@ -40,6 +40,7 @@ export const MEMBER_COACH_DRAFT_MAX_AGE_MS = 7 * DAY_MS;
 export const MEMBER_COACH_SCAN_INTERVAL_MS = 6 * HOUR_MS;
 
 // Signal windows:
+export const BOARD_NOTE_FRESH_MAX_AGE_MS = 14 * DAY_MS;
 export const QUIET_NEWCOMER_MIN_AGE_MS = 2 * DAY_MS;
 export const QUIET_NEWCOMER_MAX_AGE_MS = 14 * DAY_MS;
 export const COURSE_STALL_MIN_AGE_MS = 5 * DAY_MS;
@@ -51,10 +52,22 @@ export const QUIET_MEMBER_EVENT_HORIZON_MS = 7 * DAY_MS;
 // Per-reason dedupe windows:
 export const DEDUPE_WINDOW_MS: Record<MemberCoachReason, number> = {
   commitment_followup: 7 * DAY_MS,
+  board_coaching: 14 * DAY_MS,
   quiet_newcomer: 60 * DAY_MS,
   course_stall: 14 * DAY_MS,
   quiet_member: 30 * DAY_MS,
 };
+
+const PAUSE_INSTRUCTION_PATTERN =
+  /\b(?:pause|skip|stop|mute|hold\s+off|don['’]?t|do\s+not|no)\s+(?:all\s+)?(?:outreach|nudges?|check[-\s]?ins?|messages?|messaging|contact(?:ing)?|follow[-\s]?ups?)\b/i;
+
+// Deterministic pre-judge check so a founder's "pause nudges" / "skip outreach"
+// note on a Member Board card suppresses proactive outreach at $0 AI cost.
+export function instructionRequestsPause(text: string | null | undefined): boolean {
+  const clean = String(text ?? "").trim();
+  if (!clean) return false;
+  return PAUSE_INSTRUCTION_PATTERN.test(clean);
+}
 
 // Quiet hours for automatic outreach (10pm to 8am in the community's timezone).
 export const MEMBER_COACH_QUIET_START_HOUR = 22;

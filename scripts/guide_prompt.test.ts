@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 import { ACTION_TOOLS, actionToolEntry, actionToolsFor, type ActionToolRole } from "../shared/actionTools";
 import { CALL_OPERATION_VARIANTS } from "../shared/operationCatalog";
 import { talkToolNames, type TalkLens } from "../shared/lens";
-import { COURSE_BUILDING_SKILL_MD } from "../shared/guideSkills";
+import { COURSE_BUILDING_SKILL_MD, MEMBER_BOARD_SKILL_MD } from "../shared/guideSkills";
 import { buildRuntimeContextManifest } from "../shared/runtimeContextManifest";
 import {
   GUIDE_CORE_SECTION_IDS,
@@ -118,6 +118,19 @@ describe("the course-building skill", () => {
     expect(section(home, "skill").rendered).toBe(false);
     expect(home.text).not.toContain(COURSE_BUILDING_SKILL_MD);
     expect(home.text).toContain("  - skills/course-building.md : making, changing or reorganising courses and lessons.");
+    expect(home.text).toContain("  - skills/member-board.md : inspecting and updating the Member Board");
+
+    const members = prompt(TALKS.owner, "members");
+    expect(section(members, "skill").rendered).toBe(true);
+    expect(members.text).toContain(MEMBER_BOARD_SKILL_MD);
+    expect(members.text).not.toContain(COURSE_BUILDING_SKILL_MD);
+
+    for (const nonBuilder of [TALKS.member, TALKS.moderator]) {
+      const nonBuilderMembers = prompt(nonBuilder, "members");
+      expect(section(nonBuilderMembers, "skill").rendered).toBe(false);
+      expect(nonBuilderMembers.text).not.toContain("skills/member-board.md");
+      expect(nonBuilderMembers.text).not.toContain(MEMBER_BOARD_SKILL_MD);
+    }
   });
 
   test("a member or moderator has neither the skill nor the pointer, even on Knowledge", () => {

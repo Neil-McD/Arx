@@ -59,6 +59,8 @@ export type CloudMemberJourneyBoard = {
   cards: CloudMemberJourneyCard[];
   total_active_members: number;
   capped: boolean;
+  hosted_ai_tier?: "free" | "guide" | "chief_of_staff";
+  hosted_agent_on?: boolean;
 };
 
 export type CloudJourneyStageAdvanceProposal = {

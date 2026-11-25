@@ -375,8 +375,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   each turn's resource lane follows the private talk's lens (`TalkLens` in
   `shared/lens.ts`, worked out once in `communityAgent`; fails closed without
   community entry). The course-building instructions are a skill
-  (`shared/guideSkills.ts`, Nov 18 2026): a document under skills/ for hosts,
-  in the guide's prompt only when a host is on Knowledge.
+  (`shared/guideSkills.ts`, Nov 18 2026): host-only skill documents under skills/
+  (`course-building.md` loaded on Knowledge; `member-board.md` loaded on Members/Board).
+  Builder `builder/community.json` also includes `ai_plan` (Free / Guide / Chief of Staff
+  and hosted AI status), and Chief of Staff proactive check-ins include `board_coaching`
+  for fresh Board coaching notes and members flagged as stuck.
 
 ### 9. Proactive agent — Keep, growing
 
