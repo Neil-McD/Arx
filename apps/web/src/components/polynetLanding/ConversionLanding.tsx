@@ -321,13 +321,25 @@ function ProductMenu() {
       document.removeEventListener("pointerdown", onPointer);
     };
   }, [open]);
-  const close = () => setOpen(false);
+  // Leaving waits a moment before closing, so crossing the gap between the
+  // button and the panel (or cutting a corner) never drops the menu.
+  const leaving = useRef<number | null>(null);
+  const stay = () => {
+    if (leaving.current !== null) window.clearTimeout(leaving.current);
+    leaving.current = null;
+  };
+  const close = () => { stay(); setOpen(false); };
+  const closeSoon = () => {
+    stay();
+    leaving.current = window.setTimeout(() => { leaving.current = null; setOpen(false); }, 220);
+  };
+  useEffect(() => stay, []);
   return (
     <div
       className="menu"
       ref={wrap}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={close}
+      onMouseEnter={() => { stay(); setOpen(true); }}
+      onMouseLeave={closeSoon}
       // Tabbing out of the menu closes it.
       onBlur={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) close(); }}
     >

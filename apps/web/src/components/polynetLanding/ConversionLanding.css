@@ -85,6 +85,9 @@
   background: var(--surface);
   box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
 }
+/* An unseen bridge over the gap up to the Product button, so the pointer is
+   always over the menu on its way down. */
+.pn-landing .menu-panel::before { content: ""; position: absolute; inset: -28px 0 100% 0; }
 .pn-landing .menu-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 9px; background: #131417; }
 .pn-landing .menu-grid > div { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
 .pn-landing .menu-grid > div + div { border-left: 1px solid var(--line); }
