@@ -10,6 +10,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import { usePageHeaderEnd } from "../components/CommunityPageHeader";
 import { goToMembersPage, useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
+import {
+  isPlainLeftClick,
+  navigateInternalPolynetPath,
+  resolveInternalPolynetPath,
+} from "../../../../shared/internalPolynetLink";
 import { briefAge } from "../../../../shared/communityBriefs";
 import {
   fetchCourseProgressPeople,
@@ -425,6 +430,7 @@ export function KitClassroom(props: {
   // one picked for you only fills it in.
   useEffect(() => {
     if (!open || !props.loaded || !lessonId || lessonId === routeLesson) return;
+    if (!open.lessons.some((entry) => entry.id === lessonId)) return;
     writeRouteDetail("lesson", lessonId, { replace: !routeLesson || lessonId === autoLessonRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId, open?.course.id, props.loaded]);
@@ -858,11 +864,30 @@ export function KitClassroom(props: {
             {lesson.lesson_links?.length || lesson.lesson_files?.length ? (
               <div className={`kit-lesson-after ${cx("kres")}`}>
                 <span className={cx("lab")}>Resources for this lesson</span>
-                {(lesson.lesson_links ?? []).map((link) => (
-                  <a key={link.url} className={cx("kresrow", "klink")} href={link.url} target="_blank" rel="noreferrer noopener">
-                    <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span><Icon name="arrow" />
-                  </a>
-                ))}
+                {(lesson.lesson_links ?? []).map((link) => {
+                  const internalPath = resolveInternalPolynetPath(link.url);
+                  if (internalPath) {
+                    return (
+                      <a
+                        key={link.url}
+                        className={cx("kresrow", "klink")}
+                        href={internalPath}
+                        onClick={(event) => {
+                          if (!isPlainLeftClick(event)) return;
+                          event.preventDefault();
+                          navigateInternalPolynetPath(internalPath);
+                        }}
+                      >
+                        <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span><Icon name="arrow" />
+                      </a>
+                    );
+                  }
+                  return (
+                    <a key={link.url} className={cx("kresrow", "klink")} href={link.url} target="_blank" rel="noreferrer noopener">
+                      <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span><Icon name="arrow" />
+                    </a>
+                  );
+                })}
                 {(lesson.lesson_files ?? []).map((file) => (
                   <button key={file.id} type="button" className={cx("kresrow", "klink")} disabled={fileBusy === file.id}
                     aria-label={`Download ${file.title}`} onClick={() => void downloadLessonFile(file)}>

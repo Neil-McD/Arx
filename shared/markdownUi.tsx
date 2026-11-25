@@ -3,6 +3,11 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed } from "./linkEmbedUi";
+import {
+  isPlainLeftClick,
+  navigateInternalPolynetPath,
+  resolveInternalPolynetPath,
+} from "./internalPolynetLink";
 import { lessonCallout, lessonCalloutType, LESSON_CALLOUT_MARKER } from "./lessonCallouts";
 import { LessonCalloutIcon } from "./lessonCalloutUi";
 import { StrongOrChip, plainTextOf } from "./entityChipsUi";
@@ -762,10 +767,27 @@ function buildMarkdownComponents(headingLevelOffset: number, options?: MarkdownR
       return <StrongOrChip text={plainTextOf(children)}>{children}</StrongOrChip>;
     },
     a({ href, children }) {
+      const rawHref = typeof href === "string" ? href.trim() : "";
+      const internalPath = resolveInternalPolynetPath(rawHref);
+      if (internalPath) {
+        return (
+          <a
+            className="md-link"
+            href={internalPath}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return;
+              event.preventDefault();
+              navigateInternalPolynetPath(internalPath);
+            }}
+          >
+            {children}
+          </a>
+        );
+      }
       const safeHref =
-        typeof href === "string" &&
-        (href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:"))
-          ? href
+        rawHref &&
+        (rawHref.startsWith("https://") || rawHref.startsWith("http://") || rawHref.startsWith("mailto:"))
+          ? rawHref
           : null;
       if (!safeHref) return <>{children}</>;
       return (
