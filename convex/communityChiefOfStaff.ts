@@ -13,6 +13,7 @@ import {
   normalizeIdValue,
 } from "./communityCore";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
+import { readFounderJourneyPulse, type FounderJourneyPulseSummary } from "./communityMemberJourney";
 import { readCachedUserDisplayName as nameOf } from "./profileCore";
 import {
   COURSE_STALL_MIN_AGE_MS,
@@ -59,6 +60,7 @@ export type FounderChiefOfStaffSignals = {
     seats: number;
     messages7d: number;
   }>;
+  journeyPulse?: FounderJourneyPulseSummary;
 };
 
 async function readProactiveGuideSummary(
@@ -360,12 +362,13 @@ export async function readFounderChiefOfStaffSignals(
   args: { community: any; windowStartMs: number; nowMs: number },
 ): Promise<FounderChiefOfStaffSignals> {
   const names = new Map<string, string>();
-  const [proactiveGuide, stalledLearners, quietPayingMembers, risingContributors, podHealth] = await Promise.all([
+  const [proactiveGuide, stalledLearners, quietPayingMembers, risingContributors, podHealth, journeyPulse] = await Promise.all([
     readProactiveGuideSummary(ctx, args.community._id, args.windowStartMs, args.nowMs),
     readStalledLearnersSummary(ctx, args.community, args.nowMs, names),
     readQuietPayingMembers(ctx, args.community, args.nowMs, names),
     readRisingContributors(ctx, args.community, args.nowMs, names),
     readPodHealthSummary(ctx, args.community._id, args.nowMs),
+    readFounderJourneyPulse(ctx, { community: args.community, windowStartMs: args.windowStartMs, nowMs: args.nowMs }),
   ]);
   return {
     proactiveGuide,
@@ -373,5 +376,6 @@ export async function readFounderChiefOfStaffSignals(
     quietPayingMembers,
     risingContributors,
     podHealth,
+    journeyPulse,
   };
 }

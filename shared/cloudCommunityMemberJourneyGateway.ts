@@ -61,6 +61,61 @@ export type CloudMemberJourneyBoard = {
   capped: boolean;
 };
 
+export type CloudJourneyStageAdvanceProposal = {
+  membership_id: string;
+  member_name: string;
+  member_handle: string | null;
+  from_stage_key: string;
+  from_stage_name: string;
+  to_stage_key: string;
+  to_stage_name: string;
+  to_stage_goal: string;
+  completed_labels: string[];
+};
+
+export async function listCloudJourneyStageAdvanceProposals<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+}): Promise<CloudJourneyStageAdvanceProposal[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.query("communityMemberJourney:listJourneyStageAdvanceProposals" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as CloudJourneyStageAdvanceProposal[];
+}
+
+export async function approveCloudJourneyStageAdvance<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  membershipId: string;
+  expectedFromStageKey: string;
+  targetStageKey: string;
+}): Promise<{ status: "moved" | "already_moved" | "no_longer_ready"; stage_key: string }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.mutation("communityMemberJourney:approveJourneyStageAdvance" as any, {
+    authSubject,
+    communityId: params.communityId,
+    membershipId: params.membershipId,
+    expectedFromStageKey: params.expectedFromStageKey,
+    targetStageKey: params.targetStageKey,
+  })) as { status: "moved" | "already_moved" | "no_longer_ready"; stage_key: string };
+}
+
+export async function dismissCloudJourneyStageAdvance<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  membershipId: string;
+  expectedFromStageKey: string;
+}): Promise<{ dismissed_for_stage_key: string }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.mutation("communityMemberJourney:dismissJourneyStageAdvance" as any, {
+    authSubject,
+    communityId: params.communityId,
+    membershipId: params.membershipId,
+    expectedFromStageKey: params.expectedFromStageKey,
+  })) as { dismissed_for_stage_key: string };
+}
+
 export async function getCloudCommunityMemberJourneyBoard<SessionT>(params: {
   session: SessionT;
   communityId: string;

@@ -82,7 +82,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityMemberJourney` (Member Journey Board: ordered plain-English stages, activation checkpoints, member cards with derived health
   status, logged wins, privacy-safe agent outcome notes, and founder instructions; mounted across all three agent lenses via
   `members/me/context.md`, silent `member_private` coaching context, `builder/journey.json`, `members/<handle>.json` for builders,
-  and 7 builder-only MCP/Guide action tools `community.journey.*`; `apps/web/src/v1/KitMembersBoard.tsx`),
+  7 builder-only MCP/Guide action tools `community.journey.*`, Chief of Staff one-click stage-move approval cards on Home, and Daily Founder Brief Board Pulse; `apps/web/src/v1/KitMembersBoard.tsx`),
   `communityMemberProfiles` (Members for members: who is here, and the one profile of a person that channels and Members both open, `apps/web/src/v1/KitProfile.tsx`),
   `memberEntryDestination`, `platformHomeCommunity`, `communityPeople` (one person, one action, from someone's
   own AI).

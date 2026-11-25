@@ -294,7 +294,10 @@ export function snapshotIsQuiet(snapshot: FounderBriefSnapshot): boolean {
         cos.proactiveGuide.repliesAutoPostedInWindow > 0 ||
         cos.stalledLearners.length > 0 ||
         cos.quietPayingMembers.count > 0 ||
-        cos.risingContributors.length > 0),
+        cos.risingContributors.length > 0 ||
+        (cos.journeyPulse?.readyToAdvanceCount ?? 0) > 0 ||
+        (cos.journeyPulse?.needsAttentionCount ?? 0) > 0 ||
+        (cos.journeyPulse?.recentWins.length ?? 0) > 0),
   );
   return snapshot.newMembers.count === 0 && snapshot.activity.posts === 0 && snapshot.activity.replies === 0
     && snapshot.unanswered.length === 0 && snapshot.joinRequestsPending === 0 && snapshot.upcomingEvents.length === 0
@@ -328,6 +331,14 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
       if (cos.proactiveGuide.replyDraftsWaiting) parts.push(`${plural(cos.proactiveGuide.replyDraftsWaiting, "reply draft")}`);
       waiting.push(`Your guide suggests: ${parts.join(" and ")} ready on Home.`);
     }
+    if (cos.journeyPulse && cos.journeyPulse.readyToAdvanceCount > 0) {
+      const sample = cos.journeyPulse.readyToAdvanceNames.length
+        ? ` (${cos.journeyPulse.readyToAdvanceNames.join(", ")})`
+        : "";
+      waiting.push(
+        `Member Board: ${plural(cos.journeyPulse.readyToAdvanceCount, "member")} ready to advance${sample}.`,
+      );
+    }
   }
   for (const post of snapshot.unanswered) waiting.push(`${post.author} in #${post.channel}, ${post.hoursAgo}h with no reply: "${post.text}"`);
   if (waiting.length) sections.push({ title: "Waiting on you", items: waiting.slice(0, 5) });
@@ -356,6 +367,18 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
     const topContrib = cos.risingContributors.map((c) => `${c.name} (${c.posts + c.replies})`).join(", ");
     people.push(`Rising contributors this week: ${topContrib}.`);
   }
+  if (cos && cos.journeyPulse && cos.journeyPulse.recentWins.length > 0) {
+    const wins = cos.journeyPulse.recentWins.map((w) => `${w.memberName} — ${w.text}`).join("; ");
+    people.push(`Recent member wins: ${wins}.`);
+  }
+  if (cos && cos.journeyPulse && cos.journeyPulse.needsAttentionCount > 0) {
+    const namesSuffix = cos.journeyPulse.needsAttentionNames.length
+      ? `: ${cos.journeyPulse.needsAttentionNames.join(", ")}`
+      : "";
+    people.push(
+      `Member Board: ${plural(cos.journeyPulse.needsAttentionCount, "member")} stuck or needing attention${namesSuffix}.`,
+    );
+  }
   if (snapshot.quietNewcomers.count) people.push(`${plural(snapshot.quietNewcomers.count, "newcomer")} haven't posted yet: ${snapshot.quietNewcomers.names.join(", ")}.`);
   if (people.length) sections.push({ title: "People", items: people.slice(0, 5) });
 
@@ -375,11 +398,13 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
     ? `Reply to ${snapshot.unanswered[0].author} in #${snapshot.unanswered[0].channel}.`
     : cos && (cos.proactiveGuide.coachDraftsWaiting > 0 || cos.proactiveGuide.replyDraftsWaiting > 0)
       ? `Review your guide's waiting drafts on Home.`
-      : cos && cos.quietPayingMembers.names[0]
-        ? `Check in with paying member ${cos.quietPayingMembers.names[0]}, who has been quiet for 2+ weeks.`
-        : cos && cos.stalledLearners[0]
-          ? `Follow up with learners paused in ${cos.stalledLearners[0].course}.`
-          : null;
+      : cos && cos.journeyPulse && cos.journeyPulse.readyToAdvanceCount > 0
+        ? `Review ${plural(cos.journeyPulse.readyToAdvanceCount, "stage move")} ready on Home.`
+        : cos && cos.quietPayingMembers.names[0]
+          ? `Check in with paying member ${cos.quietPayingMembers.names[0]}, who has been quiet for 2+ weeks.`
+          : cos && cos.stalledLearners[0]
+            ? `Follow up with learners paused in ${cos.stalledLearners[0].course}.`
+            : null;
   return {
     headline: waiting.length ? `${plural(waiting.length, "thing")} waiting on you in ${snapshot.communityName}` : `Your day in ${snapshot.communityName}`,
     sections: sections.slice(0, 5),
@@ -391,7 +416,7 @@ export const FOUNDER_BRIEF_PROMPT = [
   "You are this community's AI chief of staff writing the founder's morning brief.",
   "Write like a sharp chief of staff: short, specific, warm, no filler.",
   "Use only facts in the snapshot. Never invent people, numbers or events, and never quote or speculate about members' private chats or private pod messages.",
-  "Lead with what needs the founder (join requests, waiting guide drafts on Home, unanswered posts), then what the guide did, then people signals (quiet paying members at churn risk, stalled course learners, rising contributors, new and quiet newcomers), then activity/pod health and what's coming up.",
+  "Lead with what needs the founder (join requests, waiting guide drafts and ready stage moves on Home, unanswered posts), then what the guide did, then people signals (recent member wins, Member Board stuck/needs-you highlights, quiet paying members at churn risk, stalled course learners, rising contributors, new and quiet newcomers), then activity/pod health and what's coming up.",
   "Name people. Event start times are already formatted in the founder's local time (e.g. \"Sat 7:00 AM\"); include them naturally without raw UTC timestamps.",
   "End with one concrete suggested next step the founder can do in two minutes.",
   "Reply with JSON only: {\"headline\": string (max 90 chars), \"sections\": [{\"title\": string (max 30 chars), \"items\": [string (max 220 chars)]}] (1-5 sections, 1-5 items each), \"next_step\": string (max 160 chars)}.",
