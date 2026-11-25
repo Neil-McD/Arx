@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import { useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
 import {
@@ -8,8 +8,6 @@ import {
   type ResourceReadState,
 } from "../../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
-import { WebDeleteResourceModuleModal } from "../components/WebDeleteResourceModuleModal";
-import { WebCommunityResourceModuleModal } from "../components/WebCommunityResourceModuleModal";
 
 type SessionLike = unknown;
 
@@ -111,8 +109,6 @@ export type UseWebCommunityResourceUiControllerResult<
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
   handleCreateBlankPageDraft: (moduleId: string, title?: string) => Promise<ResourceT | null>;
-  resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
-  resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   loadCommunityResourceModules: (communityId: string, session: SessionT) => Promise<void>;
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
 };
@@ -404,78 +400,6 @@ export function useWebCommunityResourceUiController<
     },
     handleDeleteResource,
     handleCreateBlankPageDraft,
-    resourceModuleModalProps: {
-      isOpen: showResourceModuleModal,
-      isEditingModule: Boolean(editingResourceModuleId),
-      hasActiveCommunity: Boolean(params.activeCommunityId),
-      moduleNameInput,
-      moduleDescriptionInput,
-      moduleBannerUrlInput,
-      moduleBannerFocusX,
-      moduleBannerFocusY,
-      moduleBannerZoom,
-      isModuleBannerDragOver,
-      isProcessingModuleBanner,
-      moduleBannerUploadError,
-      isModuleBannerFocusModalOpen,
-      moduleError: resourceModuleError,
-      isSavingModule: isSavingResourceModule,
-      onClose: () => {
-        setShowResourceModuleModal(false);
-        setIsModuleBannerFocusModalOpen(false);
-      },
-      onCancel: () => {
-        setEditingResourceModuleId(null);
-        setEditingResourceModuleBannerStorageId(null);
-        setEditingResourceModuleBannerUrl(null);
-        setModuleNameInput("");
-        setModuleDescriptionInput("");
-        setModuleBannerUrlInput("");
-        setModuleBannerFocusX(0.5);
-        setModuleBannerFocusY(0.5);
-        setModuleBannerZoom(1);
-        setModuleBannerUploadError(null);
-        setIsModuleBannerFocusModalOpen(false);
-        setResourceModuleError(null);
-        setShowResourceModuleModal(false);
-      },
-      onSave: handleSaveCommunityResourceModule,
-      onDelete: editingResourceModuleId ? () => handleDeleteModule(editingResourceModuleId) : null,
-      onChangeName: setModuleNameInput,
-      onChangeDescription: setModuleDescriptionInput,
-      onChangeBannerFocusX: setModuleBannerFocusX,
-      onChangeBannerFocusY: setModuleBannerFocusY,
-      onChangeBannerZoom: setModuleBannerZoom,
-      onSetBannerDragOver: setIsModuleBannerDragOver,
-      onBannerDrop: handleModuleBannerDrop,
-      onBannerUpload: handleModuleBannerUpload,
-      onOpenBannerFocusModal: () => setIsModuleBannerFocusModalOpen(true),
-      onCloseBannerFocusModal: () => setIsModuleBannerFocusModalOpen(false),
-      onRemoveBanner: () => {
-        setModuleBannerUrlInput("");
-        setModuleBannerFocusX(0.5);
-        setModuleBannerFocusY(0.5);
-        setModuleBannerZoom(1);
-        setModuleBannerUploadError(null);
-        setIsModuleBannerFocusModalOpen(false);
-      },
-    },
-    resourceModuleDeleteModalProps: {
-      isOpen: Boolean(pendingDeleteResourceModule),
-      moduleName: pendingDeleteResourceModule?.name ?? null,
-      lessonCount: pendingDeleteResourceModuleLessonCount,
-      moduleNameInput: moduleDeleteNameInput,
-      deleteInput: moduleDeleteWordInput,
-      isDeleting: isDeletingResourceModule,
-      error: resourceModuleDeleteError ?? resourceModuleError,
-      onChangeModuleNameInput: setModuleDeleteNameInput,
-      onChangeDeleteInput: setModuleDeleteWordInput,
-      onClose: () => {
-        if (isDeletingResourceModule) return;
-        resetModuleDeleteState();
-      },
-      onConfirm: confirmDeleteModule,
-    },
     resourceRead,
     moduleRead,
     applyLiveResourceCollection,

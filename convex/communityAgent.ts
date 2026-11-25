@@ -341,7 +341,7 @@ async function buildCommunitySoulMemoryView(ctx: any, communityId: any) {
     memoryIndexFor(ctx, scope),
     notesByUpdated(ctx, scope).order("desc").take(80),
   ]);
-  const liveNotes = noteRows.filter((note: any) => note.status === "current");
+  // All rows in `communityNotes` are live (removed notes move to `communityNoteRemovals`).
   const primary = selectPrimaryCommunityAgentConfigRow(configRows) as any;
   const customSoul = cleanAgentSoulText(primary?.communitySoulMd);
   return {
@@ -351,8 +351,8 @@ async function buildCommunitySoulMemoryView(ctx: any, communityId: any) {
     soul_updated_by: primary?.communitySoulUpdatedBy ?? null,
     soul_max_chars: AGENT_SOUL_MAX_CHARS,
     memory_summary_md: String(indexRow?.bodyMd ?? "").trim(),
-    memory_note_count: liveNotes.length,
-    memory_updated_at: indexRow?.updatedAt ?? liveNotes[0]?.updatedAt ?? null,
+    memory_note_count: noteRows.length,
+    memory_updated_at: indexRow?.updatedAt ?? noteRows[0]?.updatedAt ?? null,
   };
 }
 

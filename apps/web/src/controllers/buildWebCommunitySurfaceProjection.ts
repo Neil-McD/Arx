@@ -82,8 +82,6 @@ export type BuildWebCommunitySurfaceProjectionParams = {
   eventsActions: WebCommunitySecondaryPanelsProps["events"]["actions"];
   canManageResourcesActiveCommunity: boolean;
   canModerateContentActiveCommunity: boolean;
-  resourceModuleModalProps: WebCommunitySecondaryPanelsProps["resourceModuleModal"];
-  resourceModuleDeleteModalProps: WebCommunitySecondaryPanelsProps["resourceModuleDeleteModal"];
   podsProps: WebCommunitySecondaryPanelsProps["pods"];
   discoverProps: WebCommunitySecondaryPanelsProps["discover"];
   memberPreview?: boolean;
@@ -246,8 +244,6 @@ export function buildWebCommunitySurfaceProjection(
       state: params.eventsState,
       actions: params.eventsActions,
     },
-    resourceModuleModal: params.resourceModuleModalProps,
-    resourceModuleDeleteModal: params.resourceModuleDeleteModalProps,
     pods: params.podsProps,
     discover: params.discoverProps,
   };

@@ -10,8 +10,6 @@ import type { WebCommunityBannerEditorModal as WebCommunityBannerEditorModalType
 import type { WebCommunityEventsSection as WebCommunityEventsSectionType } from "./WebCommunityEventsSection";
 import type { WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
 import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
-import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
-import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import type { CommunityResourcesPanel as CommunityResourcesPanelType } from "./CommunityResourcesPanel";
 import type { WebCommunityKnowledgePanel as WebCommunityKnowledgePanelType } from "./WebCommunityKnowledgePanel";
 import type { WebCommunitySettingsSection as WebCommunitySettingsSectionType } from "./WebCommunitySettingsSection";
@@ -80,8 +78,6 @@ export type WebCommunitySecondaryPanelsProps = {
   events: ComponentProps<typeof WebCommunityEventsSectionType>;
   pods: WebCommunityPodsSectionProps;
   discover: WebCommunityDiscoverPageProps;
-  resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
-  resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
 };
 
 function renderCenteredPane(children: ReactNode) {
@@ -138,13 +134,8 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
 
-      {props.communityTab === "resources" ? (
-        <>
-          {renderCenteredPane(<WebCommunityKnowledgePanel key={props.knowledge.communityId} context={props.knowledge} resources={props.resources} />)}
-          <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
-          <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
-        </>
-      ) : null}
+      {props.communityTab === "resources" &&
+        renderCenteredPane(<WebCommunityKnowledgePanel key={props.knowledge.communityId} context={props.knowledge} resources={props.resources} />)}
 
       {props.communityTab === "events" &&
         renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}

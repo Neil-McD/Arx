@@ -8,8 +8,10 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Check, ChevronRight, Download, Plus, Search, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { memberKey, memberStatus, type MemberTableRow } from "../../../../shared/communityMembersTable";
-import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
-import type { CommunityAdmissionControl } from "../components/CommunityAutoJoinControl";
+import type {
+  CommunityAdmissionControl,
+  CommunityAdmissionJoinRequest,
+} from "../components/communityAdmissionTypes";
 import { Btn, cx } from "./kit";
 
 type Avatars = { getAvatarColor: (id: string) => string; getInitials: (name: string) => string };

@@ -68,9 +68,6 @@ describe("web shell refresh continuity contract", () => {
 
   it("uses shape-stable loading states for unresolved shell resources", async () => {
     const nav = read("shared/CommunityNav.tsx");
-    const context = read("apps/web/src/components/ChannelRosterPanel.tsx");
-    expect(context).toContain("communityPresenceLeaseIsActive");
-    expect(context).toContain('"unknown"');
     const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
     const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
     const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");

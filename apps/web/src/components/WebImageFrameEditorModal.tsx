@@ -1,0 +1,243 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  clampCoverZoom,
+  computeCoverFrameLayout,
+  focusFromCoverFramePosition,
+  getCoverFrameImageStyle,
+  measureFramedMediaViewport,
+  type CoverFrameLayout,
+} from "../../../../shared/coverFrameUi";
+import { useImageResource } from "../../../../shared/useImageResource";
+
+export type WebImageFrameEditorModalProps = {
+  isOpen: boolean;
+  imageUrl: string | null;
+  focusX: number;
+  focusY: number;
+  zoom: number;
+  title: string;
+  imageAlt: string;
+  hint: string;
+  aspectRatio?: string;
+  modalClassName?: string;
+  viewportClassName?: string;
+  hintClassName?: string;
+  fieldClassName?: string;
+  usePortal?: boolean;
+  onChangeFocusX: (value: number) => void;
+  onChangeFocusY: (value: number) => void;
+  onChangeZoom: (value: number) => void;
+  onDirty: () => void;
+  onClose: () => void;
+};
+
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startLayout: CoverFrameLayout;
+};
+
+export function WebImageFrameEditorModal(props: WebImageFrameEditorModalProps) {
+  const {
+    isOpen,
+    imageUrl,
+    focusX,
+    focusY,
+    zoom,
+    title,
+    imageAlt,
+    hint,
+    aspectRatio,
+    modalClassName = "modal banner-focus-modal",
+    viewportClassName = "banner-editor-viewport",
+    hintClassName = "create-community-hint banner-editor-hint",
+    fieldClassName = "create-community-field banner-focus-field",
+    usePortal = false,
+    onChangeFocusX,
+    onChangeFocusY,
+    onChangeZoom,
+    onDirty,
+    onClose,
+  } = props;
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const imageResource = useImageResource(imageUrl);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const syncViewport = () => {
+      const measured = measureFramedMediaViewport(viewport);
+      setViewportSize({
+        width: Math.max(0, Math.round(measured.width)),
+        height: Math.max(0, Math.round(measured.height)),
+      });
+    };
+    syncViewport();
+    const observer = new ResizeObserver(syncViewport);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      dragStateRef.current = null;
+      setIsDragging(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [isOpen, onClose]);
+
+  const layout = useMemo(
+    () =>
+      computeCoverFrameLayout({
+        viewportWidth: viewportSize.width,
+        viewportHeight: viewportSize.height,
+        naturalWidth: imageResource.status === "ready" ? imageResource.resource.width : 0,
+        naturalHeight: imageResource.status === "ready" ? imageResource.resource.height : 0,
+        focusX,
+        focusY,
+        zoom,
+      }),
+    [focusX, focusY, imageResource, viewportSize.height, viewportSize.width, zoom],
+  );
+
+  const commitDraggedPosition = useCallback(
+    (dragLayout: CoverFrameLayout, nextLeft: number, nextTop: number) => {
+      const clampedLeft = Math.max(dragLayout.minLeft, Math.min(0, nextLeft));
+      const clampedTop = Math.max(dragLayout.minTop, Math.min(0, nextTop));
+      const nextFocus = focusFromCoverFramePosition(dragLayout, clampedLeft, clampedTop);
+      onChangeFocusX(nextFocus.focusX);
+      onChangeFocusY(nextFocus.focusY);
+      onDirty();
+    },
+    [onChangeFocusX, onChangeFocusY, onDirty],
+  );
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!layout) return;
+      if (event.button !== 0) return;
+      event.preventDefault();
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startLayout: layout,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setIsDragging(true);
+    },
+    [layout],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = dragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      commitDraggedPosition(
+        dragState.startLayout,
+        dragState.startLayout.left + (event.clientX - dragState.startX),
+        dragState.startLayout.top + (event.clientY - dragState.startY),
+      );
+    },
+    [commitDraggedPosition],
+  );
+
+  const handlePointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    dragStateRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setIsDragging(false);
+  }, []);
+
+  if (!isOpen || !imageUrl) return null;
+
+  const modal = (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className={modalClassName} onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{title}</div>
+          <button className="modal-close" type="button" onClick={onClose} title="Close">
+            ×
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="banner-editor-stage">
+            <div
+              ref={viewportRef}
+              className={`${viewportClassName}${isDragging ? " dragging" : ""}`}
+              style={aspectRatio ? { aspectRatio } : undefined}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+              onPointerCancel={handlePointerEnd}
+            >
+              {layout ? (
+                <img
+                  className="banner-editor-image"
+                  src={imageUrl}
+                  alt={imageAlt}
+                  draggable={false}
+                  style={getCoverFrameImageStyle(layout)}
+                />
+              ) : null}
+            </div>
+            <div className={hintClassName}>{hint}</div>
+          </div>
+          <div className="banner-editor-controls">
+            <label className={fieldClassName}>
+              <span>Zoom</span>
+              <input
+                type="range"
+                min="100"
+                max="250"
+                step="1"
+                value={Math.round(clampCoverZoom(zoom) * 100)}
+                onChange={(event) => {
+                  onChangeZoom(Number(event.target.value) / 100);
+                  onDirty();
+                }}
+              />
+            </label>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <div className="resource-modal-actions">
+            <button type="button" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return usePortal && typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
+}

@@ -1,6 +1,6 @@
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { CommunityMembersPagePanel } from "./ChannelRosterPanel";
-import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
+import type { CommunityAdmissionControl } from "./communityAdmissionTypes";
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import { communityRosterProps } from "./WebCommunityInteractionProjection";
 

@@ -5,7 +5,7 @@ import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
 import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useRef, type ComponentProps } from "react";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
-import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
+import type { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import type { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 import "./WebCommunityKnowledgePanel.css";
@@ -26,7 +26,20 @@ type Props = {
 
 export function WebCommunityKnowledgePanel(props: Props) {
   if (props.context.communityId && props.context.canViewGraph) return <KnowledgeV1 {...props} />;
-  return <KnowledgeClassic {...props} />;
+  return (
+    <section className="community-knowledge-page" aria-label="Knowledge">
+      <CommunityPageHeader title="Knowledge">
+        <div className="community-knowledge-header">
+          <h1>Knowledge</h1>
+        </div>
+      </CommunityPageHeader>
+      <div className="chat-empty">
+        {!props.context.communityId
+          ? "Select a community to view its knowledge."
+          : "Knowledge is available to members of this community."}
+      </div>
+    </section>
+  );
 }
 
 // A source Polynet couldn't take, in plain words.
@@ -208,19 +221,6 @@ function KnowledgeV1({ resources, context }: Props) {
             },
           } : null}
           renderRail={(rail) => <CommunityPageRail label="Knowledge">{rail}</CommunityPageRail>} />}
-    </section>
-  );
-}
-
-function KnowledgeClassic({ resources }: Props) {
-  return (
-    <section className="community-knowledge-page" aria-label="Knowledge">
-      <CommunityPageHeader title="Knowledge">
-        <div className="community-knowledge-header">
-          <h1>Knowledge</h1>
-        </div>
-      </CommunityPageHeader>
-      <CommunityResourcesPanel {...resources} />
     </section>
   );
 }
