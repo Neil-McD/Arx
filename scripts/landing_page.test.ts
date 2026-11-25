@@ -32,7 +32,7 @@ test("the page sells the product in plain words, with one door in", () => {
   expect(html).toContain("A normal community forgets.");
   expect(html).toContain("Yours will think.");
   for (const heading of ["Stop answering<br/>the same question twice.", "Good answers get<br/>buried in old threads.",
-    "Know who's slipping before they cancel.", "Free to build. Add an AI when you're ready.", "Compare plans"]) {
+    "Members drift away<br/>before you notice.", "Free to build. Add an AI when you're ready.", "Compare plans"]) {
     expect(html).toContain(heading);
   }
   expect(html).toContain("Recommended");

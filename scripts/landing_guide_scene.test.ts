@@ -56,3 +56,19 @@ test("the brain graph: only the middle and each cluster are named, and each kind
 });
 
 
+
+test("the Chief of Staff scene: the 8am brief and the guide's suggestions, and only true claims", async () => {
+  const { ChiefScene, morningBrief } = await import("../apps/web/src/components/polynetLanding/ChiefScene");
+  const html = renderToStaticMarkup(React.createElement(ChiefScene)).replace(/&#x27;/g, "'");
+  expect(html).toContain("8:00 am");
+  expect(html).toContain("Two things need you.");
+  expect(html).toContain("Your guide suggests");
+  // A reply is only drafted once a question has waited a day.
+  expect(html).toContain("no answer for 26 hours");
+  expect(morningBrief(1)).toContain("One thing needs you.");
+  expect(morningBrief(0)).toContain("That's everything for today.");
+  const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
+  expect(page).toContain("Members drift away<br/>before you notice.");
+  // Nothing reaches people who already left; the buttons say Send, Edit, Skip.
+  expect(page).not.toMatch(/Win-backs|Approve, edit or skip|Usage and limits/);
+});

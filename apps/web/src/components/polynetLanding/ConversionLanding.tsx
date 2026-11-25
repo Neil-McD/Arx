@@ -10,11 +10,12 @@ import {
 } from "../../../../../shared/founderPlan";
 import { rememberLandingPlanChoice } from "../../../../../shared/landingPlanChoice";
 import { StableFramedMedia } from "../../../../../shared/StableFramedMedia";
-import { chiefScene, FeatureSection, StatementFigures } from "./LandingScenes";
+import { FeatureSection, StatementFigures } from "./LandingScenes";
 // The real app's kit is heavy, so the preview loads after the hero paints.
 const RealAppPreview = lazy(() => import("./RealAppPreview").then((module) => ({ default: module.RealAppPreview })));
 const GuideScene = lazy(() => import("./GuideScene").then((module) => ({ default: module.GuideScene })));
 const BrainScene = lazy(() => import("./BrainScene").then((module) => ({ default: module.BrainScene })));
+const ChiefScene = lazy(() => import("./ChiefScene").then((module) => ({ default: module.ChiefScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -525,7 +526,6 @@ function useReveal(late: unknown) {
 export function ConversionLanding({ onJoin }: JoinProps) {
   const [communities, setCommunities] = useState<DiscoverCommunitySnapshot[]>([]);
   const reveal = useReveal(communities.length);
-  const chief = chiefScene();
 
   useEffect(() => {
     const moved = movedToPricing(window.location.hash);
@@ -591,9 +591,10 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           Polynet keeps them. Helpful answers become notes on one map, filed under your lessons, so what one member figures out, the next one finds.
         </FeatureSection>
 
-        <FeatureSection id="chief-of-staff" title={["Morning briefs", "and check-ins"]} sceneLabel="The morning brief, with a drafted check-in for a quiet member who is lit in the members list behind it" {...chief}
-          features={["Morning brief", "Member check-ins", "Win-backs", "Reply drafts", "Approve, edit or skip", "Usage and limits"]}>
-          Know who's slipping before they cancel. Your chief of staff checks in on quiet members and drafts replies to unanswered questions, then waits for your yes.
+        <FeatureSection id="chief-of-staff" title={["Members drift away", "before you notice."]} sceneLabel="Try the Chief of Staff: read the 8am brief, then send, edit or skip the check-in for a quiet member and the reply drafted for an unanswered question"
+          live={<Suspense fallback={<div className="gsc-wait" />}><ChiefScene /></Suspense>}
+          features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "A monthly AI allowance you control"]}>
+          Your chief of staff watches the whole community for you. Every morning it tells you what happened, who's gone quiet and which questions nobody answered, then drafts what to say. You send it, change it, or skip it.
         </FeatureSection>
 
         <Showcase communities={communities} />

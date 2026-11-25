@@ -417,6 +417,18 @@
 .pn-landing .gsc-typing { display: inline-flex; gap: 5px; padding-top: 10px; }
 .pn-landing .gsc-typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--ai); animation: pn-typing 1.1s ease-in-out infinite; }
 .pn-landing .gsc-typing i:nth-child(2) { animation-delay: .15s; } .pn-landing .gsc-typing i:nth-child(3) { animation-delay: .3s; }
+/* The Chief of Staff's scene (ChiefScene.tsx): the host's morning in front
+   (the 8am brief, then "Your guide suggests"), the Members table behind. */
+.pn-landing .scene.live:has(.csc) { height: 700px; }
+.pn-landing .csc .gsc-back { height: 600px; }
+.pn-landing .csc-brief { margin: 14px 0 6px; }
+.pn-landing .csc-brief > * { display: flex !important; flex-direction: column; }
+.pn-landing .csc-brief p { font-size: 16px !important; }
+.pn-landing .csc-said { margin: 12px 0 0; color: #c4b5fd; font-size: 13.5px; line-height: 1.45; }
+.pn-landing .csc-allowance { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .06); color: #7d7f82; font-size: 12.5px; }
+.pn-landing .csc-allowance i { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.pn-landing .csc-allowance b { display: block; height: 100%; border-radius: 2px; background: #a78bfa; }
+
 /* The community brain's scene (BrainScene.tsx): a simple network straight on
    the page (the community, its branches named, a few dots on each), with the
    card beside it. */
@@ -518,6 +530,10 @@
   .pn-landing .scene.live:has(.gsc) { height: 460px; }
   .pn-landing .gsc { zoom: .6; height: 766px; }
   .pn-landing .gsc-talk { min-height: 150px; }
+  /* Chief of Staff: its card is taller, so the table sits lower and Josh's lit row shows under it. */
+  .pn-landing .scene.live:has(.csc) { height: 560px; }
+  .pn-landing .gsc.csc { height: 933px; }
+  .pn-landing .gsc.csc .gsc-back { top: 400px; }
   .pn-landing .gsc .gsc-back { top: 230px; left: 22%; height: 520px;
     -webkit-mask-image: linear-gradient(90deg, #000 72%, transparent), linear-gradient(180deg, #000 72%, transparent);
     mask-image: linear-gradient(90deg, #000 72%, transparent), linear-gradient(180deg, #000 72%, transparent); }
