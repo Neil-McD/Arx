@@ -13,12 +13,16 @@ import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
 import { parseCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract.ts";
 import {
+  BUILDER_JOURNEY_STATUS_SLICES,
   POLYNET_JOIN_REQUESTS_DIRECTORY_PATH,
   POLYNET_BUILDER_ANALYTICS_PATH,
+  POLYNET_BUILDER_BRIEF_PATH,
   POLYNET_BUILDER_COMMUNITY_PATH,
   POLYNET_BUILDER_DIRECTORY_PATH,
+  POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH,
   POLYNET_BUILDER_JOURNEY_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
+  POLYNET_BUILDER_SUGGESTIONS_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
   POLYNET_CHANNELS_DIRECTORY_PATH,
   POLYNET_COMMUNITY_PROFILE_PATH,
@@ -31,6 +35,7 @@ import {
   COMMUNITY_BRIEF_PATH,
   POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
+  parseBuilderJourneySlicePath,
   parseCommunityChannelSemanticPath,
   parseCommunityPodPath,
   POLYNET_PODS_DIRECTORY_PATH,
@@ -43,7 +48,7 @@ import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  announcementQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideInstructionsQuestion, handbookQuestion, journeyStageRemoveQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
+  announcementQuestion, courseDeleteQuestion, coursePublishQuestion, eventCancelQuestion, guideDraftSendQuestion, guideInstructionsQuestion, handbookQuestion, journeyStageRemoveQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
 import {
   JOURNEY_CARD_STATUSES,
@@ -140,11 +145,16 @@ const JOURNEY_RECORD_WIN_OPERATION = "community.journey.record_win";
 const JOURNEY_SET_GUIDE_NOTE_OPERATION = "community.journey.set_guide_note";
 const JOURNEY_SAVE_STAGES_OPERATION = "community.journey.save_stages";
 const JOURNEY_REMOVE_STAGE_OPERATION = "community.journey.remove_stage";
+const JOURNEY_DECIDE_STAGE_MOVE_OPERATION = "community.journey.decide_stage_move";
+const GUIDE_DRAFT_SEND_OPERATION = "community.guide_draft.send";
+const GUIDE_DRAFT_SKIP_OPERATION = "community.guide_draft.skip";
+const GUIDE_DRAFT_OPERATIONS = [GUIDE_DRAFT_SEND_OPERATION, GUIDE_DRAFT_SKIP_OPERATION];
 const JOURNEY_MULTI_MEMBER_OPERATIONS = [JOURNEY_MOVE_STAGE_OPERATION, JOURNEY_SET_STATUS_OPERATION];
 const JOURNEY_SINGLE_MEMBER_OPERATIONS = [
   JOURNEY_SET_MILESTONE_OPERATION,
   JOURNEY_RECORD_WIN_OPERATION,
   JOURNEY_SET_GUIDE_NOTE_OPERATION,
+  JOURNEY_DECIDE_STAGE_MOVE_OPERATION,
 ];
 const JOURNEY_OPERATIONS = [
   ...JOURNEY_MULTI_MEMBER_OPERATIONS,
@@ -154,7 +164,7 @@ const JOURNEY_OPERATIONS = [
 ];
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
   HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS, ANNOUNCEMENT_POST_OPERATION,
-  COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION, ...JOURNEY_OPERATIONS];
+  COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION, ...JOURNEY_OPERATIONS, ...GUIDE_DRAFT_OPERATIONS];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -1102,6 +1112,23 @@ function capabilityDocument(args: {
       move_to_stage: "optional stage key or name for members currently on the removed stage; defaults to first remaining stage",
       result: "the person is shown the stage and member count with Yes and No, every time: waiting_for_person until they say. Then result: { removed_stage_key, moved_to_stage_key, moved_cards_count, stages }",
       effects: ["remove_journey_stage_after_the_persons_yes"] }
+    : args.operation === JOURNEY_DECIDE_STAGE_MOVE_OPERATION ? {
+      required: ["member", "decision"], optional: ["expected_from_stage", "target_stage"],
+      member: "one active member handle or user:<id> ref from builder/suggestions.json",
+      decision: "approve or dismiss",
+      result: "result: { member, decision, status, stage_key }",
+      effects: ["decide_chief_of_staff_stage_move_proposal"] }
+    : args.operation === GUIDE_DRAFT_SEND_OPERATION ? {
+      required: ["draft_kind", "draft_id"], optional: ["text"],
+      draft_kind: "check_in or reply", draft_id: "draft id from builder/suggestions.json (owner only)",
+      text: "optional edited words (up to 1,500 characters)",
+      result: "the owner is shown the exact words with Yes and No, every time: waiting_for_person until they say. Then result: { draft_kind, draft_id, status }",
+      effects: ["send_guide_draft_after_the_owners_yes"] }
+    : args.operation === GUIDE_DRAFT_SKIP_OPERATION ? {
+      required: ["draft_kind", "draft_id"],
+      draft_kind: "check_in or reply", draft_id: "draft id from builder/suggestions.json (owner only)",
+      result: "result: { draft_kind, draft_id, status: skipped }",
+      effects: ["skip_guide_draft"] }
     : args.operation === HANDBOOK_DRAFT_OPERATION ? {
       required: ["text"], text: `the handbook draft in markdown, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; members and the agent don't see it until approved`,
       result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
@@ -1597,9 +1624,12 @@ async function executeCanonicalList(args: {
       value: virtualDirectory({
         path: absolutePath,
         entries: [
-          { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, where members spend time, agent instructions, handbook" },
+          { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, AI plan tier, agent instructions, handbook" },
           { path: mountedPath(target.communitySlug, POLYNET_BUILDER_ANALYTICS_PATH), kind: "document", type: "builder", name: "The community's numbers, as the Analytics page shows them" },
+          { path: mountedPath(target.communitySlug, POLYNET_BUILDER_BRIEF_PATH), kind: "document", type: "builder", name: "The latest Daily Founder Brief from Chief of Staff" },
+          { path: mountedPath(target.communitySlug, POLYNET_BUILDER_SUGGESTIONS_PATH), kind: "document", type: "builder", name: "Waiting Chief of Staff suggestions on Home (stage moves, plus owner-only check-in and reply drafts)" },
           { path: mountedPath(target.communitySlug, POLYNET_BUILDER_JOURNEY_PATH), kind: "document", type: "builder", name: "The Member Board: stages, checkpoints, member placement, statuses, wins, and Guide notes" },
+          { path: mountedPath(target.communitySlug, POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Filtered Member Board slices by stage or status" },
           joinRequests,
           {
             path: mountedPath(
@@ -1613,6 +1643,44 @@ async function executeCanonicalList(args: {
         ],
       }),
     };
+  }
+  if (target.localPath === POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH) {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError(
+        "semantic_not_found",
+        "Community path not found or not accessible.",
+      );
+    }
+    try {
+      const { stages } = (await args.ctx.runQuery(
+        (internal as any).communityMemberJourney.listBuilderJourneySliceEntriesForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId },
+      )) as { stages: Array<{ key: string; name: string }> };
+      const stageEntries = stages.map((stage) => ({
+        path: mountedPath(target.communitySlug, `${POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH}stage/${stage.key}.json`),
+        kind: "document" as const,
+        type: "builder",
+        name: `Stage: ${stage.name}`,
+      }));
+      const statusEntries = BUILDER_JOURNEY_STATUS_SLICES.map((status) => ({
+        path: mountedPath(target.communitySlug, `${POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH}status/${status}.json`),
+        kind: "document" as const,
+        type: "builder",
+        name: `Status: ${status.replace(/_/g, " ")}`,
+      }));
+      return {
+        ok: true,
+        value: virtualDirectory({
+          path: absolutePath,
+          entries: [...stageEntries, ...statusEntries],
+        }),
+      };
+    } catch {
+      return canonicalError(
+        "semantic_not_found",
+        "Community path not found or not accessible.",
+      );
+    }
   }
   if (target.localPath === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) {
     if (!reads(args, target, "builder_records")) {
@@ -1993,6 +2061,104 @@ async function executeCanonicalRead(args: {
     }
   }
 
+  // The latest Daily Founder Brief, for owners and admins only.
+  if (target.localPath === POLYNET_BUILDER_BRIEF_PATH) {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const brief = await args.ctx.runQuery(
+        (internal as any).communityFounderBrief.readLatestFounderBriefForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId },
+      );
+      return {
+        ok: true,
+        value: {
+          path: mountedPath(target.communitySlug, target.localPath),
+          body: String(brief.markdown ?? ""),
+          truncated: false,
+          total_chars: String(brief.markdown ?? "").length,
+          next_offset: null,
+          writable: false,
+          searchable: false,
+        },
+      };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
+
+  // Waiting Home suggestions ("Your guide suggests"), for owners and admins.
+  // Stage-move proposals are visible to owners and admins; check-in and reply
+  // drafts stay strictly owner-only (matching Home's exact authority rules).
+  if (target.localPath === POLYNET_BUILDER_SUGGESTIONS_PATH) {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const stageData = await args.ctx.runQuery(
+        (internal as any).communityMemberJourney.listStageAdvanceProposalsForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId },
+      );
+      const isOwner = stageData.is_owner === true;
+      const proactiveActive = stageData.proactive_tier_active === true;
+      const [rawCoachDrafts, rawReplyDrafts] = isOwner && proactiveActive
+        ? await Promise.all([
+            args.ctx.runQuery(
+              (internal as any).communityMemberCoach.listWaitingCoachDraftsForTrustedOwnerInternal,
+              { userId: args.userId, communityId: target.communityId },
+            ),
+            args.ctx.runQuery(
+              (internal as any).communityReplyDrafts.listWaitingReplyDraftsForTrustedOwnerInternal,
+              { userId: args.userId, communityId: target.communityId },
+            ),
+          ])
+        : [[], []];
+      const stageMoves = Array.isArray(stageData.proposals) ? [...stageData.proposals] : [];
+      const coachDrafts = Array.isArray(rawCoachDrafts) ? [...rawCoachDrafts] : [];
+      const replyDrafts = Array.isArray(rawReplyDrafts) ? [...rawReplyDrafts] : [];
+      const totalCounts = {
+        stage_moves: stageMoves.length,
+        coach_drafts: coachDrafts.length,
+        reply_drafts: replyDrafts.length,
+      };
+      const buildPayload = (truncated: boolean) => ({
+        read_at: new Date().toISOString(),
+        proactive_tier_active: proactiveActive,
+        hosted_agent_on: stageData.hosted_agent_on === true,
+        stage_moves: stageMoves,
+        coach_drafts: coachDrafts,
+        reply_drafts: replyDrafts,
+        ...(truncated ? { truncated: true, total_counts: totalCounts } : {}),
+        ...(!isOwner ? { owner_only_drafts_omitted: true } : {}),
+      });
+      let truncated = false;
+      while (JSON.stringify(buildPayload(truncated)).length > 22_000) {
+        truncated = true;
+        if (replyDrafts.length > 0 && replyDrafts.length >= coachDrafts.length && replyDrafts.length >= stageMoves.length) {
+          replyDrafts.pop();
+        } else if (coachDrafts.length > 0 && coachDrafts.length >= stageMoves.length) {
+          coachDrafts.pop();
+        } else if (stageMoves.length > 0) {
+          stageMoves.pop();
+        } else {
+          break;
+        }
+      }
+      const payload = buildPayload(truncated);
+      return {
+        ok: true,
+        value: {
+          ...canonicalJsonDocument({ target, localPath: target.localPath, payload }),
+          writable: false,
+          searchable: false,
+        },
+      };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
+
   // The Member Board, for owners and admins only (fail closed for members & moderators).
   if (target.localPath === POLYNET_BUILDER_JOURNEY_PATH) {
     if (!reads(args, target, "builder_records")) {
@@ -2003,6 +2169,36 @@ async function executeCanonicalRead(args: {
         { userId: args.userId, communityId: target.communityId });
       return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload: board }),
         writable: false, searchable: false } };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
+
+  // Filtered Member Board slices (builder/journey/stage/<key>.json and builder/journey/status/<status>.json).
+  const journeySlice = parseBuilderJourneySlicePath(target.localPath);
+  if (journeySlice && journeySlice.kind !== "directory") {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const board = await args.ctx.runQuery(
+        (internal as any).communityMemberJourney.readCommunityMemberJourneyBoardForTrustedManagerInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          ...(journeySlice.kind === "stage"
+            ? { filterStageKey: journeySlice.stageKey }
+            : { filterStatus: journeySlice.status }),
+        },
+      );
+      return {
+        ok: true,
+        value: {
+          ...canonicalJsonDocument({ target, localPath: target.localPath, payload: board }),
+          writable: false,
+          searchable: false,
+        },
+      };
     } catch {
       return canonicalError("semantic_not_found", "Community path not found or not accessible.");
     }
@@ -3208,6 +3404,57 @@ async function askPersonFirst(args: {
         memberCount: found.memberCount,
         fallbackStageName: found.fallbackStageName,
       });
+    } else if (operation === GUIDE_DRAFT_SEND_OPERATION) {
+      const draftKind = callInput.draft_kind === "check_in" || callInput.draft_kind === "reply" ? callInput.draft_kind : null;
+      const draftId = typeof callInput.draft_id === "string" ? callInput.draft_id.trim() : "";
+      const editedText = typeof callInput.text === "string" ? callInput.text : undefined;
+      if (
+        !draftKind ||
+        !draftId ||
+        draftId.length > 120 ||
+        (callInput.text !== undefined && (typeof callInput.text !== "string" || callInput.text.length > 1_500))
+      ) {
+        return null;
+      }
+      if (draftKind === "check_in") {
+        const found = (await args.ctx.runQuery(
+          (internal as any).communityMemberCoach.describeCoachDraftForTrustedOwnerInternal,
+          {
+            userId: args.userId,
+            communityId: target.communityId,
+            draftId,
+            ...(editedText !== undefined ? { text: editedText } : {}),
+          },
+        )) as { ok: true; memberName: string; text: string } | { ok: false; code: string };
+        if (!found.ok) {
+          const refusal = COMMUNITY_REFUSALS[found.code] ?? [
+            "guide_draft_unavailable",
+            "That check-in draft isn't waiting anymore. Read builder/suggestions.json first.",
+          ];
+          return canonicalError(refusal[0], refusal[1]);
+        }
+        question = guideDraftSendQuestion({ draftKind: "check_in", targetLabel: found.memberName });
+        text = found.text;
+      } else {
+        const found = (await args.ctx.runQuery(
+          (internal as any).communityReplyDrafts.describeReplyDraftForTrustedOwnerInternal,
+          {
+            userId: args.userId,
+            communityId: target.communityId,
+            draftId,
+            ...(editedText !== undefined ? { text: editedText } : {}),
+          },
+        )) as { ok: true; channelName: string; text: string } | { ok: false; code: string };
+        if (!found.ok) {
+          const refusal = COMMUNITY_REFUSALS[found.code] ?? [
+            "guide_draft_unavailable",
+            "That reply draft isn't waiting anymore. Read builder/suggestions.json first.",
+          ];
+          return canonicalError(refusal[0], refusal[1]);
+        }
+        question = guideDraftSendQuestion({ draftKind: "reply", targetLabel: found.channelName });
+        text = found.text;
+      }
     } else if (operation === EVENT_CANCEL_OPERATION) {
       const eventId = typeof callInput.event === "string" ? callInput.event.trim() : "";
       const scope = callInput.scope === "occurrence" || callInput.scope === "series" ? callInput.scope : undefined;
@@ -3575,6 +3822,22 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   journey_milestone_required: ["invalid_tool_args", "Give milestone (a checkpoint key or label)."],
   community_owner_not_on_board: ["owner_not_on_board", "The community owner doesn't sit on the Member Board."],
   community_member_not_found: ["member_not_found", "They aren't an active member of this community."],
+  chief_of_staff_plan_required: ["chief_of_staff_plan_required", "Chief of Staff Home approvals require the Chief of Staff plan with the community Guide turned on."],
+  community_member_coach_owner_required: ["owner_required", "Only the community owner can review or send Guide check-in drafts."],
+  community_member_coach_guide_off: ["guide_off", "The community Guide is currently turned off."],
+  community_member_coach_draft_not_found: ["draft_not_found", "No waiting check-in draft with that id. Read builder/suggestions.json first."],
+  community_member_coach_no_longer_needed: ["draft_no_longer_needed", "That check-in draft is no longer waiting or eligible."],
+  community_member_coach_active_conversation: ["active_conversation", "This member is in an active conversation with their Guide right now. Try again later."],
+  community_member_coach_cap_reached: ["cap_reached", "This member already reached their weekly or spacing check-in limit."],
+  community_member_coach_empty_text: ["invalid_tool_args", "Give non-empty words for the check-in."],
+  community_member_coach_too_long: ["invalid_tool_args", "That check-in is longer than 1,500 characters."],
+  community_reply_drafts_owner_required: ["owner_required", "Only the community owner can review or send Guide reply drafts."],
+  community_reply_draft_guide_off: ["guide_off", "The community Guide is currently turned off."],
+  community_reply_draft_not_found: ["draft_not_found", "No waiting reply draft with that id. Read builder/suggestions.json first."],
+  community_reply_draft_no_longer_needed: ["draft_no_longer_needed", "That reply draft is no longer waiting or its question was already answered."],
+  community_reply_draft_empty: ["invalid_tool_args", "Give non-empty words for the reply."],
+  community_reply_draft_too_long: ["invalid_tool_args", "That reply is longer than 1,500 characters."],
+  interaction_mention_everybody_reply_not_allowed: ["invalid_tool_args", "Replies can't mention @everybody. Remove @everybody and try again."],
 };
 
 // The community itself: profile, how people join, the agent's instructions and
@@ -3660,6 +3923,17 @@ async function executeCommunityOperation(args: {
     : operation === JOURNEY_SAVE_STAGES_OPERATION ? only(["stages"]) && isValidStagesPayload(rawInput.stages)
     : operation === JOURNEY_REMOVE_STAGE_OPERATION ? only(["stage", "move_to_stage"]) && text("stage", 64) && String(rawInput.stage).trim().length > 0 &&
       (rawInput.move_to_stage === undefined || (text("move_to_stage", 64) && String(rawInput.move_to_stage).trim().length > 0))
+    : operation === JOURNEY_DECIDE_STAGE_MOVE_OPERATION ? only(["member", "decision", "expected_from_stage", "target_stage"]) && isUserRef(rawInput.member) &&
+      (rawInput.decision === "approve" || rawInput.decision === "dismiss") &&
+      (rawInput.expected_from_stage === undefined || (text("expected_from_stage", 64) && String(rawInput.expected_from_stage).trim().length > 0)) &&
+      (rawInput.target_stage === undefined || (text("target_stage", 64) && String(rawInput.target_stage).trim().length > 0))
+    : operation === GUIDE_DRAFT_SEND_OPERATION ? only(["draft_kind", "draft_id", "text"]) &&
+      (rawInput.draft_kind === "check_in" || rawInput.draft_kind === "reply") &&
+      text("draft_id", 120) && String(rawInput.draft_id).trim().length > 0 &&
+      (rawInput.text === undefined || (text("text", 1_500) && String(rawInput.text).trim().length > 0))
+    : operation === GUIDE_DRAFT_SKIP_OPERATION ? only(["draft_kind", "draft_id"]) &&
+      (rawInput.draft_kind === "check_in" || rawInput.draft_kind === "reply") &&
+      text("draft_id", 120) && String(rawInput.draft_id).trim().length > 0
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
   if (!valid) {
@@ -3684,6 +3958,9 @@ async function executeCommunityOperation(args: {
       : operation === JOURNEY_SET_GUIDE_NOTE_OPERATION ? `Give member (handle or user:<id>) and note (up to ${MAX_FOUNDER_INSTRUCTION_CHARS} characters; empty clears it).`
       : operation === JOURNEY_SAVE_STAGES_OPERATION ? `Give stages (${MIN_JOURNEY_STAGES} to ${MAX_JOURNEY_STAGES} stages, each with a name and up to ${MAX_STAGE_CHECKPOINTS} checkpoints).`
       : operation === JOURNEY_REMOVE_STAGE_OPERATION ? "Give stage (a stage key or name from builder/journey.json) and optional move_to_stage."
+      : operation === JOURNEY_DECIDE_STAGE_MOVE_OPERATION ? "Give member (handle or user:<id>), decision (approve or dismiss), and optional expected_from_stage / target_stage."
+      : operation === GUIDE_DRAFT_SEND_OPERATION ? "Give draft_kind (check_in or reply), draft_id from builder/suggestions.json, and optional text (up to 1,500 characters)."
+      : operation === GUIDE_DRAFT_SKIP_OPERATION ? "Give draft_kind (check_in or reply) and draft_id from builder/suggestions.json."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
   // Opening lets in everyone who is waiting, and that can't be taken back.
@@ -3707,6 +3984,9 @@ async function executeCommunityOperation(args: {
       : operation === JOURNEY_REMOVE_STAGE_OPERATION
         ? personOnly({ what: "Removing a Member Board stage", where: "Members: Board, then open the stage menu and Delete stage",
           path: buildCommunityTabPath(target.communitySlug, "members") ? `${buildCommunityTabPath(target.communitySlug, "members")}/board` : null })
+      : operation === GUIDE_DRAFT_SEND_OPERATION
+        ? personOnly({ what: "Sending a Guide check-in or channel reply draft", where: "Home: Your guide suggests",
+          path: buildCommunityTabPath(target.communitySlug, "agent") })
         : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
           path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }

@@ -60,6 +60,22 @@ export const applyCommunityOperationInternal = internalMutation({
           input,
           source: args.principalKind === "community_agent_for_member" ? "agent" : "mcp",
         })
+      : args.operation === "community.guide_draft.send" || args.operation === "community.guide_draft.skip"
+        ? (input.draft_kind === "check_in"
+            ? await ctx.runMutation(refs.communityMemberCoach.decideCoachDraftForTrustedOwnerInternal, {
+                ...scope,
+                draftId: String(input.draft_id ?? "").trim(),
+                action: args.operation === "community.guide_draft.send" ? "send" : "skip",
+                ...(typeof input.text === "string" ? { text: input.text } : {}),
+              })
+            : input.draft_kind === "reply"
+              ? await ctx.runMutation(refs.communityReplyDrafts.decideReplyDraftForTrustedOwnerInternal, {
+                  ...scope,
+                  draftId: String(input.draft_id ?? "").trim(),
+                  action: args.operation === "community.guide_draft.send" ? "send" : "skip",
+                  ...(typeof input.text === "string" ? { text: input.text } : {}),
+                })
+              : (() => { throw new Error("invalid_tool_args"); })())
       : (() => { throw new Error("operation_not_found"); })();
     const value = { ...args.answer, result };
     const completed = await ctx.runMutation(refs.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal, {

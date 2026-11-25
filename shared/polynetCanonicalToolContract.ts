@@ -428,6 +428,12 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     label: { type: "string", minLength: 1, maxLength: 64 },
     remove_outcome_id: { type: "string", minLength: 1, maxLength: 80 },
     move_to_stage: { type: "string", minLength: 1, maxLength: 64 },
+    // Waiting Home suggestions: stage-move approvals and owner-only Guide drafts.
+    decision: { type: "string", enum: ["approve", "dismiss"] },
+    expected_from_stage: { type: "string", minLength: 1, maxLength: 64 },
+    target_stage: { type: "string", minLength: 1, maxLength: 64 },
+    draft_kind: { type: "string", enum: ["check_in", "reply"] },
+    draft_id: { type: "string", minLength: 1, maxLength: 120 },
     stages: { type: "array", minItems: 2, maxItems: 8, items: { type: "object" } },
     expected_created_at: { type: "string", maxLength: 24 },
     expected_updated_at: { type: "string", maxLength: 24 },

@@ -35,12 +35,13 @@ export const COURSE_BUILDING_SKILL_MD = [
 export const MEMBER_BOARD_SKILL_MD = [
   "Managing the Member Board",
   "",
-  "- Read builder/journey.json once before changing anything on the board. It shows every stage, its goal and checkpoints, and where active members sit along with their statuses, completed steps, wins, and coaching notes.",
+  "- Read builder/journey.json once before changing anything on the board. In larger communities, list builder/journey/ to read filtered slices by stage (builder/journey/stage/<key>.json) or by status (builder/journey/status/stuck.json, needs_you.json, ready_to_advance.json, on_track.json, quiet.json, done.json).",
+  "- Read builder/brief.md for the latest Daily Founder Brief and builder/suggestions.json for waiting Chief of Staff suggestions on Home (stage moves, plus owner-only member check-in and channel reply drafts).",
   "- Also check builder/community.json when you need to know the community's current plan tier (free, guide, or chief_of_staff) and whether hosted AI is turned on.",
-  "- Never guess a person's handle or a stage key; copy them from builder/journey.json or the members listing.",
-  "- When the host asks for a specific update (move someone to a stage, pin or reset a status, check off a milestone, log a win, or save a coaching note), do it directly and report back using names and stage titles rather than raw keys.",
+  "- Never guess a person's handle, a stage key, or a draft id; copy them from builder/journey.json, builder/suggestions.json, or the members listing.",
+  "- When the host asks for a specific update (move someone to a stage, pin or reset a status, check off a milestone, log a win, save a coaching note, approve/dismiss a stage move, or skip a waiting draft), do it directly and report back using names and stage titles rather than raw keys.",
   "- To rename, reorder, or add stages or checkpoints, pass the full ordered list to polynet_update_journey_stages and keep every existing stage key.",
-  "- Removing a stage uses polynet_remove_journey_stage, which always asks the host Yes or No first and moves anyone on that stage to their chosen fallback stage.",
+  "- Removing a stage uses polynet_remove_journey_stage, and sending a waiting Guide check-in or channel reply draft uses polynet_send_guide_draft; both always ask Yes or No first.",
   "- Coaching notes steer how the guide helps a member privately without ever telling the member a note exists. Never expose a member's private one-on-one conversation words when summarizing the board.",
 ].join("\n");
 

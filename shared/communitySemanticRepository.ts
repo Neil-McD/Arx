@@ -57,9 +57,49 @@ export const POLYNET_JOIN_REQUESTS_DIRECTORY_PATH = "/builder/join-requests/";
 export const POLYNET_BUILDER_COMMUNITY_PATH = "/builder/community.json";
 // Its numbers, as the Analytics page shows them to its owners and admins.
 export const POLYNET_BUILDER_ANALYTICS_PATH = "/builder/analytics.json";
+// Its latest Daily Founder Brief, for owners and admins.
+export const POLYNET_BUILDER_BRIEF_PATH = "/builder/brief.md";
+// Its waiting Home suggestions ("Your guide suggests"), for owners and admins
+// (owner-only Guide check-in and reply drafts are omitted for non-owner admins).
+export const POLYNET_BUILDER_SUGGESTIONS_PATH = "/builder/suggestions.json";
 // Its Member Board (stages, checkpoints, cards, wins, Guide notes), for owners and admins.
 export const POLYNET_BUILDER_JOURNEY_PATH = "/builder/journey.json";
+export const POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH = "/builder/journey/";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
+
+export const BUILDER_JOURNEY_STATUS_SLICES = [
+  "needs_you",
+  "stuck",
+  "ready_to_advance",
+  "on_track",
+  "quiet",
+  "done",
+] as const;
+
+export type BuilderJourneyStatusSlice = (typeof BUILDER_JOURNEY_STATUS_SLICES)[number];
+
+export type ParsedBuilderJourneySlicePath =
+  | { kind: "directory" }
+  | { kind: "stage"; stageKey: string }
+  | { kind: "status"; status: BuilderJourneyStatusSlice };
+
+export function parseBuilderJourneySlicePath(localPath: string): ParsedBuilderJourneySlicePath | null {
+  if (localPath === POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH) {
+    return { kind: "directory" };
+  }
+  const stageMatch = /^\/builder\/journey\/stage\/([a-z0-9][a-z0-9_-]{0,47})\.json$/.exec(localPath);
+  if (stageMatch) {
+    return { kind: "stage", stageKey: stageMatch[1] };
+  }
+  const statusMatch = /^\/builder\/journey\/status\/([a-z_]{2,32})\.json$/.exec(localPath);
+  if (
+    statusMatch &&
+    (BUILDER_JOURNEY_STATUS_SLICES as readonly string[]).includes(statusMatch[1])
+  ) {
+    return { kind: "status", status: statusMatch[1] as BuilderJourneyStatusSlice };
+  }
+  return null;
+}
 
 export type ParsedCommunityChannelSemanticPath =
   | {
@@ -387,6 +427,7 @@ export function parsePolynetSemanticPath(value: unknown) {
     };
   }
   const channelPath = parseCommunityChannelSemanticPath(value);
+  const builderJourneySlice = parseBuilderJourneySlicePath(value);
   if (
     !value.startsWith("/") ||
     value.includes("//") ||
@@ -402,7 +443,8 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
       value !== POLYNET_BUILDER_DIRECTORY_PATH &&
       value !== POLYNET_JOIN_REQUESTS_DIRECTORY_PATH &&
-      value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) ||
+      value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH &&
+      value !== POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH) ||
     value.split("/").some((part) => part === "." || part === "..")
   ) {
     // A folder Polynet doesn't have reads as one, not as a malformed path.
@@ -437,6 +479,9 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_COMMUNITY_PATH ||
     value === POLYNET_BUILDER_ANALYTICS_PATH ||
     value === POLYNET_BUILDER_JOURNEY_PATH ||
+    value === POLYNET_BUILDER_BRIEF_PATH ||
+    value === POLYNET_BUILDER_SUGGESTIONS_PATH ||
+    Boolean(builderJourneySlice) ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
@@ -529,6 +574,7 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
       parsed.path === POLYNET_BUILDER_DIRECTORY_PATH ||
       parsed.path === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
+      parsed.path === POLYNET_BUILDER_JOURNEY_DIRECTORY_PATH ||
       Boolean(resourceDirectory && !resourceDirectory.resourceId) ||
       resourceAlias?.kind === "module";
     if (!listable) {
@@ -571,11 +617,16 @@ export function validateCommunitySemanticOperationInput(args: {
     parsed.path === POLYNET_COMMUNITY_PROFILE_PATH ||
     "memberHandle" in parsed ||
     "memberUserId" in parsed;
+  const builderJourneySlice = parseBuilderJourneySlicePath(parsed.path);
   const isCanonicalVirtualDocumentRead =
     /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(parsed.path) ||
     parsed.path === POLYNET_BUILDER_COMMUNITY_PATH ||
     parsed.path === POLYNET_BUILDER_ANALYTICS_PATH ||
     parsed.path === POLYNET_BUILDER_JOURNEY_PATH ||
+    parsed.path === POLYNET_BUILDER_BRIEF_PATH ||
+    parsed.path === POLYNET_BUILDER_SUGGESTIONS_PATH ||
+    builderJourneySlice?.kind === "stage" ||
+    builderJourneySlice?.kind === "status" ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||

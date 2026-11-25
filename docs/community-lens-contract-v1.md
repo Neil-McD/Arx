@@ -87,14 +87,21 @@ of the slices that follow.
     silently without ever revealing board/pipeline language or the note itself.
   - Moderator: own `members/me/context.md` only; fails closed on builder board
     reads and all board mutations.
-  - Admin & Owner (Builder lens): R full Member Board (`builder/journey.json`)
-    and per-member board summary on `members/<handle>.json` (outcomes,
-    checkpoints, wins, status, founder notes; never private 1:1 chat words).
-    W/A identically via Official Polynet MCP (Free+) and Studio Guide chat
-    ($20+): `community.journey.move_stage`, `community.journey.set_status`,
-    `community.journey.set_milestone`, `community.journey.record_win`,
-    `community.journey.set_guide_note`, `community.journey.save_stages`, and
-    `community.journey.remove_stage` (confirmed every time).
+  - Admin & Owner (Builder lens): R full Member Board (`builder/journey.json`),
+    filtered Board slices (`builder/journey/stage/<key>.json`,
+    `builder/journey/status/<status>.json`), latest Daily Founder Brief
+    (`builder/brief.md`), waiting Home suggestions (`builder/suggestions.json`
+    — stage moves for owners & admins; Guide check-in and channel reply drafts
+    strictly owner-only), and per-member board summary on
+    `members/<handle>.json` (outcomes, checkpoints, wins, status, founder notes;
+    never private 1:1 chat words). W/A identically via Official Polynet MCP
+    (Free+) and Studio Guide chat ($20+): `community.journey.move_stage`,
+    `community.journey.set_status`, `community.journey.set_milestone`,
+    `community.journey.record_win`, `community.journey.set_guide_note`,
+    `community.journey.save_stages`, `community.journey.remove_stage`
+    (confirmed every time), `community.journey.decide_stage_move` (Chief of
+    Staff), plus owner-only `community.guide_draft.send` (confirmed every time)
+    and `community.guide_draft.skip`.
 - Tags on people were built and never used; they were deleted Nov 7.
   A selection never sends direct messages in bulk.
 

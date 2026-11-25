@@ -140,6 +140,10 @@ export const CALL_OPERATIONS = {
   "community.journey.set_guide_note": entry("builder", "write", "builder_change"),
   "community.journey.save_stages": entry("builder", "write", "builder_change"),
   "community.journey.remove_stage": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
+  "community.journey.decide_stage_move": entry("builder", "write", "builder_change"),
+  // Waiting Chief of Staff Guide drafts on Home (owner-only; sending always asks Yes/No first).
+  "community.guide_draft.send": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
+  "community.guide_draft.skip": entry("builder", "write", "builder_change"),
 } satisfies Record<string, OperationEntry>;
 
 // An operation that is a different thing for one of its inputs.

@@ -1593,6 +1593,252 @@ export const skipMemberCoachDraft = mutation({
   },
 });
 
+// Owner-only internal helpers for Official Polynet MCP and Studio Guide Chat
+// (builder/suggestions.json, community.guide_draft.send, community.guide_draft.skip).
+// Re-enforces ownerId === userId directly so non-owner admins fail closed.
+export const listWaitingCoachDraftsForTrustedOwnerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args): Promise<MemberCoachDraftView[]> => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.userId)) {
+      throw new Error("community_member_coach_owner_required");
+    }
+    const nowMs = Date.now();
+    if (
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, args.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, args.communityId, nowMs))
+    ) {
+      return [];
+    }
+    const rows = await ctx.db
+      .query("communityMemberCoachDrafts")
+      .withIndex("by_community_status_createdAt", (q) =>
+        q.eq("communityId", args.communityId).eq("status", "waiting"),
+      )
+      .order("desc")
+      .take(20);
+    const views: MemberCoachDraftView[] = [];
+    for (const row of rows) {
+      if (nowMs - row.createdAt > MEMBER_COACH_DRAFT_MAX_AGE_MS) continue;
+      if (!row.text?.trim()) continue;
+      const eligibility = await checkMemberEligibleForCoach(ctx, community, row.memberUserId);
+      if (!eligibility.ok) continue;
+      const profile = await resolveUserProfileDisplayProjection(ctx, row.memberUserId);
+      const user = await ctx.db.get(row.memberUserId);
+      views.push({
+        id: String(row._id),
+        member_name: profile.display_name ?? user?.displayName ?? "Member",
+        member_handle: user?.normalizedHandle ?? user?.handle ?? null,
+        reason: row.reason,
+        reason_label: MEMBER_COACH_REASON_LABELS[row.reason].shortTag,
+        signal_summary: row.signalSummary,
+        text: row.text,
+        created_at: new Date(row.createdAt).toISOString(),
+      });
+    }
+    return views.reverse();
+  },
+});
+
+export const describeCoachDraftForTrustedOwnerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    draftId: v.string(),
+    text: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.userId)) {
+      return { ok: false as const, code: "community_member_coach_owner_required" };
+    }
+    const nowMs = Date.now();
+    if (!communityIsActive(community) || !(await communityAgentIsOn(ctx, args.communityId))) {
+      return { ok: false as const, code: "community_member_coach_guide_off" };
+    }
+    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, nowMs))) {
+      return { ok: false as const, code: "chief_of_staff_plan_required" };
+    }
+    const normalizedId = ctx.db.normalizeId("communityMemberCoachDrafts", args.draftId.trim());
+    if (!normalizedId) return { ok: false as const, code: "community_member_coach_draft_not_found" };
+    const draft = await ctx.db.get(normalizedId);
+    if (!draft || String(draft.communityId) !== String(args.communityId)) {
+      return { ok: false as const, code: "community_member_coach_draft_not_found" };
+    }
+    if (draft.status !== "waiting" || nowMs - draft.createdAt > MEMBER_COACH_DRAFT_MAX_AGE_MS) {
+      return { ok: false as const, code: "community_member_coach_no_longer_needed" };
+    }
+    const eligibility = await checkMemberEligibleForCoach(ctx, community, draft.memberUserId);
+    if (!eligibility.ok) {
+      return { ok: false as const, code: "community_member_coach_no_longer_needed" };
+    }
+    const [lastUserAgentAt, recentHistory] = await Promise.all([
+      readLastUserAgentMessageAt(ctx, args.communityId, draft.memberUserId),
+      readRecentCoachHistoryForMember(ctx, args.communityId, draft.memberUserId, draft._id),
+    ]);
+    const deliveryGate = evaluateMemberCoachGate({
+      nowMs,
+      isOwner: false,
+      memberMuted: false,
+      reason: draft.reason,
+      dedupeKey: `approved-delivery:${String(draft._id)}`,
+      lastUserThreadMessageAt: lastUserAgentAt,
+      recentHistory,
+      autoReasonEnabled: false,
+    });
+    if (!deliveryGate.allowed) {
+      return {
+        ok: false as const,
+        code:
+          deliveryGate.blockReason === "mid_conversation"
+            ? "community_member_coach_active_conversation"
+            : "community_member_coach_cap_reached",
+      };
+    }
+    const finalText = (args.text !== undefined ? args.text : draft.text ?? "").replace(/\r\n/g, "\n").trim();
+    if (!finalText) return { ok: false as const, code: "community_member_coach_empty_text" };
+    if (finalText.length > MEMBER_COACH_EDIT_MAX_CHARS) {
+      return { ok: false as const, code: "community_member_coach_too_long" };
+    }
+    const profile = await resolveUserProfileDisplayProjection(ctx, draft.memberUserId);
+    const user = await ctx.db.get(draft.memberUserId);
+    return {
+      ok: true as const,
+      memberName: profile.display_name ?? user?.displayName ?? "Member",
+      text: finalText,
+    };
+  },
+});
+
+export const decideCoachDraftForTrustedOwnerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    draftId: v.string(),
+    action: v.union(v.literal("send"), v.literal("skip")),
+    text: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.userId)) {
+      throw new Error("community_member_coach_owner_required");
+    }
+    const normalizedId = ctx.db.normalizeId("communityMemberCoachDrafts", args.draftId.trim());
+    if (!normalizedId) throw new Error("community_member_coach_draft_not_found");
+    const draft = await ctx.db.get(normalizedId);
+    if (!draft || String(draft.communityId) !== String(args.communityId)) {
+      throw new Error("community_member_coach_draft_not_found");
+    }
+    const nowMs = Date.now();
+    if (args.action === "skip") {
+      if (draft.status === "skipped") {
+        return { draft_kind: "check_in" as const, draft_id: String(draft._id), status: "skipped" as const, already: true };
+      }
+      if (draft.status !== "waiting") {
+        throw new Error("community_member_coach_no_longer_needed");
+      }
+      await ctx.db.patch(draft._id, {
+        status: "skipped",
+        decidedByUserId: args.userId,
+        decidedAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { draft_kind: "check_in" as const, draft_id: String(draft._id), status: "skipped" as const, already: false };
+    }
+    if (!communityIsActive(community) || !(await communityAgentIsOn(ctx, args.communityId))) {
+      throw new Error("community_member_coach_guide_off");
+    }
+    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, nowMs))) {
+      throw new Error("chief_of_staff_plan_required");
+    }
+    if (draft.status === "sent") {
+      return { draft_kind: "check_in" as const, draft_id: String(draft._id), status: "sent" as const, already: true };
+    }
+    if (draft.status !== "waiting" || nowMs - draft.createdAt > MEMBER_COACH_DRAFT_MAX_AGE_MS) {
+      throw new Error("community_member_coach_no_longer_needed");
+    }
+    const eligibility = await checkMemberEligibleForCoach(ctx, community, draft.memberUserId);
+    if (!eligibility.ok) {
+      await ctx.db.patch(draft._id, {
+        status: "skipped",
+        skipReason: eligibility.code,
+        decidedByUserId: args.userId,
+        decidedAt: nowMs,
+        updatedAt: nowMs,
+      });
+      throw new Error("community_member_coach_no_longer_needed");
+    }
+    const [lastUserAgentAt, recentHistory] = await Promise.all([
+      readLastUserAgentMessageAt(ctx, args.communityId, draft.memberUserId),
+      readRecentCoachHistoryForMember(ctx, args.communityId, draft.memberUserId, draft._id),
+    ]);
+    const deliveryGate = evaluateMemberCoachGate({
+      nowMs,
+      isOwner: false,
+      memberMuted: false,
+      reason: draft.reason,
+      dedupeKey: `approved-delivery:${String(draft._id)}`,
+      lastUserThreadMessageAt: lastUserAgentAt,
+      recentHistory,
+      autoReasonEnabled: false,
+    });
+    if (!deliveryGate.allowed) {
+      if (deliveryGate.blockReason === "mid_conversation") {
+        throw new Error("community_member_coach_active_conversation");
+      }
+      throw new Error("community_member_coach_cap_reached");
+    }
+    const finalText = (args.text !== undefined ? args.text : draft.text ?? "").replace(/\r\n/g, "\n").trim();
+    if (!finalText) throw new Error("community_member_coach_empty_text");
+    if (finalText.length > MEMBER_COACH_EDIT_MAX_CHARS) {
+      throw new Error("community_member_coach_too_long");
+    }
+    const threadMessageKey = `member-coach:${String(draft._id)}`;
+    const delivered = await deliverAssistantMessageToMemberCommunityThread(ctx, {
+      communityId: args.communityId,
+      memberUserId: draft.memberUserId,
+      messageKey: threadMessageKey,
+      contentJson: {
+        text: finalText,
+        meta: {
+          kind: "member_coach",
+          reason: draft.reason,
+          draft_id: String(draft._id),
+          delivery_mode: "approved",
+        },
+      },
+    });
+    await ctx.db.patch(draft._id, {
+      status: "sent",
+      deliveryMode: "approved",
+      sentText: finalText,
+      unseenEmailState: "pending",
+      threadId: delivered.threadId,
+      threadMessageKey,
+      decidedByUserId: args.userId,
+      decidedAt: nowMs,
+      sentAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await recordMemberJourneyCoachOutcome(ctx, {
+      communityId: args.communityId,
+      memberUserId: draft.memberUserId,
+      outcomeNote: `Sent ${MEMBER_COACH_REASON_LABELS[draft.reason as MemberCoachReason]?.shortTag ?? "check-in"} (approved)`,
+      nowMs,
+    });
+    return {
+      draft_kind: "check_in" as const,
+      draft_id: String(draft._id),
+      status: "sent" as const,
+      already: false,
+    };
+  },
+});
+
 const MONTHLY_SPEND_RECEIPT_SCAN_LIMIT = 400;
 const REENGAGEMENT_DRAFT_SCAN_LIMIT = 100;
 const REENGAGEMENT_MEMBER_CHECK_CAP = 40;

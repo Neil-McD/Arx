@@ -17,6 +17,7 @@ import { runAgentWork } from "./agentWork";
 import { communityAgentIsOn } from "./communityApps";
 import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
+import { textContainsEverybodyMentionToken } from "./communityMentionBroadcasts";
 import { communityResourceIsLiveModulePage, communityResourceModuleIsLive, normalizeIdValue } from "./communityCore";
 import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { communityTimeZone, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
@@ -676,6 +677,184 @@ export const skipReplyDraft = mutation({
     const nowMs = Date.now();
     if (draft.status === "waiting") await ctx.db.patch(draft._id, { status: "skipped", decidedByUserId: userId, decidedAt: nowMs, updatedAt: nowMs });
     return { skipped: true };
+  },
+});
+
+// Owner-only internal helpers for Official Polynet MCP and Studio Guide Chat
+// (builder/suggestions.json, community.guide_draft.send, community.guide_draft.skip).
+export const listWaitingReplyDraftsForTrustedOwnerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args): Promise<ReplyDraftView[]> => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.userId)) {
+      throw new Error("community_reply_drafts_owner_required");
+    }
+    const nowMs = Date.now();
+    if (
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, args.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, args.communityId, nowMs))
+    ) {
+      return [];
+    }
+    const rows = await ctx.db
+      .query("communityReplyDrafts")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "waiting"),
+      )
+      .order("desc")
+      .take(20);
+    const names = new Map<string, string>();
+    const checked = await Promise.all(
+      (rows as any[]).map(async (draft) => ({ draft, live: await waitingDraft(ctx, draft, nowMs) })),
+    );
+    const liveDrafts = checked.filter(
+      (entry): entry is { draft: any; live: NonNullable<Awaited<ReturnType<typeof waitingDraft>>> } =>
+        Boolean(entry.live),
+    );
+    const uniqueAuthorIds = Array.from(
+      new Map(liveDrafts.map(({ live }) => [String(live.root.actorUserId), live.root.actorUserId])).values(),
+    );
+    await Promise.all(uniqueAuthorIds.map((userId) => displayName(ctx, userId, names)));
+    const views: Array<ReplyDraftView & { askedAt: number }> = [];
+    for (const { draft, live } of liveDrafts) {
+      views.push({
+        id: String(draft._id),
+        author: await displayName(ctx, live.root.actorUserId, names),
+        question: questionText(live.root).slice(0, 400),
+        channel: String(live.channel.name ?? "a channel"),
+        ...(live.isPod ? { is_pod: true } : {}),
+        hours_waiting: Math.floor((nowMs - Number(live.root.createdAt)) / 3_600_000),
+        text: String(draft.text ?? ""),
+        source: String(draft.sourceLabel ?? ""),
+        askedAt: Number(live.root.createdAt),
+      });
+    }
+    return views.sort((a, b) => a.askedAt - b.askedAt).map(({ askedAt: _askedAt, ...view }) => view);
+  },
+});
+
+export const describeReplyDraftForTrustedOwnerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    draftId: v.string(),
+    text: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.userId)) {
+      return { ok: false as const, code: "community_reply_drafts_owner_required" };
+    }
+    const nowMs = Date.now();
+    if (!communityIsActive(community) || !(await communityAgentIsOn(ctx, args.communityId))) {
+      return { ok: false as const, code: "community_reply_draft_guide_off" };
+    }
+    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, nowMs))) {
+      return { ok: false as const, code: "chief_of_staff_plan_required" };
+    }
+    const normalizedId = ctx.db.normalizeId("communityReplyDrafts", args.draftId.trim());
+    if (!normalizedId) return { ok: false as const, code: "community_reply_draft_not_found" };
+    const draft: any = await ctx.db.get(normalizedId);
+    if (!draft || String(draft.communityId) !== String(args.communityId)) {
+      return { ok: false as const, code: "community_reply_draft_not_found" };
+    }
+    const live = await waitingDraft(ctx, draft, nowMs);
+    if (!live) return { ok: false as const, code: "community_reply_draft_no_longer_needed" };
+    const text = (args.text ?? String(draft.text ?? "")).replace(/\r\n/g, "\n").trim();
+    if (!text) return { ok: false as const, code: "community_reply_draft_empty" };
+    if (text.length > REPLY_DRAFT_EDIT_MAX_CHARS) {
+      return { ok: false as const, code: "community_reply_draft_too_long" };
+    }
+    if (textContainsEverybodyMentionToken(text)) {
+      return { ok: false as const, code: "interaction_mention_everybody_reply_not_allowed" };
+    }
+    return {
+      ok: true as const,
+      channelName: String(live.channel.name ?? "a channel"),
+      text: replyDraftPost(text, String(draft.sourceLabel ?? "")),
+    };
+  },
+});
+
+export const decideReplyDraftForTrustedOwnerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    draftId: v.string(),
+    action: v.union(v.literal("send"), v.literal("skip")),
+    text: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(args.userId)) {
+      throw new Error("community_reply_drafts_owner_required");
+    }
+    const normalizedId = ctx.db.normalizeId("communityReplyDrafts", args.draftId.trim());
+    if (!normalizedId) throw new Error("community_reply_draft_not_found");
+    const draft: any = await ctx.db.get(normalizedId);
+    if (!draft || String(draft.communityId) !== String(args.communityId)) {
+      throw new Error("community_reply_draft_not_found");
+    }
+    const nowMs = Date.now();
+    if (args.action === "skip") {
+      if (draft.status === "skipped") {
+        return { draft_kind: "reply" as const, draft_id: String(draft._id), status: "skipped" as const, already: true };
+      }
+      if (draft.status !== "waiting") {
+        throw new Error("community_reply_draft_no_longer_needed");
+      }
+      await ctx.db.patch(draft._id, {
+        status: "skipped",
+        decidedByUserId: args.userId,
+        decidedAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { draft_kind: "reply" as const, draft_id: String(draft._id), status: "skipped" as const, already: false };
+    }
+    if (!communityIsActive(community) || !(await communityAgentIsOn(ctx, args.communityId))) {
+      throw new Error("community_reply_draft_guide_off");
+    }
+    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, nowMs))) {
+      throw new Error("chief_of_staff_plan_required");
+    }
+    if (draft.status === "posted") {
+      return { draft_kind: "reply" as const, draft_id: String(draft._id), status: "posted" as const, already: true };
+    }
+    const live = await waitingDraft(ctx, draft, nowMs);
+    if (!live) throw new Error("community_reply_draft_no_longer_needed");
+    const text = (args.text ?? String(draft.text ?? "")).replace(/\r\n/g, "\n").trim();
+    if (!text) throw new Error("community_reply_draft_empty");
+    if (text.length > REPLY_DRAFT_EDIT_MAX_CHARS) {
+      throw new Error("community_reply_draft_too_long");
+    }
+    if (textContainsEverybodyMentionToken(text)) {
+      throw new Error("interaction_mention_everybody_reply_not_allowed");
+    }
+    const posted = replyDraftPost(text, String(draft.sourceLabel ?? ""));
+    await ctx.runMutation(internalRefs.communityInteractions.createCommunityAgentCanonicalInteractionInternal, {
+      userId: args.userId,
+      communityId: args.communityId,
+      channelId: live.channel._id,
+      rootId: draft.rootId,
+      idempotencyKey: `reply-draft:${String(draft._id)}`,
+      text: posted,
+      trustedOwnerReply: true,
+    });
+    await ctx.db.patch(draft._id, {
+      status: "posted",
+      deliveryMode: "approved",
+      postedText: posted,
+      decidedByUserId: args.userId,
+      decidedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return {
+      draft_kind: "reply" as const,
+      draft_id: String(draft._id),
+      status: "posted" as const,
+      already: false,
+    };
   },
 });
 
