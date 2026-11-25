@@ -21,7 +21,7 @@ const WebPlatformLegalReaderModal = lazy(() =>
 
 type JoinProps = { onJoin: () => void };
 
-const OFFER_META = "Free to build your community · The agent is $79/month with AI included";
+const OFFER_META = "Free to build · Guide $20/month · Chief of Staff $100/month";
 
 const STEPS = [
   {
@@ -36,26 +36,26 @@ const STEPS = [
   },
   {
     number: "03",
-    title: "Switch on the agent",
-    description: "It answers from everything your community has learned, remembers what matters and helps everyone, all day.",
+    title: "Switch on your agent",
+    description: "Start with Guide so your community remembers and answers 24/7, or upgrade to Chief of Staff to proactively help run it.",
   },
 ];
 
 const PRICES = [
   {
-    label: "Build",
-    price: "Free",
-    detail: "Your community, members, channels, events, courses and site. No time limit.",
+    label: "Free",
+    price: "$0/month",
+    detail: "Unlimited members, channels, courses, pods, events, DMs, zero-AI weekly digests, and official Polynet MCP. No time limit.",
   },
   {
-    label: "Agent plan",
-    price: "$79/month",
-    detail: "Per community. The community agent with AI included, answering and remembering for everyone.",
+    label: "Guide",
+    price: "$20/month",
+    detail: "Per community. The community that remembers — reactive 1:1 chats, @mentions, active-thread follow-ups, and living memory ($3/month AI included).",
   },
   {
-    label: "Paid memberships",
-    price: "2.9%",
-    detail: "Plus Stripe's fees, only when you charge. You connect Stripe when you set a price, not before.",
+    label: "Chief of Staff",
+    price: "$100/month",
+    detail: "Per community. The agent that helps run your community — everything in Guide plus Daily Briefs, proactive member & builder check-ins, auto-replies, and optional usage boosts ($20/month AI included).",
   },
 ];
 
@@ -292,7 +292,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
           <section className="pricing" aria-labelledby="pricing-title">
             <p className="kicker">Pricing</p>
-            <h2 id="pricing-title">Free to build. Pay for the agent when you want it.</h2>
+            <h2 id="pricing-title">Free to build. Add Guide or Chief of Staff when you're ready.</h2>
             <div className="pricing-grid">
               {PRICES.map((item) => (
                 <article className="price" key={item.label}>
@@ -302,6 +302,9 @@ export function ConversionLanding({ onJoin }: JoinProps) {
                 </article>
               ))}
             </div>
+            <p className="microcopy pricing-footnote">
+              Selling paid memberships? 2.9% platform fee plus Stripe fees — only when you charge.
+            </p>
           </section>
 
           <Showcase communities={communities} />

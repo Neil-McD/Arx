@@ -23,12 +23,16 @@ import {
   consumeBoostCheckoutReturnStatus,
   formatBoostCheckoutErrorMessage,
 } from "../../../../shared/founderUsageBoosts";
+import type { FounderPlanTier } from "../../../../shared/founderPlan";
 import { SettingsButton, SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
 export function CommunityMemberCoachSettingsSection(props: {
   communityId: string;
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
+  planTier?: FounderPlanTier | null;
+  isUpgradingPlan?: boolean;
+  onUpgradeToChiefOfStaff?: () => void;
 }) {
   const [settings, setSettings] = useState<MemberCoachSettingsView | null>(null);
   const [saving, setSaving] = useState(false);
@@ -100,7 +104,7 @@ export function CommunityMemberCoachSettingsSection(props: {
       cancelled = true;
       for (const id of timers) window.clearTimeout(id);
     };
-  }, [props.communityId]);
+  }, [props.communityId, props.planTier]);
 
   const save = async (next: {
     enabled: boolean;
@@ -180,6 +184,10 @@ export function CommunityMemberCoachSettingsSection(props: {
     : "";
   const heartbeat = settings?.heartbeat;
   const impact = settings?.impact;
+  const effectivePlanTier: FounderPlanTier | null =
+    props.planTier ?? impact?.plan_tier ?? null;
+  const isGuideTier = effectivePlanTier === "guide";
+  const includedLabel = formatMicrosUsd(impact?.included_allowance_micros ?? impact?.allowance_micros ?? 20_000_000);
   const tierLabel =
     heartbeat?.community_tier === "paused"
       ? "Paused · $0 AI until new activity"
@@ -201,12 +209,14 @@ export function CommunityMemberCoachSettingsSection(props: {
       ? ` (${formatMicrosUsd(includedMicros)} included + ${formatMicrosUsd(paidBoostMicros)} boosts)`
       : "";
   const spendSummary = impact
-    ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)}${allowanceBreakdown} monthly allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
+    ? isGuideTier
+      ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)} monthly Guide allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""}.`
+      : `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)}${allowanceBreakdown} monthly allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
     : null;
-  const reserveNote = impact?.background_ai_paused
+  const reserveNote = !isGuideTier && impact?.background_ai_paused
     ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining allowance for live chats, @mentions, and your Daily Brief."
     : null;
-  const winBackSummary = impact
+  const winBackSummary = !isGuideTier && impact
     ? impact.contacted_30d > 0
       ? impact.reengagement_truncated
         ? `${impact.reengaged_30d} of ${impact.contacted_30d} sampled members checked in came back in the last 30 days.`
@@ -221,8 +231,8 @@ export function CommunityMemberCoachSettingsSection(props: {
         : "";
 
   return (
-    <SettingsGroup label="Proactive guide">
-      {settings ? (
+    <SettingsGroup label={isGuideTier ? "Guide allowance & automation" : "Chief of Staff & allowance"}>
+      {!isGuideTier && settings ? (
         <SettingsRow
           label="Heartbeat cadence"
           help={`${tierLabel}. ${countsSummary}`}
@@ -258,13 +268,13 @@ export function CommunityMemberCoachSettingsSection(props: {
           <span className="settings-v1-value">{impact.percent_used}%</span>
         </SettingsRow>
       ) : null}
-      {impact ? (
+      {!isGuideTier && impact ? (
         <SettingsRow
           label="Extra usage safety cap"
           htmlFor="usage-boost-cap"
           help={
             usageBoostCapCents <= 0
-              ? "Paused at your $20/month included allowance — zero extra charges."
+              ? `Paused at your ${includedLabel}/month included allowance — zero extra charges.`
               : firstCycleCapActive && usageBoostCapCents > FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS
                 ? `Allows prepaid usage boosts ($30 for +$20 AI allowance) up to $${usageBoostCapCents / 100}/month after your first renewal (capped at $${FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS / 100} during your first billing cycle).`
                 : `Allows prepaid usage boosts ($30 for +$20 AI allowance) up to $${usageBoostCapCents / 100}/month. Extra boosts expire at billing cycle reset; nothing is charged automatically without your payment.`
@@ -289,7 +299,7 @@ export function CommunityMemberCoachSettingsSection(props: {
               const boosts = Math.floor(capCents / FOUNDER_USAGE_BOOST_PRICE_CENTS);
               const label =
                 capCents === 0
-                  ? "Paused at $20 (default)"
+                  ? `Paused at ${includedLabel} (default)`
                   : `$${capCents / 100}/mo (${boosts} ${boosts === 1 ? "boost" : "boosts"})`;
               return (
                 <option key={capCents} value={capCents}>
@@ -300,7 +310,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           </SettingsSelect>
         </SettingsRow>
       ) : null}
-      {impact && usageBoostCapCents > 0 && impact.can_buy_usage_boost ? (
+      {!isGuideTier && impact && usageBoostCapCents > 0 && impact.can_buy_usage_boost ? (
         <SettingsRow
           label="Add extra AI usage"
           help={`Prepaid $30 boost adds +$20.00 AI allowance for this billing cycle (${impact.usage_boost_remaining_this_cycle ?? 0} remaining under your safety cap).`}
@@ -348,71 +358,92 @@ export function CommunityMemberCoachSettingsSection(props: {
           }
         />
       </SettingsRow>
-      <SettingsRow
-        label="Auto-reply to unanswered questions"
-        help={
-          autoReplyEnabled
-            ? "Cited replies from lessons and community or pod notes post automatically during daytime hours (up to 3 per day community-wide, 1 per pod)."
-            : 'Drafts wait in "Your guide suggests" on Home until you post them. Turn on to post cited replies automatically during daytime hours.'
-        }
-      >
-        <SettingsSwitch
-          label="Auto-reply to unanswered questions"
-          checked={autoReplyEnabled}
-          disabled={!settings || saving}
-          onChange={(checked) =>
-            void save({ enabled, autoReasons, autoReplyEnabled: checked, threadFollowupEnabled, weeklyDigestEnabled })
-          }
-        />
-      </SettingsRow>
-      <SettingsRow
-        label="Prepare member check-ins"
-        help={
-          error ? (
-            <span className="settings-v1-error" role="alert">{error}</span>
+      {isGuideTier ? (
+        <SettingsRow
+          label="Proactive member check-ins & auto-replies"
+          help="Included on Chief of Staff ($100/month with $20 AI included). Unlocks proactive member check-ins, unanswered-question auto-replies, Daily Briefs, personal builder check-ins, and optional $30 usage boosts."
+        >
+          {props.onUpgradeToChiefOfStaff ? (
+            <SettingsButton
+              variant="primary"
+              disabled={props.isUpgradingPlan}
+              onClick={props.onUpgradeToChiefOfStaff}
+            >
+              {props.isUpgradingPlan ? "Upgrading…" : "Upgrade to Chief of Staff"}
+            </SettingsButton>
           ) : (
-            `Your guide spots quiet newcomers, stalled learners, and quiet members before an event, and puts private check-in drafts in "Your guide suggests" on Home. At most 2 messages per member per week, 48 hours apart, never during quiet hours or active chats.${statusNote}`
-          )
-        }
-      >
-        <SettingsSwitch
-          label="Prepare member check-ins"
-          checked={enabled}
-          disabled={!settings || saving}
-          onChange={(checked) =>
-            void save({ enabled: checked, autoReasons, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled })
-          }
-        />
-      </SettingsRow>
-      {enabled ? (
+            <span className="settings-v1-value">Chief of Staff</span>
+          )}
+        </SettingsRow>
+      ) : (
         <>
-          {MEMBER_COACH_REASONS.map((reason) => {
-            const copy = MEMBER_COACH_REASON_LABELS[reason];
-            const isAuto = autoReasons.includes(reason);
-            const modeHelp = copy.privateAutoOnly
-              ? isAuto
-                ? "Sends directly to their private thread during daytime hours."
-                : "Off — enable to let your guide follow up privately on goals members share."
-              : isAuto
-                ? "Sends automatically during daytime hours."
-                : "Waits for your approval on Home first.";
-            return (
-              <SettingsRow
-                key={reason}
-                label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
-                help={`${copy.description} ${modeHelp}`}
-              >
-                <SettingsSwitch
-                  label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
-                  checked={isAuto}
-                  disabled={!settings || saving}
-                  onChange={(checked) => toggleAutoReason(reason, checked)}
-                />
-              </SettingsRow>
-            );
-          })}
+          <SettingsRow
+            label="Auto-reply to unanswered questions"
+            help={
+              autoReplyEnabled
+                ? "Cited replies from lessons and community or pod notes post automatically during daytime hours (up to 3 per day community-wide, 1 per pod)."
+                : 'Drafts wait in "Your guide suggests" on Home until you post them. Turn on to post cited replies automatically during daytime hours.'
+            }
+          >
+            <SettingsSwitch
+              label="Auto-reply to unanswered questions"
+              checked={autoReplyEnabled}
+              disabled={!settings || saving}
+              onChange={(checked) =>
+                void save({ enabled, autoReasons, autoReplyEnabled: checked, threadFollowupEnabled, weeklyDigestEnabled })
+              }
+            />
+          </SettingsRow>
+          <SettingsRow
+            label="Prepare member check-ins"
+            help={
+              error ? (
+                <span className="settings-v1-error" role="alert">{error}</span>
+              ) : (
+                `Your guide spots quiet newcomers, stalled learners, and quiet members before an event, and puts private check-in drafts in "Your guide suggests" on Home. At most 2 messages per member per week, 48 hours apart, never during quiet hours or active chats.${statusNote}`
+              )
+            }
+          >
+            <SettingsSwitch
+              label="Prepare member check-ins"
+              checked={enabled}
+              disabled={!settings || saving}
+              onChange={(checked) =>
+                void save({ enabled: checked, autoReasons, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled })
+              }
+            />
+          </SettingsRow>
+          {enabled ? (
+            <>
+              {MEMBER_COACH_REASONS.map((reason) => {
+                const copy = MEMBER_COACH_REASON_LABELS[reason];
+                const isAuto = autoReasons.includes(reason);
+                const modeHelp = copy.privateAutoOnly
+                  ? isAuto
+                    ? "Sends directly to their private thread during daytime hours."
+                    : "Off — enable to let your guide follow up privately on goals members share."
+                  : isAuto
+                    ? "Sends automatically during daytime hours."
+                    : "Waits for your approval on Home first.";
+                return (
+                  <SettingsRow
+                    key={reason}
+                    label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
+                    help={`${copy.description} ${modeHelp}`}
+                  >
+                    <SettingsSwitch
+                      label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
+                      checked={isAuto}
+                      disabled={!settings || saving}
+                      onChange={(checked) => toggleAutoReason(reason, checked)}
+                    />
+                  </SettingsRow>
+                );
+              })}
+            </>
+          ) : null}
         </>
-      ) : null}
+      )}
     </SettingsGroup>
   );
 }

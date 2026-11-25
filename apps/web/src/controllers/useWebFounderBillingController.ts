@@ -4,8 +4,10 @@ import {
   loadCloudFounderBillingOverview,
   startCloudFounderBillingPortal,
   startCloudFounderSubscriptionCheckout,
+  switchCloudFounderSubscriptionTier,
   type CloudFounderBillingOverview,
 } from "../../../../shared/cloudFounderBillingGateway";
+import type { FounderPlanTier } from "../../../../shared/founderPlan";
 import type { AuthSession } from "../auth";
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
 import { resolveAuthSubject } from "../../../../shared/authSession";
@@ -17,11 +19,23 @@ import { captureProductAnalyticsEvent } from "../posthogAnalytics";
 
 function messageForError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("founder_subscription_payment_settling")) {
+    return "Your previous checkout payment is still confirming with Stripe. Refresh in a moment.";
+  }
+  if (message.includes("founder_subscription_checkout_in_progress")) {
+    return "Checkout is already opening for this community. Try again in a moment.";
+  }
   if (message.includes("founder_subscription_checkout_already_pending")) {
     return "Checkout is already processing for this community. Refresh in a moment.";
   }
   if (message.includes("founder_subscription_community_already_managed")) {
     return "This community already has a managed subscription.";
+  }
+  if (message.includes("founder_subscription_tier_unchanged")) {
+    return "This community is already on that plan.";
+  }
+  if (message.includes("founder_subscription_not_active_on_provider")) {
+    return "Your subscription needs attention in Stripe before switching plans.";
   }
   if (message.includes("operator_billing_exempt")) {
     return "Operator access is already included for this community.";
@@ -29,8 +43,11 @@ function messageForError(error: unknown): string {
   if (message.includes("profile_setup_required")) {
     return "Finish your profile before starting community billing.";
   }
+  if (message.includes("founder_guide_stripe_price_id_missing")) {
+    return "The $20 Guide plan is not configured in Stripe yet.";
+  }
   if (message.includes("founder_stripe_price")) {
-    return "The $79 community plan is not configured correctly yet.";
+    return "This community plan is not configured in Stripe yet.";
   }
   if (message.includes("community_restore_billing_cleanup_incomplete")) {
     return "Archive cleanup must finish before this community can be restored.";
@@ -173,7 +190,10 @@ export function useWebFounderBillingController(params: {
     };
   }, [params.session, refresh]);
 
-  const startCheckout = useCallback(async (communityId: string): Promise<void> => {
+  const startCheckout = useCallback(async (
+    communityId: string,
+    planTier?: FounderPlanTier,
+  ): Promise<void> => {
     const usableSession = await ensureSessionRef.current(params.session);
     if (!usableSession) return;
     if (params.operatorComplimentaryAccess) {
@@ -182,18 +202,25 @@ export function useWebFounderBillingController(params: {
     }
     setActionCommunityId(communityId);
     setError(null);
-    captureProductAnalyticsEvent("agent_plan_checkout_started", { community_id: communityId });
+    captureProductAnalyticsEvent("agent_plan_checkout_started", {
+      community_id: communityId,
+      plan_tier: planTier ?? "chief_of_staff",
+    });
     try {
       const community = overviewRef.current.communities.find(
         (candidate) => candidate.community_id === communityId,
       );
-      const returnSettingsGroup = community?.lifecycle_status === "archived"
-        ? "account"
-        : "billing";
-      const returnUrl = `${window.location.origin}/settings/${returnSettingsGroup}?founder_community=${encodeURIComponent(communityId)}`;
+      const returnPath =
+        community &&
+        community.lifecycle_status !== "archived" &&
+        community.community_slug
+          ? `/c/${encodeURIComponent(community.community_slug)}/settings/agent`
+          : "/settings/account";
+      const returnUrl = `${window.location.origin}${returnPath}?founder_community=${encodeURIComponent(communityId)}`;
       const result = await startCloudFounderSubscriptionCheckout({
         session: usableSession,
         communityId,
+        planTier,
         successUrl: returnUrl,
         cancelUrl: returnUrl,
       });
@@ -204,13 +231,53 @@ export function useWebFounderBillingController(params: {
     }
   }, [params.operatorComplimentaryAccess, params.session, refresh]);
 
+  const switchTier = useCallback(async (
+    communityId: string,
+    targetTier: FounderPlanTier,
+  ): Promise<boolean> => {
+    const usableSession = await ensureSessionRef.current(params.session);
+    if (!usableSession) return false;
+    if (params.operatorComplimentaryAccess) {
+      await refresh(usableSession);
+      return false;
+    }
+    setActionCommunityId(communityId);
+    setError(null);
+    try {
+      await switchCloudFounderSubscriptionTier({
+        session: usableSession,
+        communityId,
+        targetTier,
+      });
+      await Promise.all([
+        refresh(usableSession),
+        onCommunityReadyRef.current?.(communityId, usableSession),
+      ]);
+      return true;
+    } catch (switchError) {
+      setError(messageForError(switchError));
+      return false;
+    } finally {
+      setActionCommunityId(null);
+    }
+  }, [params.operatorComplimentaryAccess, params.session, refresh]);
+
   const openPortal = useCallback(async (communityId: string): Promise<void> => {
     const usableSession = await ensureSessionRef.current(params.session);
     if (!usableSession) return;
     setActionCommunityId(communityId);
     setError(null);
     try {
-      const returnUrl = `${window.location.origin}/settings/billing`;
+      const community = overviewRef.current.communities.find(
+        (candidate) => candidate.community_id === communityId,
+      );
+      const returnPath =
+        community &&
+        community.lifecycle_status !== "archived" &&
+        community.community_slug
+          ? `/c/${encodeURIComponent(community.community_slug)}/settings/agent`
+          : "/settings/account";
+      const returnUrl = `${window.location.origin}${returnPath}`;
       const result = await startCloudFounderBillingPortal({
         session: usableSession,
         communityId,
@@ -304,6 +371,7 @@ export function useWebFounderBillingController(params: {
     ),
     refresh,
     startCheckout,
+    switchTier,
     openPortal,
     retryArchiveCleanup,
     restoreCommunityWithoutPayment,

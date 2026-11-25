@@ -5,38 +5,49 @@ import type {
 import {
   POLYNET_BUILDER_OFFER_NAME,
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
-  POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
+  POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS,
+  POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
+  type FounderPlanTier,
 } from "./founderPlan";
 
 export const POLYNET_BUILDER_OFFER = {
   id: "builder_community_v1",
   name: POLYNET_BUILDER_OFFER_NAME,
-  priceBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
+  priceBaseUnits: POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS,
+  guidePriceBaseUnits: POLYNET_FOUNDER_GUIDE_MONTHLY_PRICE_BASE_UNITS,
+  chiefOfStaffPriceBaseUnits: POLYNET_FOUNDER_CHIEF_OF_STAFF_MONTHLY_PRICE_BASE_UNITS,
   cadence: "month",
   scopeLabel: "per community",
   headline: "Give your community an agent",
   description:
-    "Your community is free forever. The Agent plan adds one always-on AI agent for your community, with $20/month in included AI usage (enough for thousands of conversations).",
-  purchaseHeadline: "Turn on the agent",
+    "Your community is free forever. Add Guide ($20/month, $3 AI included) for reactive answers and living memory, or Chief of Staff ($100/month, $20 AI included) for proactive briefs, member check-ins, and auto-replies.",
+  purchaseHeadline: "Turn on your community agent",
   purchaseDescription:
-    "One always-on AI agent for one community, with $20/month in included AI usage.",
+    "Pick Guide ($20/month) for reactive 1:1 chats and living memory, or Chief of Staff ($100/month) to run proactive briefs, check-ins, and auto-replies.",
   purchaseNote: "Your community stays free either way.",
   benefits: [
     {
-      title: "Living Soul & Memory",
-      description: "Remembers your community's voice, lessons, and each person's private goals — strictly private per member and builder.",
+      title: "Guide ($20/month · $3 AI included)",
+      description:
+        "The community that remembers — reactive 1:1 chats, public @mentions, active-thread follow-ups, and strictly private community & personal memory.",
     },
     {
-      title: "1:1 answers & follow-ups everywhere",
-      description: "Answers members privately, replies to @mentions, follows up in active threads, and works on your site and MCP.",
+      title: "Chief of Staff ($100/month · $20 AI included)",
+      description:
+        "The agent that helps run your community — everything in Guide plus Daily Founder Briefs, proactive member & builder check-ins, unanswered-question auto-replies, and optional $30 usage boosts.",
     },
     {
-      title: "Chief of Staff & Proactive Heartbeats",
-      description: "Daily founder briefs, activity-tapered member & builder check-ins, and zero-AI weekly digests that bring quiet members back.",
+      title: "Free community core included",
+      description:
+        "Unlimited members, channels, courses, pods, events, DMs, zero-AI weekly digests, and official Polynet MCP.",
     },
   ],
   platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
 } as const;
+
+export function founderPlanTierDisplayName(tier: FounderPlanTier | null | undefined): string {
+  return tier === "guide" ? "Guide" : "Chief of Staff";
+}
 
 export function formatBuilderOfferPrice(
   priceBaseUnits: number = POLYNET_BUILDER_OFFER.priceBaseUnits,

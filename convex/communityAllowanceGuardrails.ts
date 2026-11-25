@@ -274,6 +274,7 @@ export const processFounderAllowanceAlertsPageInternal = internalMutation({
         reengaged30d: reengagement.reengagedCount,
         contacted30d: reengagement.contactedCount,
         actionUrl,
+        planTier: state.planTier,
         boostAvailable:
           state.fundingSource === "stripe" && founderPlanTierAllowsUsageBoosts(state.planTier),
       });

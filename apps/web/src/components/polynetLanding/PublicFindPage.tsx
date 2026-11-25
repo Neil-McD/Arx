@@ -80,7 +80,7 @@ export function PublicFindPage({ onJoin }: PublicFindPageProps) {
       <section className="closing" aria-labelledby="find-start-title">
         <h2 id="find-start-title">Don't see yours? Start it.</h2>
         <button className="cta" type="button" onClick={trackStart("find_closing", onJoin)}>Start a community</button>
-        <p className="microcopy">Free to build your community · The agent is $79/month with AI included</p>
+        <p className="microcopy">Free to build · Guide $20/month · Chief of Staff $100/month</p>
       </section>
     </PublicFrame>
   );
