@@ -749,3 +749,6 @@
 .pn-landing .rpw-convo .rpw-composer { min-height: 42px; }
 .pn-landing .rpw-convo .rpw-bubbles { margin-top: auto; }
 .pn-landing .rpw-convo .rpw-composer { margin-top: 0; }
+/* Scrolling over the preview: a part that can scroll does, and once it's at
+   its end the page carries on. Nothing in the preview holds the page still. */
+.pn-landing .rpw, .pn-landing .rpw * { overscroll-behavior: auto !important; }
