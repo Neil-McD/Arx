@@ -55,6 +55,11 @@ export const applyCommunityOperationInternal = internalMutation({
         ? await ctx.runMutation(refs.communityChannels.applyChannelOperationForTrustedUserInternal, { ...scope, operation: args.operation, input })
       : args.operation.startsWith("community.note.")
         ? await ctx.runMutation(refs.communityNotes.applyCommunityNoteOperationForTrustedManagerInternal, { ...scope, operation: args.operation, input })
+      : args.operation === "community.pod.request_join"
+        ? await ctx.runMutation(refs.communityPods.requestJoinPodForTrustedMemberInternal, {
+            ...scope,
+            podSlug: String(input.pod ?? "").trim().toLowerCase(),
+          })
       : args.operation.startsWith("community.pod.")
         ? await ctx.runMutation(refs.communityPods.applyPodOperationForTrustedManagerInternal, { ...scope, operation: args.operation, input })
       : args.operation.startsWith("community.journey.")

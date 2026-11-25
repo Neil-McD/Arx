@@ -421,9 +421,34 @@ describe("Slice 3: Community Notes editing, Pods parity, Channel Pinning, and Da
     expect(paidReq.ok).toBe(false);
     expect(paidReq.code).toBe("pod_is_paid");
 
-    const listedReq: any = await sam("polynet_request_join_pod", { pod: "founders-pod" });
+    const listedReq: any = await sam("polynet_request_join_pod", { pod: "founders-pod" }, { idempotencyKey: "req-pod-sam-1" });
     expect(listedReq.ok).toBe(true);
     expect(listedReq.value.result).toMatchObject({ pod: "founders-pod", status: "pending" });
+
+    // Declining and retrying the exact same idempotencyKey replays the original receipt and NEVER reopens the declined request.
+    const declineReq: any = await admin("polynet_decide_pod_request", {
+      pod: "founders-pod",
+      member: "sam",
+      approve: false,
+    });
+    expect(declineReq.ok).toBe(true);
+    expect(declineReq.value.result.status).toBe("declined");
+
+    const retryReq: any = await sam("polynet_request_join_pod", { pod: "founders-pod" }, { idempotencyKey: "req-pod-sam-1" });
+    expect(retryReq.ok).toBe(true);
+    expect(retryReq.value.deduped).toBe(true);
+    const reqRowAfterRetry = await t.run((ctx) =>
+      ctx.db
+        .query("communityPodRequests")
+        .withIndex("by_channel_user", (q) => q.eq("channelId", w.listedPodChannelId).eq("userId", w.samId))
+        .first(),
+    );
+    expect(reqRowAfterRetry?.status).toBe("declined");
+
+    // A brand-new request with a fresh idempotency key creates a fresh pending request for the rest of the flow.
+    const freshReq: any = await sam("polynet_request_join_pod", { pod: "founders-pod" }, { idempotencyKey: "req-pod-sam-2" });
+    expect(freshReq.ok).toBe(true);
+    expect(freshReq.value.result).toMatchObject({ pod: "founders-pod", status: "pending" });
 
     // 3. Builder reads builder/pods.json and sees all 3 pods + Sam's pending request + Jules paid seat + Pat plan seat.
     const podsDoc: any = await admin("polynet_read", { path: `${ROOT}builder/pods.json` });

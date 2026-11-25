@@ -3281,21 +3281,43 @@ async function executeCanonicalCall(args: {
     ) {
       return canonicalError("invalid_tool_args", "Give pod (the listed pod's slug from pods/).");
     }
+    const normalizedPodInput = { pod: podSlug };
+    const receiptArgs = {
+      ...args,
+      target,
+      idempotencyKey,
+      toolName: "polynet_call" as const,
+      input: { operation, version: 1, input: normalizedPodInput, idempotency_key: idempotencyKey },
+    };
+    const reservation = await reserveMutatingOperation(receiptArgs);
+    if (!reservation.ok) return reservation.result;
+    if (reservation.status === "completed") return { ok: true, value: replayedOperationValue(reservation.completedValue) };
     try {
-      const value = await args.ctx.runMutation(
-        (internal as any).communityPods.requestJoinPodForTrustedMemberInternal,
-        { userId: args.userId, communityId: target.communityId, podSlug },
-      );
-      return {
-        ok: true,
-        value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey, result: value }),
-      };
+      const applied = await args.ctx.runMutation((internal as any).communityOperations.applyCommunityOperationInternal, {
+        userId: args.userId,
+        communityId: target.communityId,
+        operation,
+        input: normalizedPodInput,
+        idempotencyKey,
+        ...(args.principalKind === "community_agent_for_member" ? { principalKind: args.principalKind } : {}),
+        requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
+        answer: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey, result: {} }),
+      });
+      return { ok: true, value: applied.replayed !== undefined ? replayedOperationValue(applied.replayed) : applied.value };
     } catch (error) {
       const raw = error instanceof Error ? error.message : "";
-      if (raw.includes("community_pod_paid")) {
-        return canonicalError("pod_is_paid", "That is a paid pod. Join it on its Pods page in Polynet.");
-      }
-      return canonicalError("pod_not_found", "No listed pod with that slug here. List pods/ first.");
+      const [code, message] = raw.includes("community_pod_paid")
+        ? ["pod_is_paid", "That is a paid pod. Join it on its Pods page in Polynet."]
+        : ["pod_not_found", "No listed pod with that slug here. List pods/ first."];
+      await failMutatingOperation({
+        ...receiptArgs,
+        requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
+        errorCode: code,
+        errorMessage: message,
+      });
+      return canonicalError(code, message);
     }
   }
   if (ADMISSION_OPERATIONS.includes(operation)) {
