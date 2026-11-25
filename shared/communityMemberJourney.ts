@@ -161,13 +161,18 @@ export function deriveMemberJourneyStatus(args: {
 export function formatMemberActivitySummary(args: {
   postsCount: number;
   lessonsDoneCount: number;
+  lessonsCapped?: boolean;
 }): string | null {
   const parts: string[] = [];
   if (args.postsCount > 0) {
     parts.push(args.postsCount >= 5 ? "5+ posts" : `${args.postsCount} ${args.postsCount === 1 ? "post" : "posts"}`);
   }
   if (args.lessonsDoneCount > 0) {
-    parts.push(`${args.lessonsDoneCount} ${args.lessonsDoneCount === 1 ? "lesson" : "lessons"}`);
+    parts.push(
+      args.lessonsCapped
+        ? `${args.lessonsDoneCount}+ lessons`
+        : `${args.lessonsDoneCount} ${args.lessonsDoneCount === 1 ? "lesson" : "lessons"}`,
+    );
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }

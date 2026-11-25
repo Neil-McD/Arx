@@ -1844,7 +1844,8 @@ export default defineSchema({
   })
     .index("by_community_module_user", ["communityId", "moduleId", "userId"])
     .index("by_community_module", ["communityId", "moduleId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_user_lastCompletedAt", ["communityId", "userId", "lastCompletedAt"]),
 
   // Files under a lesson, beside its links (communityLessonFiles.ts, Nov 18).
   // A row of its own, not an entry in lessonLinks, so the guide's course

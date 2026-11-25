@@ -79,16 +79,19 @@ async function readMemberParticipationSignals(
 ): Promise<{
   postsCount: number;
   lessonsDoneCount: number;
+  lessonsCapped: boolean;
   participationCount: number;
   lastParticipationAtMs: number | null;
 }> {
-  const [roots, replies, courseProgressRows] = await Promise.all([
+  const COURSE_MODULE_SCAN_CAP = 25;
+  const [liveRoots, liveReplies, courseProgressRows] = await Promise.all([
     ctx.db
       .query("communityInteractionRoots")
       .withIndex("by_community_actorUser_createdAt", (q: any) =>
         q.eq("communityId", communityId).eq("actorUserId", userId),
       )
       .order("desc")
+      .filter((q: any) => q.eq(q.field("status"), "live"))
       .take(5),
     ctx.db
       .query("communityInteractionReplies")
@@ -96,16 +99,16 @@ async function readMemberParticipationSignals(
         q.eq("communityId", communityId).eq("actorUserId", userId),
       )
       .order("desc")
+      .filter((q: any) => q.eq(q.field("status"), "live"))
       .take(5),
     ctx.db
       .query("communityCourseProgress")
-      .withIndex("by_community_user", (q: any) =>
+      .withIndex("by_community_user_lastCompletedAt", (q: any) =>
         q.eq("communityId", communityId).eq("userId", userId),
       )
-      .take(10),
+      .order("desc")
+      .take(COURSE_MODULE_SCAN_CAP),
   ]);
-  const liveRoots = roots.filter((row: any) => row.status === "live");
-  const liveReplies = replies.filter((row: any) => row.status === "live");
   const postsCount = liveRoots.length + liveReplies.length;
   let lessonsDoneCount = 0;
   let lastCourseAt = 0;
@@ -120,6 +123,7 @@ async function readMemberParticipationSignals(
   return {
     postsCount,
     lessonsDoneCount,
+    lessonsCapped: courseProgressRows.length >= COURSE_MODULE_SCAN_CAP,
     participationCount: postsCount + lessonsDoneCount,
     lastParticipationAtMs: bestAt > 0 ? bestAt : null,
   };
@@ -534,6 +538,7 @@ export const getCommunityMemberJourneyBoard = query({
           activity_summary: formatMemberActivitySummary({
             postsCount: participation.postsCount,
             lessonsDoneCount: participation.lessonsDoneCount,
+            lessonsCapped: participation.lessonsCapped,
           }),
           joined_at: iso(joinedAtMs),
           last_active_at: iso(lastActiveAtMs),
