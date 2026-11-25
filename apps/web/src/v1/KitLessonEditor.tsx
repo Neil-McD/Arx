@@ -19,6 +19,7 @@ import { askInApp } from "../../../../shared/inAppConfirm";
 import {
   isPlainLeftClick,
   navigateInternalPolynetPath,
+  registerInternalNavigationGuard,
   resolveInternalPolynetPath,
 } from "../../../../shared/internalPolynetLink";
 import { Btn, cx, Icon } from "./kit";
@@ -191,6 +192,17 @@ export function KitLessonEditor(props: {
   const { onDirtyChange } = props;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
+  useEffect(() => {
+    if (!dirty) return;
+    return registerInternalNavigationGuard(() =>
+      askInApp({
+        message: "Leave this lesson without saving your changes?",
+        yes: "Discard changes",
+        no: "Keep editing",
+        danger: true,
+      }),
+    );
+  }, [dirty]);
 
   const discard = () => {
     setTitle(resource.title);
@@ -291,20 +303,7 @@ export function KitLessonEditor(props: {
                       onClick={(event) => {
                         if (!isPlainLeftClick(event)) return;
                         event.preventDefault();
-                        void (async () => {
-                          if (
-                            dirty &&
-                            !(await askInApp({
-                              message: "Leave this lesson without saving your changes?",
-                              yes: "Discard changes",
-                              no: "Keep editing",
-                              danger: true,
-                            }))
-                          ) {
-                            return;
-                          }
-                          navigateInternalPolynetPath(internalPath);
-                        })();
+                        void navigateInternalPolynetPath(internalPath);
                       }}
                     >
                       <Icon name="arrow" />

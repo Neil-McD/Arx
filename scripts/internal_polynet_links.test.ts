@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   isPlainLeftClick,
+  navigateInternalPolynetPath,
+  registerInternalNavigationGuard,
   resolveInternalPolynetPath,
 } from "../shared/internalPolynetLink";
 import { renderMarkdown } from "../shared/markdownUi";
@@ -101,6 +103,49 @@ describe("internal Polynet link resolution", () => {
     expect(isPlainLeftClick({ button: 0, shiftKey: true })).toBe(false);
     expect(isPlainLeftClick({ button: 0, altKey: true })).toBe(false);
     expect(isPlainLeftClick({ button: 0, defaultPrevented: true })).toBe(false);
+  });
+
+  it("honors registered unsaved-changes guards before navigating in-app", async () => {
+    let pathname = "/c/builders/knowledge/rs1/m1";
+    let popstateCount = 0;
+    const prevWindow = globalThis.window;
+    const prevPopStateEvent = globalThis.PopStateEvent;
+    try {
+      (globalThis as unknown as { PopStateEvent: typeof Event }).PopStateEvent = Event;
+      (globalThis as unknown as { window: unknown }).window = {
+        location: {
+          get pathname() {
+            return pathname;
+          },
+          search: "",
+          hash: "",
+        },
+        history: {
+          pushState: (_state: unknown, _title: string, next: string) => {
+            pathname = next;
+          },
+        },
+        dispatchEvent: () => {
+          popstateCount += 1;
+          return true;
+        },
+      };
+
+      const unregister = registerInternalNavigationGuard(async () => false);
+      const blocked = await navigateInternalPolynetPath("/c/builders/knowledge/rs2/m9");
+      expect(blocked).toBe(false);
+      expect(pathname).toBe("/c/builders/knowledge/rs1/m1");
+      expect(popstateCount).toBe(0);
+
+      unregister();
+      const allowed = await navigateInternalPolynetPath("/c/builders/knowledge/rs2/m9");
+      expect(allowed).toBe(true);
+      expect(pathname).toBe("/c/builders/knowledge/rs2/m9");
+      expect(popstateCount).toBe(1);
+    } finally {
+      (globalThis as unknown as { window: unknown }).window = prevWindow;
+      (globalThis as unknown as { PopStateEvent: unknown }).PopStateEvent = prevPopStateEvent;
+    }
   });
 });
 

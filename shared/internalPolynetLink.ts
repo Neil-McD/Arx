@@ -130,15 +130,39 @@ export function isPlainLeftClick(event: {
   );
 }
 
+export type InternalNavigationGuard = (inAppPath: string) => Promise<boolean> | boolean;
+
+const navigationGuards = new Set<InternalNavigationGuard>();
+
+/**
+ * Registers a guard (e.g. unsaved-changes confirmation) checked before any
+ * in-app Polynet link navigation runs. Returns an unregister callback.
+ */
+export function registerInternalNavigationGuard(
+  guard: InternalNavigationGuard,
+): () => void {
+  navigationGuards.add(guard);
+  return () => {
+    navigationGuards.delete(guard);
+  };
+}
+
 /**
  * Navigates inside the Polynet SPA via history.pushState + popstate so
  * shell navigation, detail routes (courses/lessons/threads/members), and
  * the browser Back button stay in sync without opening a new tab.
  */
-export function navigateInternalPolynetPath(inAppPath: string): void {
-  if (typeof window === "undefined") return;
+export async function navigateInternalPolynetPath(inAppPath: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
   const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  if (current === inAppPath) return;
+  if (current === inAppPath) return false;
+  for (const guard of Array.from(navigationGuards)) {
+    const allowed = await guard(inAppPath);
+    if (!allowed) return false;
+  }
+  const latest = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (latest === inAppPath) return false;
   window.history.pushState({}, "", inAppPath);
   window.dispatchEvent(new PopStateEvent("popstate"));
+  return true;
 }
