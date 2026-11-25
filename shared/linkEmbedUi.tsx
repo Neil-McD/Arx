@@ -1,5 +1,10 @@
 import { memo, type ReactNode } from "react";
 import { extractCommunityInteractionLinkSources } from "./communityInteractionLinkExtraction";
+import {
+  isPlainLeftClick,
+  navigateInternalPolynetPath,
+  resolveInternalPolynetPath,
+} from "./internalPolynetLink";
 import { normalizeExternalUrl, parseEmbedUrl, parseYouTubeEmbedUrl, type ParsedEmbed } from "./videoEmbed";
 export { normalizeExternalUrl, parseEmbedUrl, parseYouTubeEmbedUrl, type ParsedEmbed };
 
@@ -35,24 +40,40 @@ export function renderTextWithLinks(
     const raw = match[0] ?? "";
     const { url, trailing } = splitUrlAndTrailingPunctuation(raw);
     const href = url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+    const internalPath = !opts?.onOpenUrl ? resolveInternalPolynetPath(href) : null;
     nodes.push(
-      <a
-        key={`link-${index}`}
-        className="chat-link"
-        href={href}
-        target="_blank"
-        rel="noreferrer noopener"
-        onClick={
-          opts?.onOpenUrl
-            ? (event) => {
-                event.preventDefault();
-                opts.onOpenUrl?.(href);
-              }
-            : undefined
-        }
-      >
-        {url}
-      </a>,
+      internalPath ? (
+        <a
+          key={`link-${index}`}
+          className="chat-link"
+          href={internalPath}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return;
+            event.preventDefault();
+            navigateInternalPolynetPath(internalPath);
+          }}
+        >
+          {url}
+        </a>
+      ) : (
+        <a
+          key={`link-${index}`}
+          className="chat-link"
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          onClick={
+            opts?.onOpenUrl
+              ? (event) => {
+                  event.preventDefault();
+                  opts.onOpenUrl?.(href);
+                }
+              : undefined
+          }
+        >
+          {url}
+        </a>
+      ),
     );
     if (trailing) nodes.push(trailing);
     lastIndex = index + raw.length;

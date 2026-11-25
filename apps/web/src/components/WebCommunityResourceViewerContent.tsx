@@ -9,6 +9,11 @@ import {
 } from "react";
 
 import { normalizeExternalUrl, parseEmbedUrl, StableMediaEmbedFrame } from "../../../../shared/linkEmbedUi";
+import {
+  isPlainLeftClick,
+  navigateInternalPolynetPath,
+  resolveInternalPolynetPath,
+} from "../../../../shared/internalPolynetLink";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
 import type { CommunityResource } from "./communityResourcesContracts";
@@ -375,17 +380,36 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
 
           {renderBodyContent()}
 
-          {verificationLink ? (
-            <a
-              className="resource-viewer-verification-link"
-              href={verificationLink.href}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span>{verificationLink.label}</span>
-              <ExternalArrowIcon />
-            </a>
-          ) : null}
+          {verificationLink ? (() => {
+            const internalPath = resolveInternalPolynetPath(verificationLink.href);
+            if (internalPath) {
+              return (
+                <a
+                  className="resource-viewer-verification-link"
+                  href={internalPath}
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return;
+                    event.preventDefault();
+                    navigateInternalPolynetPath(internalPath);
+                  }}
+                >
+                  <span>{verificationLink.label}</span>
+                  <ExternalArrowIcon />
+                </a>
+              );
+            }
+            return (
+              <a
+                className="resource-viewer-verification-link"
+                href={verificationLink.href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>{verificationLink.label}</span>
+                <ExternalArrowIcon />
+              </a>
+            );
+          })() : null}
         </div>
       </div>
     </div>

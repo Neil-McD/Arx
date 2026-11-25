@@ -15,6 +15,13 @@ import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 const LessonEditor = lazy(() => import("../components/lessonEditor/LessonEditor"));
 import type { CommunityResource } from "../components/communityResourcesContracts";
 import { formatLessonFileSize, LESSON_FILE_MAX_BYTES, LESSON_RESOURCES_MAX } from "../../../../shared/lessonFiles";
+import { askInApp } from "../../../../shared/inAppConfirm";
+import {
+  isPlainLeftClick,
+  navigateInternalPolynetPath,
+  registerInternalNavigationGuard,
+  resolveInternalPolynetPath,
+} from "../../../../shared/internalPolynetLink";
 import { Btn, cx, Icon } from "./kit";
 
 export type LessonLink = { title: string; url: string };
@@ -185,6 +192,17 @@ export function KitLessonEditor(props: {
   const { onDirtyChange } = props;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
+  useEffect(() => {
+    if (!dirty) return;
+    return registerInternalNavigationGuard(() =>
+      askInApp({
+        message: "Leave this lesson without saving your changes?",
+        yes: "Discard changes",
+        no: "Keep editing",
+        danger: true,
+      }),
+    );
+  }, [dirty]);
 
   const discard = () => {
     setTitle(resource.title);
@@ -274,7 +292,28 @@ export function KitLessonEditor(props: {
               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
             <em>{lessonLinkPlace(link)}</em>
             <span className={cx("kresacts")}>
-              <a href={link.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${link.title}`} title="Open"><Icon name="arrow" /></a>
+              {(() => {
+                const internalPath = resolveInternalPolynetPath(link.url);
+                if (internalPath) {
+                  return (
+                    <a
+                      href={internalPath}
+                      aria-label={`Open ${link.title}`}
+                      title="Open"
+                      onClick={(event) => {
+                        if (!isPlainLeftClick(event)) return;
+                        event.preventDefault();
+                        void navigateInternalPolynetPath(internalPath);
+                      }}
+                    >
+                      <Icon name="arrow" />
+                    </a>
+                  );
+                }
+                return (
+                  <a href={link.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${link.title}`} title="Open"><Icon name="arrow" /></a>
+                );
+              })()}
               <button type="button" aria-label={`Remove ${link.title}`} title="Remove" onClick={() => setLinks(links.filter((entry) => entry.url !== link.url))}><Icon name="close" /></button>
             </span>
           </div>
