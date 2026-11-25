@@ -5,9 +5,10 @@
 // A row opens to the exact words; the host sends/posts them, changes them
 // first, or skips. Nothing is sent without that click. Empty, it isn't drawn.
 import { useEffect, useState } from "react";
-import { BookOpen, ChevronDown, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Check, ChevronDown, MessageSquare, Sparkles } from "lucide-react";
 import { REPLY_DRAFT_EDIT_MAX_CHARS, replyDraftWaited, type ReplyDraftView } from "../../../../shared/communityReplyDrafts";
 import { MEMBER_COACH_EDIT_MAX_CHARS, type MemberCoachDraftView } from "../../../../shared/communityMemberCoachTypes";
+import type { CloudJourneyStageAdvanceProposal } from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import { Btn, cx } from "./kit";
 
 export function replyDraftTitle(draft: Pick<ReplyDraftView, "author">): string {
@@ -23,6 +24,17 @@ export function coachDraftTitle(draft: Pick<MemberCoachDraftView, "member_name">
   return `Check in with ${draft.member_name}`;
 }
 
+export function stageProposalTitle(proposal: Pick<CloudJourneyStageAdvanceProposal, "member_name" | "to_stage_name">): string {
+  return `Move ${proposal.member_name} to ${proposal.to_stage_name}`;
+}
+
+export function stageProposalDetail(proposal: Pick<CloudJourneyStageAdvanceProposal, "from_stage_name" | "completed_labels">): string {
+  const checks = proposal.completed_labels.slice(0, 3).join(", ");
+  return checks
+    ? `Finished ${proposal.from_stage_name}: ${checks}.`
+    : `Finished all ${proposal.from_stage_name} checkpoints.`;
+}
+
 export function GuideSuggests(props: {
   drafts: ReplyDraftView[];
   // Posts the reply draft (with the host's words, when given). Resolves to what
@@ -32,6 +44,9 @@ export function GuideSuggests(props: {
   coachDrafts?: MemberCoachDraftView[];
   onSendCoach?: (id: string, text?: string) => Promise<string | null>;
   onSkipCoach?: (id: string) => void;
+  stageProposals?: CloudJourneyStageAdvanceProposal[];
+  onApproveStageProposal?: (proposal: CloudJourneyStageAdvanceProposal) => Promise<string | null>;
+  onDismissStageProposal?: (proposal: CloudJourneyStageAdvanceProposal) => void;
   // Opens one row from outside ("reply:<id>" or "coach:<id>"); the home
   // page's product preview uses it to show a draft once. The app leaves it unset.
   openRow?: string | null;
@@ -43,8 +58,19 @@ export function GuideSuggests(props: {
   const [error, setError] = useState<string | null>(null);
 
   const coachDrafts = props.coachDrafts ?? [];
-  const totalCount = props.drafts.length + coachDrafts.length;
+  const stageProposals = props.stageProposals ?? [];
+  const totalCount = props.drafts.length + coachDrafts.length + stageProposals.length;
   if (totalCount === 0) return null;
+
+  const approveStageMove = async (proposal: CloudJourneyStageAdvanceProposal) => {
+    if (busy || !props.onApproveStageProposal) return;
+    setBusy(true);
+    setError(null);
+    const problem = await props.onApproveStageProposal(proposal);
+    setBusy(false);
+    if (problem) setError(problem);
+    else { setOpenKey(null); setEditing(null); }
+  };
 
   const postReply = async (draft: ReplyDraftView) => {
     if (busy) return;
@@ -128,6 +154,45 @@ export function GuideSuggests(props: {
                       : <Btn small disabled={busy} onClick={() => { setEditing(null); setError(null); }}>Cancel</Btn>}
                     {editing === null && props.onSkipCoach ? <Btn small txt disabled={busy} onClick={() => props.onSkipCoach!(draft.id)}>Skip</Btn> : null}
                     <small>Sends privately to {draft.member_name}’s guide chat</small>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        {stageProposals.map((proposal) => {
+          const rowKey = `stage:${proposal.membership_id}:${proposal.from_stage_key}`;
+          const open = openKey === rowKey;
+          return (
+            <div key={rowKey} className={cx("nrow")}>
+              <button type="button" className={cx("nhead")} aria-expanded={open}
+                onClick={() => { setOpenKey(open ? null : rowKey); setEditing(null); setError(null); }}>
+                <span className={cx("nicon", "guide")} aria-hidden="true"><ArrowRight size={16} strokeWidth={1.7} /></span>
+                <span className={cx("ntext")}><b>{stageProposalTitle(proposal)}</b><span>{stageProposalDetail(proposal)}</span></span>
+                <ChevronDown className={cx("nchev", open && "up")} size={16} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+              {open ? (
+                <div className={cx("nopen")}>
+                  {proposal.to_stage_goal ? (
+                    <p className={cx("gdraft")}>Next stage focus: {proposal.to_stage_goal}</p>
+                  ) : null}
+                  {proposal.completed_labels.length ? (
+                    <span className={cx("gsrc")}>
+                      <Check size={13} strokeWidth={2} aria-hidden="true" />
+                      Completed: {proposal.completed_labels.join(" · ")}
+                    </span>
+                  ) : null}
+                  {error ? <p className={cx("gerr")}>{error}</p> : null}
+                  <div className={cx("gacts")}>
+                    <Btn small go disabled={busy || !props.onApproveStageProposal} onClick={() => void approveStageMove(proposal)}>
+                      {busy ? "…" : `Move to ${proposal.to_stage_name}`}
+                    </Btn>
+                    {props.onDismissStageProposal ? (
+                      <Btn small txt disabled={busy} onClick={() => { setOpenKey(null); props.onDismissStageProposal!(proposal); }}>
+                        Keep in {proposal.from_stage_name}
+                      </Btn>
+                    ) : null}
+                    <small>Updates {proposal.member_name} on the Member Board</small>
                   </div>
                 </div>
               ) : null}

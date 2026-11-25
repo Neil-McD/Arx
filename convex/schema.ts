@@ -1454,6 +1454,9 @@ export default defineSchema({
     ),
     agentOutcomeNote: v.optional(v.string()),
     agentOutcomeAt: v.optional(v.number()),
+    // Stage key for which the host dismissed a Chief of Staff "ready to advance"
+    // proposal (or manually moved a member back to), so Home never nags twice.
+    dismissedAdvanceForStageKey: v.optional(v.string()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),

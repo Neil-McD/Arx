@@ -43,6 +43,12 @@ import {
   skipMemberCoachDraft,
 } from "../../../../shared/cloudCommunityMemberCoachGateway";
 import type { MemberCoachDraftView } from "../../../../shared/communityMemberCoachTypes";
+import {
+  approveCloudJourneyStageAdvance,
+  dismissCloudJourneyStageAdvance,
+  listCloudJourneyStageAdvanceProposals,
+  type CloudJourneyStageAdvanceProposal,
+} from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx, useMinWidth } from "../v1/kit";
 import type { HomeTags } from "../../../../shared/communityHomeTags";
 import { useLiveQuery } from "../../../../shared/liveQuery";
@@ -227,6 +233,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // What the guide drafted and offers to post/send (a host with a guide).
   const [drafts, setDrafts] = useState<ReplyDraftView[] | null>(null);
   const [coachDrafts, setCoachDrafts] = useState<MemberCoachDraftView[] | null>(null);
+  const [stageProposals, setStageProposals] = useState<CloudJourneyStageAdvanceProposal[] | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
   const isHost = props.audience === "host";
   const agentOn = props.agentOn !== false;
@@ -260,6 +267,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       setSteps(null);
       setDrafts(null);
       setCoachDrafts(null);
+      setStageProposals(null);
     }
     setFailed(false);
     void (async () => {
@@ -282,11 +290,15 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             fetchMemberCoachDrafts({ session, communityId: props.communityId })
               .then((rows) => { if (!cancelled) setCoachDrafts(rows); })
               .catch(() => { if (!cancelled) setCoachDrafts([]); }),
+            listCloudJourneyStageAdvanceProposals({ session, communityId: props.communityId })
+              .then((rows) => { if (!cancelled) setStageProposals(rows); })
+              .catch(() => { if (!cancelled) setStageProposals([]); }),
           ])
         : Promise.resolve().then(() => {
             if (!cancelled) {
               setDrafts([]);
               setCoachDrafts([]);
+              setStageProposals([]);
             }
           });
       try {
@@ -368,6 +380,42 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     })();
   };
 
+  const approveStageProposal = async (proposal: CloudJourneyStageAdvanceProposal): Promise<string | null> => {
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) return "You're signed out. Sign in and try again.";
+      await approveCloudJourneyStageAdvance({
+        session,
+        communityId: props.communityId,
+        membershipId: proposal.membership_id,
+        expectedFromStageKey: proposal.from_stage_key,
+        targetStageKey: proposal.to_stage_key,
+      });
+      setStageProposals((current) =>
+        (current ?? []).filter((item) => item.membership_id !== proposal.membership_id),
+      );
+      return null;
+    } catch {
+      return "Couldn't move them right now. Try again.";
+    }
+  };
+  const dismissStageProposal = (proposal: CloudJourneyStageAdvanceProposal) => {
+    setStageProposals((current) =>
+      (current ?? []).filter((item) => item.membership_id !== proposal.membership_id),
+    );
+    void (async () => {
+      const session = await props.ensureSession(props.session).catch(() => null);
+      if (session) {
+        await dismissCloudJourneyStageAdvance({
+          session,
+          communityId: props.communityId,
+          membershipId: proposal.membership_id,
+          expectedFromStageKey: proposal.from_stage_key,
+        }).catch(() => undefined);
+      }
+    })();
+  };
+
   const wide = useMinWidth(1024);
   if (!props.kit) return null;
   const kit = props.kit;
@@ -392,7 +440,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // The page draws as one piece once its parts have answered, so the list is
   // never drawn and then pushed down by the brief (docs/specs/web-architecture
   // -end-state.md: nothing moves after it is drawn).
-  const ready = Boolean(snapshot) && briefSettled && tagsSettled && (isHost ? noticed !== null && drafts !== null && coachDrafts !== null : steps !== null);
+  const ready = Boolean(snapshot) && briefSettled && tagsSettled && (isHost ? noticed !== null && drafts !== null && coachDrafts !== null && stageProposals !== null : steps !== null);
 
   const showDesktopRail = wide && Boolean(props.asideContainer);
   const showInlineRail = showsInlineHomeRail({ wide, ready, talking: kit.talking, hasSnapshot: Boolean(snapshot) });
@@ -444,6 +492,9 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
               coachDrafts={coachDrafts ?? []}
               onSendCoach={sendCoach}
               onSkipCoach={skipCoach}
+              stageProposals={stageProposals ?? []}
+              onApproveStageProposal={approveStageProposal}
+              onDismissStageProposal={dismissStageProposal}
             />
           </Suspense>
         ) : null}
