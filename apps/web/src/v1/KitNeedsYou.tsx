@@ -10,7 +10,7 @@
 import { useState, type ReactNode } from "react";
 import { AtSign, BookOpen, CalendarDays, ChevronDown, MessageCircleQuestion, MessageSquare, UserPlus, Users } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
+import type { CommunityAdmissionJoinRequest } from "../components/communityAdmissionTypes";
 import { Btn, cx } from "./kit";
 
 // How many rows show before "N more".

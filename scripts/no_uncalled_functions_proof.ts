@@ -26,6 +26,7 @@ const ALLOWED = new Map<string, string>([
   ["authSessions:pruneRevokedAuthSessionsForMaintenance", "operator tool: scripts/auth_prune_sessions.sh"],
   ["authSessions:scrubRevokedAuthSessionSecretsForMaintenance", "operator tool: scripts/auth_scrub_revoked_session_secrets.sh"],
   ["communityChannels:listCommunityChannels", "channel access tests read through it; replace in the channel slice"],
+  ["communityChannelParticipants:listChannelRoster", "cached client grace: dead ChannelRosterPanel watch removed in Wave A; delete after prod clients rotate"],
   ["communityResources:listCommunityResourceBuilderDirectory", "protected core (resources): deleting needs Neil's confirmation"],
   ["communityResources:readCommunityResourceBuilderResource", "protected core (resources): deleting needs Neil's confirmation"],
   ["communityResources:getCommunityResourceBuilderChangesetStatus", "protected core (resources): deleting needs Neil's confirmation"],

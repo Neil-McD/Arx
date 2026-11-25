@@ -13,16 +13,14 @@ const SCAN_DIRS = ["apps/web/src", "shared"];
 
 // Files legitimately allowed to render raw <img> tags:
 // - The canonical framed media primitive itself
-// - The 3 interactive framing/crop editor modals
+// - The unified interactive framing/crop editor modal
 // - Content images (chat/DM attachments, lightbox, upload previews, markdown/lesson images)
 // - Static Polynet brand assets
 const ALLOWED_RAW_IMG_FILES = new Set([
   "shared/StableFramedMedia.tsx",
   "shared/CommunityChatMediaGrid.tsx",
   "shared/AttachmentChipButton.tsx",
-  "apps/web/src/components/WebCommunityAvatarEditorModal.tsx",
-  "apps/web/src/components/WebCommunityBannerEditorModal.tsx",
-  "apps/web/src/components/WebUserAvatarEditorModal.tsx",
+  "apps/web/src/components/WebImageFrameEditorModal.tsx",
   "apps/web/src/components/WebCommunityAgentDock.tsx",
   "apps/web/src/components/WebCommunityChatLightboxModal.tsx",
   "apps/web/src/components/WebCommunityChatPanel.tsx",

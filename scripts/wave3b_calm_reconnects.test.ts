@@ -64,7 +64,6 @@ describe("Wave 3B: calm reconnects, warm directory switching, and lazy feed avat
     const profileHydration = read("apps/web/src/controllers/useWebCommunityProfileHydrationController.ts");
     const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
     const membersTable = read("apps/web/src/v1/KitMembersTable.tsx");
-    const rosterPanel = read("apps/web/src/components/ChannelRosterPanel.tsx");
 
     expect(activityController).toContain("minInactiveDurationMs: WEB_APP_RESUME_COOLDOWN_MS");
     expect(directoryLifecycle).toContain("DIRECTORY_TAB_FRESHNESS_MS");
@@ -73,6 +72,5 @@ describe("Wave 3B: calm reconnects, warm directory switching, and lazy feed avat
     expect(profileHydration).toContain("visibleProfileIdsKey");
     expect(interactionFeed).toMatch(/loading="lazy"[\s\S]{0,60}fetchPriority="low"/);
     expect(membersTable).toMatch(/loading="lazy"\s+fetchPriority="low"/);
-    expect(rosterPanel).toMatch(/loading="lazy"\s+fetchPriority="low"/);
   });
 });

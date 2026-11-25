@@ -28,8 +28,6 @@ export function buildWebCommunityContentProjectionBindings(params: {
   | "resourcesActions"
   | "eventsState"
   | "eventsActions"
-  | "resourceModuleModalProps"
-  | "resourceModuleDeleteModalProps"
   | "podsProps"
 > {
   const { communityContent } = params;
@@ -77,8 +75,6 @@ export function buildWebCommunityContentProjectionBindings(params: {
       saveEvent: communityContent.handleSaveCommunityEvent,
       cancelEvent: communityContent.handleCancelCommunityEvent,
     },
-    resourceModuleModalProps: communityContent.resourceModuleModalProps,
-    resourceModuleDeleteModalProps: communityContent.resourceModuleDeleteModalProps,
     podsProps: {
       session: params.session,
       ensureSession: params.ensureSession,

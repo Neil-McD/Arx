@@ -16,7 +16,7 @@ test("narrow access reuses one roster and preserves the mounted conversation", (
 });
 test("roster Back and Escape reuse the host close callback", () => {
   const source = read("apps/web/src/components/ChannelRosterPanel.tsx");
-  expect(source).toContain('event.key === "Escape" && !event.defaultPrevented && props.narrowOpen');
+  expect(source).toContain('event.key === "Escape" && !event.defaultPrevented && narrowOpen');
   expect(source).toContain('onClick={props.onCloseNarrow}');
   expect(source).toContain('backRef.current.focus()');
 });

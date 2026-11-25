@@ -23,8 +23,10 @@ import {
 import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
 import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
-import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
-import type { CommunityAdmissionControl } from "../components/CommunityAutoJoinControl";
+import type {
+  CommunityAdmissionControl,
+  CommunityAdmissionJoinRequest,
+} from "../components/communityAdmissionTypes";
 import { matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
 import { Face, WhoCanJoinLine, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";

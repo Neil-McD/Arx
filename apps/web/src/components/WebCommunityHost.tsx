@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import type { AppView, CommunityTab } from "../../../../shared/appShellNavigation";
 import { WebCommunityChatPanel, type WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
-import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
+import type { CommunityAdmissionControl } from "./communityAdmissionTypes";
 import type { WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
 import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
 import { resilientImport, scheduleIdlePrefetch } from "../lib/resilientLazy";
@@ -28,15 +28,19 @@ const WebCommunityMembersPage = lazy(() =>
   })),
 );
 
-const COMMUNITY_TAB_PREFETCH_LOADERS = [
+const MEMBER_TAB_PREFETCH_LOADERS = [
   loadSecondaryPanels,
   loadMembersPage,
   () => import("./WebCommunityKnowledgePanel"),
   () => import("./WebCommunityEventsSection"),
   () => import("./WebCommunityPodsSection"),
-  () => import("./WebCommunitySettingsSection"),
-  () => import("./WebCommunityAnalyticsSection"),
   () => import("./WebCommunityDiscoverPage"),
+];
+const HOST_SETTINGS_PREFETCH_LOADERS = [
+  () => import("./WebCommunitySettingsSection"),
+];
+const HOST_ANALYTICS_PREFETCH_LOADERS = [
+  () => import("./WebCommunityAnalyticsSection"),
 ];
 
 type WebCommunityHostProps = {
@@ -49,8 +53,18 @@ type WebCommunityHostProps = {
 
 export function WebCommunityHost(props: WebCommunityHostProps) {
   const { communityTab, chatPanelProps, secondaryPanelsProps } = props;
+  const canManageCommunity = secondaryPanelsProps.aiAgent.canManageMembersActiveCommunity;
+  const canViewAnalytics = secondaryPanelsProps.analytics.canViewActiveCommunityAnalytics;
 
-  useEffect(() => scheduleIdlePrefetch(COMMUNITY_TAB_PREFETCH_LOADERS), []);
+  useEffect(() => scheduleIdlePrefetch(MEMBER_TAB_PREFETCH_LOADERS), []);
+  useEffect(() => {
+    if (!canManageCommunity) return;
+    return scheduleIdlePrefetch(HOST_SETTINGS_PREFETCH_LOADERS);
+  }, [canManageCommunity]);
+  useEffect(() => {
+    if (!canViewAnalytics) return;
+    return scheduleIdlePrefetch(HOST_ANALYTICS_PREFETCH_LOADERS);
+  }, [canViewAnalytics]);
 
   const communityKey = secondaryPanelsProps.knowledge.communityId ?? "";
 

@@ -19,7 +19,7 @@ import type {
 import { youTubeEmbedsInText } from "../../../../shared/linkEmbedUi";
 import { pdfLinksInText } from "../../../../shared/messagePdf";
 import { type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
-import type { CommunityAdmissionJoinRequest } from "./CommunityJoinRequestReview";
+import type { CommunityAdmissionJoinRequest } from "./communityAdmissionTypes";
 import type { MentionCandidate } from "./communityMentionAutocomplete";
 import {
   WebCommunityChannelHeader,
@@ -33,7 +33,7 @@ import type {
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { ChannelRosterPanel } from "./ChannelRosterPanel";
-import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
+import type { CommunityAdmissionControl } from "./communityAdmissionTypes";
 import {
   MOBILE_READING_MODE_POLICY,
   advanceMobileReadingMode,
