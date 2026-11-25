@@ -330,11 +330,6 @@
 @keyframes pn-glowpulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 .pn-landing .f1 .core-glow { transform-box: fill-box; transform-origin: center; animation: pn-core 5s ease-in-out infinite; }
 @keyframes pn-core { 0%, 100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.18); } }
-/* the figure as a whole: a point climbs from a conversation into the memory */
-.pn-landing .f1 .trail { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 900ms cubic-bezier(.2, .8, .2, 1); }
-.pn-landing .f1 .rise { transition: transform 900ms cubic-bezier(.2, .8, .2, 1); }
-.pn-landing .f1:hover .trail, .pn-landing .f1.play .trail { stroke-dashoffset: 0; }
-.pn-landing .f1:hover .rise, .pn-landing .f1.play .rise { transform: translateY(-74px); }
 /* It acts: the person under the pointer lights their line; the figure reaches the quiet one. */
 .pn-landing .f2 .spoke-line { transition: stroke 250ms; }
 .pn-landing .f2 .spoke:hover .spoke-line { stroke: #9aa0aa; }
