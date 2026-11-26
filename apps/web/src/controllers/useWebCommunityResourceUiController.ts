@@ -300,7 +300,6 @@ export function useWebCommunityResourceUiController<
       setModuleBannerFocusX(0.5);
       setModuleBannerFocusY(0.5);
       setModuleBannerZoom(1);
-      setIsModuleBannerFocusModalOpen(true);
     } catch (error) {
       setModuleBannerUploadError(error instanceof Error ? error.message : "Failed to load banner image.");
     } finally {

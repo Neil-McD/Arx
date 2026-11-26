@@ -34,8 +34,7 @@ export function buildWebCommunitySettingsImageUploadArgs(params: {
     setCommunitySettingsBannerUploadError: settingsUi.setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner: settingsUi.setIsProcessingCommunitySettingsBanner,
     markCommunitySettingsDirty: settingsUi.markCommunitySettingsDirty,
-    onCommunityAvatarUploadSuccess: () => settingsUi.setIsCommunityAvatarFocusModalOpen(true),
-    onCommunityBannerUploadSuccess: () => settingsUi.setIsCommunityBannerFocusModalOpen(true),
+    // A new picture is placed centred; the crop window opens only from "Adjust" (Neil, Nov 26).
     isLikelyImageFile: params.isLikelyImageFile,
     maxWebImageDataUrlChars: params.maxWebImageDataUrlChars,
     setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
@@ -44,7 +43,6 @@ export function buildWebCommunitySettingsImageUploadArgs(params: {
     setProfileAvatarFocusY: profileUi.setProfileAvatarFocusY,
     setProfileAvatarZoom: profileUi.setProfileAvatarZoom,
     setAuthError: params.setAuthError,
-    onProfileAvatarUploadSuccess: () => profileUi.setIsProfileAvatarFocusModalOpen(true),
   };
 }
 

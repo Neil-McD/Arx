@@ -5,13 +5,13 @@ import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
 import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useRef, type ComponentProps } from "react";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
-import type { CommunityResourcesPanel } from "./CommunityResourcesPanel";
+import type { CommunityResourcesProps } from "./communityResourcesContracts";
 import type { WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import type { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 import "./WebCommunityKnowledgePanel.css";
 
 type Props = {
-  resources: ComponentProps<typeof CommunityResourcesPanel>;
+  resources: CommunityResourcesProps;
   context: {
     communityId: string | null;
     communityName: string | null;

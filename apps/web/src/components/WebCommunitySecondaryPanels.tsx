@@ -10,7 +10,7 @@ import type { WebCommunityBannerEditorModal as WebCommunityBannerEditorModalType
 import type { WebCommunityEventsSection as WebCommunityEventsSectionType } from "./WebCommunityEventsSection";
 import type { WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
 import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
-import type { CommunityResourcesPanel as CommunityResourcesPanelType } from "./CommunityResourcesPanel";
+import type { CommunityResourcesProps } from "./communityResourcesContracts";
 import type { WebCommunityKnowledgePanel as WebCommunityKnowledgePanelType } from "./WebCommunityKnowledgePanel";
 import type { WebCommunitySettingsSection as WebCommunitySettingsSectionType } from "./WebCommunitySettingsSection";
 import { resilientImport } from "../lib/resilientLazy";
@@ -73,7 +73,7 @@ export type WebCommunitySecondaryPanelsProps = {
   };
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSectionType>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSectionType>;
-  resources: ComponentProps<typeof CommunityResourcesPanelType>;
+  resources: CommunityResourcesProps;
   knowledge: ComponentProps<typeof WebCommunityKnowledgePanelType>["context"];
   events: ComponentProps<typeof WebCommunityEventsSectionType>;
   pods: WebCommunityPodsSectionProps;
