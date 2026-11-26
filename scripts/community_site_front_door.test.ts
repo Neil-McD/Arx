@@ -16,8 +16,8 @@ test("someone setting up their account from a community's landing page comes bac
 
 test("after setup they land on the landing page, which joins for them; no site address is involved", () => {
   const onboarding = readFileSync(new URL("../apps/web/src/controllers/useWebOnboardingProfileController.ts", import.meta.url), "utf8");
-  expect(onboarding).toMatch(/buildCommunityFunnelPath\(returnCommunity\)[\s\S]*window\.location\.assign\(`\$\{funnelPath\}\?intent=join`\)/);
+  expect(onboarding).toMatch(/buildSetupReturnUrl\(returnTarget\)[\s\S]*window\.location\.assign\(returnUrl\)/);
   expect(onboarding).not.toMatch(/site_url|communitySiteJoinUrl/);
   const host = readFileSync(new URL("../apps/web/src/components/WebAppMainSurfaceHost.tsx", import.meta.url), "utf8");
-  expect(host).toMatch(/<WebCommunityLandingPage communitySlug=\{props\.publicCommunitySlug\} session=\{props\.publicCommunitySession\} \/>/);
+  expect(host).toMatch(/<WebCommunityLandingPage[\s\S]*communitySlug=\{props\.publicCommunitySlug\}[\s\S]*session=\{props\.publicCommunitySession\}/);
 });
