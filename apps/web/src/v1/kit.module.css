@@ -960,11 +960,12 @@
 .app .evday.past{opacity:.55}
 .app .evnext{display:grid;grid-template-columns:84px minmax(0,1fr);gap:0 22px;margin-top:10px;padding:22px 24px;border-radius:12px;border:1px solid var(--line2);background:var(--panel2,var(--s1))}
 .app .evnext.on{border-color:rgba(var(--w),.28)}
-.app .evnext-cancelled{grid-column:1/-1;display:flex;align-items:flex-start;flex-wrap:nowrap;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:8px;border:1px solid var(--bad-line,rgba(240,104,104,.28));background:rgba(240,104,104,.07);font:inherit;font-size:13px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),border-color .14s var(--ease)}
-.app .evnext-cancelled>span:last-child{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
-.app .evnext-cancelled:hover{background:rgba(240,104,104,.12);border-color:var(--bad-line,rgba(240,104,104,.4));color:var(--ink)}
-.app .nx-cancel{display:block;max-width:100%;margin:4px 0 0;padding:0;border:0;background:none;font:inherit;font-size:12px;line-height:1.4;color:var(--bad,#f38b8b);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;opacity:.88;transition:opacity .14s var(--ease)}
-.app .nx-cancel:hover{opacity:1;text-decoration:underline;text-underline-offset:2px}
+.app .evnext-cancelled{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:8px;padding:0;border:0;background:none;font:inherit;font-size:13px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:color .14s var(--ease)}
+.app .evnext-cancelled>span:last-child{min-width:0;overflow-wrap:anywhere}
+.app .evnext-cancelled:hover{color:var(--ink)}
+.app .nx-cancel{display:inline-flex;align-items:center;gap:7px;max-width:100%;margin:7px 0 0;padding:0;border:0;background:none;font:inherit;font-size:12.5px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:color .14s var(--ease)}
+.app .nx-cancel>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .nx-cancel:hover{color:var(--ink)}
 .app .evnext h2{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0 0;font-size:22px;font-weight:600;letter-spacing:-.012em;color:var(--ink)}
 .app .evsoon{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--aurora-ink)}
 .app .evsoon i{width:6px;height:6px;border-radius:50%;background:var(--aurora-ink);box-shadow:0 0 0 4px rgba(var(--au),.18)}
