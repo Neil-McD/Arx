@@ -378,7 +378,9 @@ export function KitMembersBoard(props: {
     return <p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>;
   }
 
-  const shownStages = phone ? stages.filter((stage) => stage.key === (phoneStageKey ?? stages[0]?.key)) : stages;
+  // The phone's tab, or the first stage when it's unset or its stage was deleted.
+  const phoneKey = stages.some((stage) => stage.key === phoneStageKey) ? phoneStageKey : stages[0]?.key ?? null;
+  const shownStages = phone ? stages.filter((stage) => stage.key === phoneKey) : stages;
 
   return (
     <div className={phone ? "members-board-shell is-phone" : "members-board-shell"}>
@@ -421,7 +423,7 @@ export function KitMembersBoard(props: {
       {phone ? (
         <div className="members-board-tabs" role="tablist" aria-label="Stages">
           {stages.map((stage) => {
-            const on = stage.key === (phoneStageKey ?? stages[0]?.key);
+            const on = stage.key === phoneKey;
             return (
               <button key={stage.key} type="button" role="tab" aria-selected={on} className={on ? "is-on" : ""} onClick={() => setPhoneStageKey(stage.key)}>
                 {stage.name} <em>{visibleCards.filter((card) => card.stage_key === stage.key).length}</em>
