@@ -309,3 +309,11 @@ body {
   background: var(--bg-app);
   color: var(--text-primary);
 }
+
+/* Phones never enlarge text on their own: the shrunk app examples on the
+   website (and small badges like "Needs you 2") keep their exact sizes, so
+   nothing drifts off-centre (Neil, Nov 26). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}

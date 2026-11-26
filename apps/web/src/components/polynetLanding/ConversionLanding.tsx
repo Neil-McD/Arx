@@ -197,6 +197,11 @@ const RESOURCES_MENU_LINKS: Array<[string, string]> = [
   ["Privacy", "/privacy"],
 ];
 
+// Only one top bar menu is ever open: opening one shuts the other at once,
+// instead of letting it linger through its closing delay on top of the new
+// one (Neil, Nov 26: they overlapped when moving from Product to Resources).
+let shutOpenMenu: (() => void) | null = null;
+
 // A top bar menu. It opens on hover or click; leaving waits a moment before
 // closing, so crossing the gap between the button and the panel (or cutting a
 // corner) never drops it. Escape, clicking elsewhere or tabbing out closes.
@@ -227,18 +232,27 @@ function NavMenu(props: { label: string; id: string; narrow?: boolean; children:
     stay();
     leaving.current = window.setTimeout(() => { leaving.current = null; setOpen(false); }, 220);
   };
-  useEffect(() => stay, []);
+  const shut = useRef(close);
+  shut.current = close;
+  const shutThis = useRef(() => shut.current()).current;
+  const show = () => {
+    stay();
+    if (shutOpenMenu && shutOpenMenu !== shutThis) shutOpenMenu();
+    shutOpenMenu = shutThis;
+    setOpen(true);
+  };
+  useEffect(() => () => { stay(); if (shutOpenMenu === shutThis) shutOpenMenu = null; }, [shutThis]);
   return (
     <div
       className="menu"
       ref={wrap}
-      onMouseEnter={() => { stay(); setOpen(true); }}
+      onMouseEnter={show}
       onMouseLeave={closeSoon}
       onBlur={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) close(); }}
     >
       {/* Hovering has already opened it by the time a click lands, so a click
           only ever opens. */}
-      <button type="button" className={open ? "menu-button open" : "menu-button"} aria-expanded={open} aria-controls={props.id} onClick={() => setOpen(true)}>{props.label}</button>
+      <button type="button" className={open ? "menu-button open" : "menu-button"} aria-expanded={open} aria-controls={props.id} onClick={show}>{props.label}</button>
       {open ? <div className={props.narrow ? "menu-panel narrow" : "menu-panel"} id={props.id}>{props.children(close)}</div> : null}
     </div>
   );
