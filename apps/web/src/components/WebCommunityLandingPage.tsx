@@ -18,6 +18,11 @@ import {
   type CommunityLandingPage,
   type CommunityLandingPlan,
 } from "../../../../shared/cloudCommunityLandingGateway";
+import {
+  OAUTH_JOIN_RETURN_STORAGE_KEY,
+  buildOnboardingUrlForCommunityReturn,
+  sanitizeOAuthAuthorizeReturnPath,
+} from "../../../../shared/webAppRouteState";
 import "./WebCommunityLandingPage.css";
 
 type Props = {
@@ -129,14 +134,48 @@ export function WebCommunityLandingPage(props: Props) {
   const autoActed = useRef(false);
 
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const checkoutParam = params.get("checkout");
-  const returnSessionId = checkoutParam && /^chk_[a-f0-9]{32}$/.test(checkoutParam) ? checkoutParam : null;
+  const initialCheckoutParam = params.get("checkout");
+  const [returnSessionId, setReturnSessionId] = useState<string | null>(
+    initialCheckoutParam && /^chk_[a-f0-9]{32}$/.test(initialCheckoutParam) ? initialCheckoutParam : null,
+  );
   const intent = params.get("intent");
   const requestedPlan = params.get("plan");
   const requestedPeriod = params.get("period");
   const appParam = params.get("app")?.trim() ?? "";
   const requestedAppId = /^app_[a-f0-9]{20}$/.test(appParam) ? appParam : null;
   const initializedPlanSelection = useRef(false);
+  const postJoinTimerRef = useRef<number | null>(null);
+
+  const oauthReturnPath = useMemo(() => {
+    if (!requestedAppId) return null;
+    try {
+      const raw = window.sessionStorage.getItem(OAUTH_JOIN_RETURN_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { appId?: string; path?: string; savedAt?: number };
+      if (!parsed || parsed.appId !== requestedAppId) return null;
+      if (typeof parsed.savedAt === "number" && Date.now() - parsed.savedAt > 30 * 60_000) return null;
+      return sanitizeOAuthAuthorizeReturnPath(parsed.path, requestedAppId);
+    } catch {
+      return null;
+    }
+  }, [requestedAppId]);
+
+  const clearPostJoinTimer = useCallback(() => {
+    if (postJoinTimerRef.current !== null) {
+      window.clearTimeout(postJoinTimerRef.current);
+      postJoinTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearPostJoinTimer(), [clearPostJoinTimer]);
+
+  const clearStoredOAuthReturn = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(OAUTH_JOIN_RETURN_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors.
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -174,20 +213,39 @@ export function WebCommunityLandingPage(props: Props) {
 
   const returnApp = data?.return_app ?? null;
   const openCommunity = useCallback(() => {
+    clearPostJoinTimer();
+    clearStoredOAuthReturn();
     window.location.assign(`/c/${encodeURIComponent(slug)}/home`);
-  }, [slug]);
+  }, [clearPostJoinTimer, clearStoredOAuthReturn, slug]);
   const openAfterJoin = useCallback(() => {
+    clearPostJoinTimer();
+    if (oauthReturnPath) {
+      clearStoredOAuthReturn();
+      window.location.assign(oauthReturnPath);
+      return;
+    }
     if (returnApp?.url) {
       window.location.assign(returnApp.url);
       return;
     }
     openCommunity();
-  }, [openCommunity, returnApp?.url]);
+  }, [clearPostJoinTimer, clearStoredOAuthReturn, oauthReturnPath, openCommunity, returnApp?.url]);
+  const scheduleOpenAfterJoin = useCallback(
+    (defaultDelayMs: number) => {
+      clearPostJoinTimer();
+      const delayMs = oauthReturnPath || returnApp?.url ? 1800 : defaultDelayMs;
+      postJoinTimerRef.current = window.setTimeout(() => {
+        postJoinTimerRef.current = null;
+        openAfterJoin();
+      }, delayMs);
+    },
+    [clearPostJoinTimer, oauthReturnPath, openAfterJoin, returnApp?.url],
+  );
 
-  // Back from Stripe: signed out, the card asks them to sign in; signed in,
-  // the membership finishes (Stripe's verified notice decides), then in.
+  // Back from Stripe: wait until auth bootstrap finishes; signed out, the card
+  // asks them to sign in; signed in, the membership finishes, then in.
   useEffect(() => {
-    if (!returnSessionId || !data) return;
+    if (!returnSessionId || !data || props.sessionCheckPending) return;
     if (!props.session) { setPhase({ kind: "paid_signed_out" }); return; }
     let cancelled = false;
     setPhase({ kind: "finishing" });
@@ -199,27 +257,30 @@ export function WebCommunityLandingPage(props: Props) {
         if (result.status === "joined") {
           writeStored(CHECKOUT_SECRET_KEY(returnSessionId), null);
           setPhase({ kind: "joined" });
-          window.setTimeout(openAfterJoin, 900);
+          scheduleOpenAfterJoin(900);
           return;
         }
         if (result.status === "pending") {
-          if (attempt < 30) { window.setTimeout(() => void tryFinish(attempt + 1), 2000); return; }
+          if (attempt < 30) { window.setTimeout(() => { if (!cancelled) void tryFinish(attempt + 1); }, 2000); return; }
           setPhase({ kind: "still_confirming" });
           return;
         }
         setPhase({ kind: "checkout_expired" });
       } catch {
         if (cancelled) return;
-        if (attempt < 30) window.setTimeout(() => void tryFinish(attempt + 1), 2000);
+        if (attempt < 30) window.setTimeout(() => { if (!cancelled) void tryFinish(attempt + 1); }, 2000);
         else setPhase({ kind: "still_confirming" });
       }
     };
     void tryFinish(0);
-    return () => { cancelled = true; };
-  }, [returnSessionId, Boolean(data), props.session, slug, openAfterJoin, finishAttempt]);
+    return () => {
+      cancelled = true;
+      clearPostJoinTimer();
+    };
+  }, [returnSessionId, Boolean(data), props.session, props.sessionCheckPending, slug, scheduleOpenAfterJoin, clearPostJoinTimer, finishAttempt]);
 
   const join = useCallback(async () => {
-    if (!data) return;
+    if (!data || props.sessionCheckPending) return;
     if (!props.session) {
       const nextParams = new URLSearchParams(window.location.search);
       nextParams.set("intent", "join");
@@ -230,13 +291,13 @@ export function WebCommunityLandingPage(props: Props) {
     try {
       await joinCommunityFromLanding(props.session, slug);
       const next = await load();
-      if (next?.viewer?.state === "member") { setPhase({ kind: "joined" }); window.setTimeout(openAfterJoin, 600); return; }
+      if (next?.viewer?.state === "member") { setPhase({ kind: "joined" }); scheduleOpenAfterJoin(600); return; }
       setPhase({ kind: "idle" });
     } catch (joinError) {
       setError(joinErrorText(joinError, data.community.name));
       setPhase({ kind: "idle" });
     }
-  }, [data, props.session, slug, load, openAfterJoin]);
+  }, [data, props.session, props.sessionCheckPending, slug, load, scheduleOpenAfterJoin]);
 
   const cancelRequest = useCallback(async () => {
     if (!props.session) return;
@@ -304,9 +365,15 @@ export function WebCommunityLandingPage(props: Props) {
     const errorLine = error ? <p className="cl-error" role="alert">{error}</p> : null;
 
     if (phase.kind === "joined") {
+      const returningExternal = Boolean(oauthReturnPath || returnApp);
+      const joinedNote = oauthReturnPath
+        ? `Returning to finish signing in to ${returnApp?.name ?? "your app"}…`
+        : returnApp
+          ? `Returning to ${returnApp.name}…`
+          : `Opening ${name}…`;
       return (
-        <Card title="You're in" note={returnApp ? `Returning to ${returnApp.name}…` : `Opening ${name}…`}>
-          {returnApp ? (
+        <Card title="You're in" note={joinedNote}>
+          {returningExternal ? (
             <button type="button" className="cl-secondary" onClick={openCommunity}>Stay in {name}</button>
           ) : null}
         </Card>
@@ -334,6 +401,7 @@ export function WebCommunityLandingPage(props: Props) {
             type="button"
             className="cl-primary"
             onClick={() => {
+              setReturnSessionId(null);
               setPhase({ kind: "idle" });
               const clean = new URLSearchParams(window.location.search);
               clean.delete("checkout");
@@ -362,16 +430,27 @@ export function WebCommunityLandingPage(props: Props) {
           {wantsPlanChange ? (
             <>
               <a className="cl-primary" href={`/c/${encodeURIComponent(slug)}/settings`}>Manage plan in Settings</a>
-              {returnApp ? (
-                <a className="cl-secondary" style={{ marginTop: 8 }} href={returnApp.url}>Return to {returnApp.name}</a>
+              {oauthReturnPath ? (
+                <a className="cl-secondary" href={oauthReturnPath} onClick={clearStoredOAuthReturn}>
+                  Continue sign-in{returnApp ? ` to ${returnApp.name}` : ""}
+                </a>
+              ) : returnApp ? (
+                <a className="cl-secondary" href={returnApp.url}>Return to {returnApp.name}</a>
               ) : (
-                <button type="button" className="cl-secondary" style={{ marginTop: 8 }} onClick={openCommunity}>Open community</button>
+                <button type="button" className="cl-secondary" onClick={openCommunity}>Open community</button>
               )}
+            </>
+          ) : oauthReturnPath ? (
+            <>
+              <a className="cl-primary" href={oauthReturnPath} onClick={clearStoredOAuthReturn}>
+                Continue sign-in{returnApp ? ` to ${returnApp.name}` : ""}
+              </a>
+              <button type="button" className="cl-secondary" onClick={openCommunity}>Open community</button>
             </>
           ) : returnApp ? (
             <>
               <a className="cl-primary" href={returnApp.url}>Return to {returnApp.name}</a>
-              <button type="button" className="cl-secondary" style={{ marginTop: 8 }} onClick={openCommunity}>Open community</button>
+              <button type="button" className="cl-secondary" onClick={openCommunity}>Open community</button>
             </>
           ) : (
             <button type="button" className="cl-primary" onClick={openCommunity}>Open community</button>
@@ -382,7 +461,13 @@ export function WebCommunityLandingPage(props: Props) {
     if (viewer?.state === "blocked") return <Card title={`You can't join ${name}`} note={null} />;
     if (!d.available) return <Card title={`Join ${name}`} note={`${name} isn't taking new members right now.`} />;
     if (viewer?.setup_required) {
-      return <Card title={`Join ${name}`} note={`Finish setting up your Polynet account to join ${name}.`}><a className="cl-primary" href={`/onboarding?community=${encodeURIComponent(slug)}`}>Finish setup</a></Card>;
+      const onboardingHref = buildOnboardingUrlForCommunityReturn({
+        community: slug,
+        plan: requestedPlan,
+        period: requestedPeriod,
+        app: requestedAppId,
+      });
+      return <Card title={`Join ${name}`} note={`Finish setting up your Polynet account to join ${name}.`}><a className="cl-primary" href={onboardingHref}>Finish setup</a></Card>;
     }
     if (viewer?.state === "pending") {
       return (
@@ -416,8 +501,8 @@ export function WebCommunityLandingPage(props: Props) {
           ) : (
             <div className="cl-price">{chosen.price}<span>/{chosen.billing_period === "annual" ? "year" : "month"}</span></div>
           )}
-          <button type="button" className="cl-primary" disabled={phase.kind === "busy"} onClick={() => void checkout()}>
-            {phase.kind === "busy" ? "Opening checkout…" : `Join for ${planPrice(chosen)}`}
+          <button type="button" className="cl-primary" disabled={phase.kind === "busy" || props.sessionCheckPending} onClick={() => void checkout()}>
+            {phase.kind === "busy" ? "Opening checkout…" : props.sessionCheckPending ? "Checking…" : `Join for ${planPrice(chosen)}`}
           </button>
           <p className="cl-fine">You pay with Stripe{d.signed_in ? "" : ", then sign in with one tap"}. Cancel anytime.</p>
           {errorLine}
@@ -429,8 +514,8 @@ export function WebCommunityLandingPage(props: Props) {
     const asks = d.gate === "request_access";
     return (
       <Card title={`Join ${name}`} note={asks ? "The host reviews each request. You'll hear back by email." : `Free to join.${c.member_count > 1 ? ` ${c.member_count.toLocaleString()} members.` : ""}`}>
-        <button type="button" className="cl-primary" disabled={phase.kind === "busy"} onClick={() => void join()}>
-          {phase.kind === "busy" ? (asks ? "Sending…" : "Joining…") : asks ? (viewer?.state === "denied" ? "Ask again" : "Ask to join") : "Join"}
+        <button type="button" className="cl-primary" disabled={phase.kind === "busy" || props.sessionCheckPending} onClick={() => void join()}>
+          {phase.kind === "busy" ? (asks ? "Sending…" : "Joining…") : props.sessionCheckPending ? "Checking…" : asks ? (viewer?.state === "denied" ? "Ask again" : "Ask to join") : "Join"}
         </button>
         {!d.signed_in ? <p className="cl-fine">You'll sign in with one tap.</p> : null}
         {errorLine}

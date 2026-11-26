@@ -1504,6 +1504,7 @@ export default function App() {
     publicRoute: shellPublicRoute,
     session,
     shownSession,
+    isAuthBootstrapComplete,
     shouldHoldLandingForAuth,
     openNewCommunityPurchaseFlow,
     requireSignIn,

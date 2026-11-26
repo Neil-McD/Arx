@@ -7,6 +7,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   publicRoute: PublicRoute;
   // The viewer's session (null signed out), for /c/<slug>'s landing page.
   session: unknown | null;
+  sessionCheckPending?: boolean;
   landingPageProps: WebAppMainSurfaceHostProps["landingPageProps"];
   isSignedOut: boolean;
   onboardingPageProps: WebAppMainSurfaceHostProps["onboardingPageProps"];
@@ -40,6 +41,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
     publicCommunitySlug: params.publicRoute.kind === "community_funnel" ? params.publicRoute.slug : null,
     publicCommunitySession: params.session,
+    publicCommunitySessionCheckPending: params.sessionCheckPending,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
     discoverPageProps: params.discoverPageProps,

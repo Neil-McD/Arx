@@ -139,6 +139,7 @@ export function buildWebAppMainSurfaceProps(params: {
   publicRoute: PublicRoute;
   session: AuthSession | null;
   shownSession: AuthSession | null;
+  isAuthBootstrapComplete?: boolean;
   shouldHoldLandingForAuth: boolean;
   openNewCommunityPurchaseFlow: () => void;
   requireSignIn: (intent?: any) => void;
@@ -168,6 +169,7 @@ export function buildWebAppMainSurfaceProps(params: {
     isPublicCommunityFunnel: params.isPublicCommunityFunnel,
     publicRoute: params.publicRoute,
     session: params.shownSession,
+    sessionCheckPending: params.isAuthBootstrapComplete === false,
     holdLandingForAuth: params.shouldHoldLandingForAuth,
     isSignedOut: !params.session,
     landingPageProps: {

@@ -8,7 +8,12 @@ import {
   fetchConnectedAppAuthorizeContext,
   type ConnectedAppAuthorizeContext,
 } from "../../../../shared/cloudConnectedAppsGateway";
-import { stripShellVariantFromPathname } from "../../../../shared/webAppRouteState";
+import {
+  OAUTH_JOIN_RETURN_STORAGE_KEY,
+  SETUP_RETURN_TARGET_STORAGE_KEY,
+  sanitizeOAuthAuthorizeReturnPath,
+  stripShellVariantFromPathname,
+} from "../../../../shared/webAppRouteState";
 import "./WebCommunityLandingPage.css";
 
 export function isConnectedAppAuthorizePathname(pathname: string): boolean {
@@ -163,11 +168,13 @@ export function WebConnectedAppAuthorizePage() {
       setError(
         code.includes("verified_email_required")
           ? "Verify your email in Polynet before signing in to connected apps."
-          : code.includes("community_user_blocked")
-            ? "You can't sign in to this community's connected app."
-            : code.includes("rate_limited")
-              ? "Too many sign-in attempts. Wait a minute and try again."
-              : "Couldn't finish signing in. Try again.",
+          : code.includes("account_setup_required")
+            ? "Finish setting up your Polynet account before signing in to connected apps."
+            : code.includes("community_user_blocked")
+              ? "You can't sign in to this community's connected app."
+              : code.includes("rate_limited")
+                ? "Too many sign-in attempts. Wait a minute and try again."
+                : "Couldn't finish signing in. Try again.",
       );
       setBusy(false);
     }
@@ -225,8 +232,37 @@ export function WebConnectedAppAuthorizePage() {
     }
 
     const { app, community, user, access } = context;
-    const cannotApprove = !user.email_verified || user.is_blocked;
+    const setupRequired = Boolean(user.setup_required);
+    const cannotApprove = !user.email_verified || user.is_blocked || setupRequired;
     const joinUrl = `/c/${encodeURIComponent(community.slug)}?app=${encodeURIComponent(app.app_id)}`;
+    const currentAuthorizePath = sanitizeOAuthAuthorizeReturnPath(
+      `${window.location.pathname}${window.location.search}`,
+      app.app_id,
+    );
+    const rememberAuthorizeForJoin = () => {
+      if (!currentAuthorizePath) return;
+      try {
+        window.sessionStorage.setItem(
+          OAUTH_JOIN_RETURN_STORAGE_KEY,
+          JSON.stringify({ appId: app.app_id, path: currentAuthorizePath, savedAt: Date.now() }),
+        );
+      } catch {
+        // Storage blocked: fall back to direct /c/:slug?app=...
+      }
+    };
+    const handleFinishSetup = () => {
+      if (currentAuthorizePath) {
+        try {
+          window.sessionStorage.setItem(
+            SETUP_RETURN_TARGET_STORAGE_KEY,
+            JSON.stringify({ kind: "oauth", path: currentAuthorizePath }),
+          );
+        } catch {
+          // Ignore storage error and proceed to onboarding.
+        }
+      }
+      window.location.assign("/onboarding?oauth=1");
+    };
 
     return (
       <div className="cl-card">
@@ -235,7 +271,7 @@ export function WebConnectedAppAuthorizePage() {
           Connected to <strong>{community.name}</strong>. Continuing shares your Polynet account ID, verified email
           {user.email ? ` (${user.email})` : ""}, display name, and membership access in {community.name}.
         </p>
-        <div className="cl-tile" style={{ marginBottom: 16 }}>
+        <div className="cl-tile">
           <div className="cl-tile-label">Your status in {community.name}</div>
           <div className="cl-row">
             <span>{user.display_name || user.email || "Your account"}</span>
@@ -252,25 +288,39 @@ export function WebConnectedAppAuthorizePage() {
           <p className="cl-error" role="alert">You don&apos;t have access to {community.name}.</p>
         ) : !user.email_verified ? (
           <p className="cl-error" role="alert">A verified email address is required to sign in to connected apps.</p>
+        ) : setupRequired ? (
+          <p className="cl-card-note">
+            Finish setting up your Polynet profile and terms before signing in to {app.name}.
+          </p>
         ) : !access.allowed ? (
-          <p className="cl-fine" style={{ marginBottom: 14 }}>
+          <p className="cl-fine">
             You aren&apos;t a member of {community.name} yet. You can still sign in now, or{" "}
-            <a href={joinUrl}>join {community.name} first</a>.
+            <a href={joinUrl} onClick={rememberAuthorizeForJoin}>join {community.name} first</a>.
           </p>
         ) : null}
         {error ? <p className="cl-error" role="alert">{error}</p> : null}
-        <button
-          type="button"
-          className="cl-primary"
-          disabled={busy || cannotApprove}
-          onClick={() => void handleApprove()}
-        >
-          {busy ? `Signing in to ${app.name}…` : `Continue to ${app.name}`}
-        </button>
+        {setupRequired && !user.is_blocked && user.email_verified ? (
+          <button
+            type="button"
+            className="cl-primary"
+            disabled={busy}
+            onClick={handleFinishSetup}
+          >
+            Finish setup
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="cl-primary"
+            disabled={busy || cannotApprove}
+            onClick={() => void handleApprove()}
+          >
+            {busy ? `Signing in to ${app.name}…` : `Continue to ${app.name}`}
+          </button>
+        )}
         <button
           type="button"
           className="cl-secondary"
-          style={{ marginTop: 8 }}
           disabled={busy}
           onClick={handleCancel}
         >

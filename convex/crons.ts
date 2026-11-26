@@ -85,4 +85,7 @@ crons.interval("refresh community analytics rollups", { minutes: 15 },
 // Refresh pre-computed Discover activity stats for published communities in paginated batches.
 crons.interval("refresh discover activity stats", { minutes: 15 },
   (internal as any).communityAnalyticsRollups.refreshDiscoverActivityStatsBatchInternal, {});
+// Prune expired Sign in with Polynet one-time OAuth authorization codes.
+crons.interval("prune expired connected app auth codes", { hours: 24 },
+  (internal as any).connectedApps.pruneExpiredConnectedAppAuthCodesInternal, {});
 export default crons;

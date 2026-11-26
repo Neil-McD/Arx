@@ -1547,7 +1547,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_codeHash", ["codeHash"])
-    .index("by_user_createdAt", ["userId", "createdAt"]),
+    .index("by_user_createdAt", ["userId", "createdAt"])
+    .index("by_expiresAt", ["expiresAt"]),
   // Sales a connected app made through its own checkout and reported
   // (communityAppSales.ts): its latest word per email. No fee. userId is set
   // once an account with that verified email exists.

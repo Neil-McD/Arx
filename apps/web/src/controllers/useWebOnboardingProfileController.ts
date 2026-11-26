@@ -20,9 +20,13 @@ import { formatProfileMutationError } from "../../../../shared/profileMutationEr
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import {
   SETUP_RETURN_STORAGE_KEY,
-  buildCommunityFunnelPath,
+  SETUP_RETURN_TARGET_STORAGE_KEY,
+  buildSetupReturnUrl,
   isRootAppRoutePath,
   readSetupReturnCommunity,
+  readSetupReturnTargetFromSearch,
+  sanitizeOAuthAuthorizeReturnPath,
+  type SetupReturnTarget,
 } from "../../../../shared/webAppRouteState";
 import { useWebProfileSettingsUiController } from "./useWebProfileSettingsUiController";
 import { readProfileDraftForUser } from "../../../../shared/profileDraftStorage";
@@ -49,21 +53,51 @@ type OnboardingActions = {
   resumePendingAuthIntent: () => Promise<boolean>;
 };
 
-// The community someone came from to join, kept for this tab while they set
-// up (redirects during setup drop the address's ?community=).
-function readStoredSetupReturnCommunity(): string | null {
+// The community join link (including selected plan/period/app) or Sign in with
+// Polynet request someone came from, kept for this tab while they finish setup.
+function readStoredSetupReturnTarget(): SetupReturnTarget | null {
   if (typeof window === "undefined") return null;
-  const fromAddress = window.location.pathname.endsWith("/onboarding") ? readSetupReturnCommunity(window.location.search) : null;
+  const onOnboarding = window.location.pathname.endsWith("/onboarding");
+  const fromAddress = onOnboarding ? readSetupReturnTargetFromSearch(window.location.search) : null;
   try {
-    if (fromAddress) window.sessionStorage.setItem(SETUP_RETURN_STORAGE_KEY, fromAddress);
-    return fromAddress ?? readSetupReturnCommunity(`community=${window.sessionStorage.getItem(SETUP_RETURN_STORAGE_KEY) ?? ""}`);
+    if (fromAddress) {
+      window.sessionStorage.setItem(SETUP_RETURN_TARGET_STORAGE_KEY, JSON.stringify(fromAddress));
+      if (fromAddress.kind === "community") {
+        window.sessionStorage.setItem(SETUP_RETURN_STORAGE_KEY, fromAddress.community);
+      }
+      return fromAddress;
+    }
+    const rawTarget = window.sessionStorage.getItem(SETUP_RETURN_TARGET_STORAGE_KEY);
+    if (rawTarget) {
+      const parsed = JSON.parse(rawTarget) as Record<string, unknown>;
+      if (parsed?.kind === "oauth") {
+        const safePath = sanitizeOAuthAuthorizeReturnPath(String(parsed.path ?? ""));
+        if (safePath) return { kind: "oauth", path: safePath };
+      } else if (parsed?.kind === "community") {
+        const slug = readSetupReturnCommunity(`community=${encodeURIComponent(String(parsed.community ?? ""))}`);
+        if (slug) {
+          const qs = new URLSearchParams();
+          qs.set("community", slug);
+          if (typeof parsed.plan === "string") qs.set("plan", parsed.plan);
+          if (typeof parsed.period === "string") qs.set("period", parsed.period);
+          if (typeof parsed.app === "string") qs.set("app", parsed.app);
+          const validated = readSetupReturnTargetFromSearch(`?${qs.toString()}`);
+          if (validated) return validated;
+        }
+      }
+    }
+    const legacySlug = readSetupReturnCommunity(`community=${window.sessionStorage.getItem(SETUP_RETURN_STORAGE_KEY) ?? ""}`);
+    return legacySlug ? { kind: "community", community: legacySlug } : null;
   } catch {
     return fromAddress;
   }
 }
 
-function clearStoredSetupReturnCommunity(): void {
-  try { window.sessionStorage.removeItem(SETUP_RETURN_STORAGE_KEY); } catch { /* nothing kept */ }
+function clearStoredSetupReturnTarget(): void {
+  try {
+    window.sessionStorage.removeItem(SETUP_RETURN_TARGET_STORAGE_KEY);
+    window.sessionStorage.removeItem(SETUP_RETURN_STORAGE_KEY);
+  } catch { /* nothing kept */ }
 }
 
 export function useWebOnboardingProfileController(params: {
@@ -96,8 +130,8 @@ export function useWebOnboardingProfileController(params: {
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
-  // Keep the community a site sent them from, before anything redirects away from ?community=.
-  useEffect(() => { readStoredSetupReturnCommunity(); }, []);
+  // Keep the community or Sign in with Polynet return target before anything redirects away from ?community=.
+  useEffect(() => { readStoredSetupReturnTarget(); }, []);
   const actionsRef = useRef<OnboardingActions>({
     navigateTo: () => undefined,
     enterDefaultDestination: async () => false,
@@ -353,14 +387,14 @@ export function useWebOnboardingProfileController(params: {
           setOnboardingError("We could not continue where you left off. Try again.");
           return false;
         }
-        // Came from a community's landing page to join it: back there, and
-        // the page joins (or asks to) for them (intent=join).
-        const returnCommunity = readStoredSetupReturnCommunity();
-        if (returnCommunity) {
-          clearStoredSetupReturnCommunity();
-          const funnelPath = buildCommunityFunnelPath(returnCommunity);
-          if (funnelPath) {
-            window.location.assign(`${funnelPath}?intent=join`);
+        // Came from a community's landing page or Sign in with Polynet: return
+        // straight back (preserving selected plan, period, and app).
+        const returnTarget = readStoredSetupReturnTarget();
+        if (returnTarget) {
+          clearStoredSetupReturnTarget();
+          const returnUrl = buildSetupReturnUrl(returnTarget);
+          if (returnUrl) {
+            window.location.assign(returnUrl);
             return true;
           }
         }

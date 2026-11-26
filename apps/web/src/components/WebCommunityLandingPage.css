@@ -137,7 +137,9 @@
 .cl-page .cl-primary { height: 46px; border: 0; border-radius: 10px; background: var(--cl-accent); color: var(--cl-c8); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; display: grid; place-items: center; text-align: center; }
 .cl-page .cl-primary:hover:not(:disabled) { background: var(--cl-accent-hover); color: var(--cl-c8); }
 .cl-page .cl-primary:disabled { opacity: 0.7; cursor: default; }
-.cl-page .cl-secondary { height: 40px; border-radius: 10px; background: transparent; border: 1px solid var(--cl-c21); color: var(--cl-c3); font: inherit; font-size: 14px; cursor: pointer; display: grid; place-items: center; padding: 0 16px; }
+.cl-page .cl-secondary { height: 40px; border-radius: 10px; background: transparent; border: 1px solid var(--cl-c21); color: var(--cl-c3); font: inherit; font-size: 14px; cursor: pointer; display: grid; place-items: center; padding: 0 16px; transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease; }
+.cl-page .cl-secondary:hover:not(:disabled) { border-color: var(--cl-c17); background: var(--cl-c9); color: var(--cl-ink); }
+.cl-page .cl-secondary:disabled { opacity: 0.6; cursor: default; }
 .cl-fine { margin: 0; font-size: 12px; color: var(--cl-c24); line-height: 1.5; }
 .cl-signin { margin: 0; padding-top: 14px; border-top: 1px solid var(--cl-c14); font-size: 13px; color: var(--cl-c2); }
 .cl-error { margin: 0; font-size: 13px; color: var(--cl-c25); }

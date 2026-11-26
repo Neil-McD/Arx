@@ -17,7 +17,7 @@ export type ConnectedAppAuthorizeContext =
       redirect_uri: string;
       app: { app_id: string; name: string; app_url: string | null };
       community: { slug: string; name: string };
-      user: { email: string | null; email_verified: boolean; display_name: string | null; is_blocked: boolean };
+      user: { email: string | null; email_verified: boolean; display_name: string | null; is_blocked: boolean; setup_required?: boolean };
       access: { allowed: boolean; tier: { key: string; name: string } | null; grants: string[] };
     }
   | { ok: false; error: "invalid_client" | "invalid_redirect_uri" | "invalid_pkce" };
