@@ -455,17 +455,21 @@
 /* The community brain's scene (BrainScene.tsx): the network (the community,
    its branches named, a few dots on each) inside the app's own window, the
    card in front of it on the left, as in the guide and Chief of Staff. */
-.pn-landing .scene.live:has(.bsc) { height: 600px; }
+/* Room above for the window's top line, which sits above the network. */
+.pn-landing .scene.live:has(.bsc) { height: 600px; margin-top: 100px; }
 .pn-landing .bsc { position: relative; height: 100%; }
+/* The window is drawn around the network where it always sat (Neil, Nov 26:
+   same size, same place): the network 30px above the scene's top and 3% past
+   its right edge, as wide as before. */
 .pn-landing .bsc-win {
-  position: absolute; top: 40px; left: 30%; width: 980px; height: 540px;
+  position: absolute; top: -92px; left: 30%; right: calc(-3% - 70px); height: 700px;
   -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent 98%), linear-gradient(180deg, #000 80%, transparent);
   -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, #000 78%, transparent 98%), linear-gradient(180deg, #000 80%, transparent); mask-composite: intersect;
 }
 .pn-landing .bsc-win .rpw-head { padding: 0 24px 0 calc(14% + 56px); gap: 10px; }
 /* A soft light behind the network, inside the window. */
 .pn-landing .bsc-body { position: relative; overflow: hidden; background: radial-gradient(ellipse 46% 52% at 56% 50%, rgba(167, 139, 250, .07), transparent 72%); }
-.pn-landing .bsc-net { position: absolute; top: 8px; left: calc(14% + 40px); width: 600px; height: auto; overflow: visible; }
+.pn-landing .bsc-net { position: absolute; top: 0; right: 60px; width: min(704px, 49vw); height: auto; overflow: visible; }
 .pn-landing .bsc-net g[role="button"] { cursor: pointer; outline: none; }
 .pn-landing .bsc-hit { fill: transparent; }
 /* Each kind of memory has the app's own look (kit.module.css, .brain-*). */
@@ -580,7 +584,7 @@
   /* Phones: as before (the card on the left, the network beside it with about
      half of it off the screen; the network exactly where it was, 32% across
      and 24px down), the window drawn around it. */
-  .pn-landing .scene.live:has(.bsc) { height: auto; }
+  .pn-landing .scene.live:has(.bsc) { height: auto; margin-top: 0; }
   .pn-landing .bsc { height: auto; min-height: 430px; }
   .pn-landing .bsc-card { position: relative; z-index: 2; top: auto; width: 50%; zoom: .76; }
   .pn-landing .bsc-kind small { display: none; }
