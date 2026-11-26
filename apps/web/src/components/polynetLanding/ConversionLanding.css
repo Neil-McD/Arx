@@ -1011,3 +1011,11 @@
 @media (max-width: 900px) {
   .pn-landing .hero > .product .rp { align-self: flex-start; width: calc(100% + (100vw - 100%) / 2); }
 }
+
+/* Phones: the app examples scroll without showing scroll bars (Neil, Nov 26:
+   the board's column bars looked out of place). */
+@media (max-width: 900px) {
+  .pn-landing .rpw *, .pn-landing .gsc *, .pn-landing .bsc *, .pn-landing .rp * { scrollbar-width: none; }
+  .pn-landing .rpw *::-webkit-scrollbar, .pn-landing .gsc *::-webkit-scrollbar,
+  .pn-landing .bsc *::-webkit-scrollbar, .pn-landing .rp *::-webkit-scrollbar { display: none; }
+}
