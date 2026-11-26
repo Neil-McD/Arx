@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import logoutHandler from "../api/auth/logout.js";
 import { logoutAuthSessionRemote } from "../shared/authCore";
 import { useWebAppAuthController } from "../apps/web/src/controllers/useWebAppAuthController";
-import { WebSignOutConfirmModal } from "../apps/web/src/components/WebSignOutConfirmModal";
+import { SignOutItem, SIGN_OUT_FAILED } from "../apps/web/src/components/WebAccountMenu";
 
 vi.mock("react", () => import("../apps/web/node_modules/react/index.js"));
 vi.mock("../apps/web/src/lib/runtimeInstrumentation", () => ({ emitAgentRuntimeEvent: vi.fn(), formatRuntimeInstrumentationError: vi.fn() }));
@@ -148,7 +148,9 @@ test("late refresh cannot restore the session after confirmed logout", async () 
   expect(await pending).toBeNull(); expect(c.sessionRef.current).toBeNull();
 });
 
-test("logout confirmation displays its retry error accessibly and retains the action", () => {
-  const html=renderToStaticMarkup(React.createElement(WebSignOutConfirmModal,{isOpen:true,isSubmitting:false,error:message,onClose:()=>{},onConfirm:()=>{}}));
-  expect(html).toContain('role="alert"'); expect(html).toContain("couldn&#x27;t be confirmed"); expect(html).toContain("Sign out</button>");
+test("sign out is one click: it shows Signing out, and a failure is announced with the item kept to retry", () => {
+  const busy=renderToStaticMarkup(React.createElement(SignOutItem,{busy:true,error:null,onSignOut:()=>{}}));
+  expect(busy).toContain("Signing out…"); expect(busy).toContain("disabled");
+  const failed=renderToStaticMarkup(React.createElement(SignOutItem,{busy:false,error:SIGN_OUT_FAILED,onSignOut:()=>{}}));
+  expect(failed).toContain('role="alert"'); expect(failed).toContain("Couldn&#x27;t sign you out"); expect(failed).toContain("<span>Sign out</span>");
 });

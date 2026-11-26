@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronsUpDown, Eye, LogOut, Moon, Settings, Sun } from "lucide-react";
 import type { AppTheme } from "../../../../shared/theme";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
 export type WebAccountMenuProps = {
   name: string;
@@ -37,7 +36,6 @@ export function accountMenuRoleLine(roleLabel: string, communityName?: string | 
 // (settings, light or dark), and sign out last.
 export function WebAccountMenu(props: WebAccountMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -66,15 +64,18 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
     };
   }, [isOpen]);
 
-  const handleConfirmSignOut = async (): Promise<void> => {
+  // Sign out is one click (Neil, Nov 26: nothing is lost, you just sign back
+  // in). The menu stays open with "Signing out…" until it's done; if the
+  // server can't confirm it, the menu says so and the item stays to retry.
+  const handleSignOut = async (): Promise<void> => {
     if (isSubmittingSignOut) return;
     setSignOutError(null);
     setIsSubmittingSignOut(true);
     try {
       await props.onSignOut();
-      setIsSignOutConfirmOpen(false);
+      setIsOpen(false);
     } catch {
-      setSignOutError("Sign out couldn't be confirmed. Try again.");
+      setSignOutError(SIGN_OUT_FAILED);
     } finally {
       setIsSubmittingSignOut(false);
     }
@@ -166,18 +167,7 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
             <span className="account-menu-fact">{isLight ? "Light" : "Dark"}</span>
           </button>
           <div className="account-menu-separator" role="separator" />
-          <button
-            className="account-menu-item"
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              setIsSignOutConfirmOpen(true);
-            }}
-          >
-            <LogOut size={16} aria-hidden="true" />
-            <span>Sign out</span>
-          </button>
+          <SignOutItem busy={isSubmittingSignOut} error={signOutError} onSignOut={() => void handleSignOut()} />
         </div>
       ) : null}
       <button
@@ -206,18 +196,22 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
         </span>
         <ChevronsUpDown size={15} aria-hidden="true" />
       </button>
-      <WebSignOutConfirmModal
-        isOpen={isSignOutConfirmOpen}
-        isSubmitting={isSubmittingSignOut}
-        error={signOutError}
-        onClose={() => {
-          if (!isSubmittingSignOut) {
-            setIsSignOutConfirmOpen(false);
-            setSignOutError(null);
-          }
-        }}
-        onConfirm={handleConfirmSignOut}
-      />
     </div>
+  );
+}
+
+export const SIGN_OUT_FAILED = "Couldn't sign you out. Try again.";
+
+// The menu's last item: Sign out, "Signing out…" while it runs, and the
+// failure under it when the server couldn't confirm it.
+export function SignOutItem(props: { busy: boolean; error: string | null; onSignOut: () => void }) {
+  return (
+    <>
+      <button className="account-menu-item" type="button" role="menuitem" disabled={props.busy} onClick={props.onSignOut}>
+        <LogOut size={16} aria-hidden="true" />
+        <span>{props.busy ? "Signing out…" : "Sign out"}</span>
+      </button>
+      {props.error ? <p className="account-menu-error" role="alert">{props.error}</p> : null}
+    </>
   );
 }
