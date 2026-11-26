@@ -4,6 +4,7 @@ import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { buildLandingCheckoutReturnQuery } from "./communityLanding";
 import { pkceS256Challenge, redirectUrlIsAllowed, signStandardWebhook, webhookUrlIsAllowed } from "./connectedApps";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 const NOW = Date.now();
@@ -12,14 +13,36 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 async function setup(t: ReturnType<typeof convexTest>) {
   return await t.run(async (ctx) => {
-    const user = (handle: string, verified = true) => ctx.db.insert("users", {
-      authSubject: `${handle}-subject`, displayName: handle, handle, normalizedHandle: handle,
-      email: `${handle}@example.com`, normalizedEmail: `${handle}@example.com`, ...(verified ? { emailVerifiedAt: NOW } : {}),
-      createdAt: NOW, updatedAt: NOW,
-    });
+    const user = async (handle: string, verified = true, completedSetup = true) => {
+      const uid = await ctx.db.insert("users", {
+        authSubject: `${handle}-subject`, displayName: handle, handle, normalizedHandle: handle,
+        email: `${handle}@example.com`, normalizedEmail: `${handle}@example.com`, ...(verified ? { emailVerifiedAt: NOW } : {}),
+        createdAt: NOW, updatedAt: NOW,
+      });
+      if (completedSetup) {
+        await ctx.db.insert("userProfileDetails", {
+          userId: uid,
+          displayName: handle,
+          createdAt: NOW,
+          updatedAt: NOW,
+        } as any);
+        for (const doc of PLATFORM_LEGAL_DOCUMENTS) {
+          await ctx.db.insert("legalAcceptances", {
+            userId: uid,
+            documentKey: doc.key,
+            documentVersion: doc.version,
+            acceptedAt: NOW,
+            source: "account_setup",
+            createdAt: NOW,
+          } as any);
+        }
+      }
+      return uid;
+    };
     const ownerId = await user("owner");
     const buyerId = await user("buyer");
     await user("unverified", false);
+    await user("incomplete", true, false);
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "de-pilot", name: "Distribution Engineer", lifecycleStatus: "active", lifecycleGeneration: 0, visibility: "published",
       inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 1, createdAt: NOW, updatedAt: NOW,
@@ -361,6 +384,74 @@ test("Sign in with Polynet enforces PKCE S256, exact callback match, single-use 
       codeChallengeMethod: "S256",
     }),
   ).rejects.toThrow(/oauth_community_user_blocked/);
+
+  // Incomplete account setup fails closed on OAuth authorize & approval.
+  const asIncomplete = t.withIdentity({ subject: "incomplete-subject" });
+  const incompleteCtx = await asIncomplete.query(api.connectedApps.getConnectedAppAuthorizeContext, {
+    clientId: appA.app_id,
+    redirectUri: callbackA,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  expect(incompleteCtx).toMatchObject({ ok: true, user: { setup_required: true } });
+  await expect(
+    asIncomplete.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+      clientId: appA.app_id,
+      redirectUri: callbackA,
+      codeChallenge: challenge,
+      codeChallengeMethod: "S256",
+    }),
+  ).rejects.toThrow(/oauth_account_setup_required/);
+
+  // Removing a callback URL immediately invalidates already-issued auth codes for that URL.
+  const asOwnerSigner = t.withIdentity({ subject: "owner-subject" });
+  const preRemoveCode = await asOwnerSigner.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+    clientId: appB.app_id,
+    redirectUri: callbackB,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  await asOwner.mutation(api.connectedApps.updateConnectedApp, {
+    communityId: ids.communityId,
+    appId: appB.app_id,
+    redirectUrls: ["https://app-b.example.com/api/auth/polynet/callback-v2"],
+  });
+  const removedCallbackRes = await exchange(appB.secret, {
+    grant_type: "authorization_code",
+    code: preRemoveCode.code,
+    redirect_uri: callbackB,
+    code_verifier: verifier,
+  });
+  expect(removedCallbackRes.status).toBe(400);
+  expect(await removedCallbackRes.json()).toEqual({ error: "invalid_grant" });
+
+  // Expired auth code pruning deletes expired rows while keeping live rows intact.
+  const futureLiveCode = await asOwnerSigner.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+    clientId: appB.app_id,
+    redirectUri: "https://app-b.example.com/api/auth/polynet/callback-v2",
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  expect(futureLiveCode.code).toMatch(/^pcode_/);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("connectedAppAuthCodes", {
+      codeHash: "expired_hash_1",
+      appId: appB.app_id,
+      communityId: ids.communityId,
+      userId: ids.ownerId,
+      redirectUri: callbackB,
+      codeChallenge: challenge,
+      codeChallengeMethod: "S256",
+      expiresAt: Date.now() - 120_000,
+      createdAt: Date.now() - 420_000,
+    });
+  });
+  const pruned = await t.mutation(internal.connectedApps.pruneExpiredConnectedAppAuthCodesInternal, {
+    nowMs: Date.now(),
+  });
+  expect(pruned.deleted).toBe(1);
+  const remainingCodes = await t.run((ctx) => ctx.db.query("connectedAppAuthCodes").collect());
+  expect(remainingCodes.some((row) => row.codeHash === "expired_hash_1")).toBe(false);
 });
 
 test("community landing page resolves return_app only for an active app belonging to that exact community", async () => {

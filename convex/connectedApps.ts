@@ -14,6 +14,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import { getActiveCommunityBlock, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { sha256Hex, verifiedUserIdForEmail } from "./communityCheckoutBuyer";
 import { resolveMemberGrants } from "./communityTiers";
@@ -323,11 +324,12 @@ export const getConnectedAppAuthorizeContext = query({
     const resolved = await resolveActiveAppForOAuth(ctx, args.clientId.trim(), args.redirectUri);
     if (!resolved.ok) return resolved;
     const { app, community, redirectUri } = resolved;
-    const [user, profile, block, access] = await Promise.all([
+    const [user, profile, block, access, setup] = await Promise.all([
       ctx.db.get(userId),
       resolveUserProfileDisplayProjection(ctx, userId),
       getActiveCommunityBlock({ ctx, communityId: community._id, userId }),
       resolveMemberGrants(ctx, community._id, userId),
+      loadAccountSetupStatusForUserId(ctx, userId),
     ]);
     const email = typeof (user as any)?.email === "string" ? (user as any).email.trim().toLowerCase() : null;
     const emailVerified = Boolean(email && (user as any)?.emailVerifiedAt);
@@ -348,6 +350,7 @@ export const getConnectedAppAuthorizeContext = query({
         email_verified: emailVerified,
         display_name: profile?.display_name ?? (String((user as any)?.displayName ?? "").trim() || null),
         is_blocked: Boolean(block),
+        setup_required: !setup.completed,
       },
       access,
     };
@@ -373,6 +376,8 @@ export const approveConnectedAppAuthorization = mutation({
     const user: any = await ctx.db.get(userId);
     const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
     if (!email || !user?.emailVerifiedAt) throw new Error("oauth_verified_email_required");
+    const setup = await loadAccountSetupStatusForUserId(ctx, userId);
+    if (!setup.completed) throw new Error("oauth_account_setup_required");
     const block = await getActiveCommunityBlock({ ctx, communityId: community._id, userId });
     if (block) throw new Error("oauth_community_user_blocked");
 
@@ -449,6 +454,11 @@ export const exchangeConnectedAppAuthCodeInternal = internalMutation({
     if (!app || app.revokedAt || String(app.communityId) !== String(row.communityId)) {
       return { ok: false as const, error: "invalid_grant" as const };
     }
+    // Fail closed if the founder removed this callback URL after code issuance.
+    const registeredRedirects = Array.isArray(app.redirectUrls) ? app.redirectUrls : [];
+    if (!registeredRedirects.includes(row.redirectUri)) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
     const community: any = await ctx.db.get(row.communityId);
     if (!community || !communityIsActive(community)) {
       return { ok: false as const, error: "invalid_grant" as const };
@@ -460,6 +470,10 @@ export const exchangeConnectedAppAuthCodeInternal = internalMutation({
     const user: any = await ctx.db.get(row.userId);
     const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
     if (!user || !email || !user.emailVerifiedAt) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const setup = await loadAccountSetupStatusForUserId(ctx, row.userId);
+    if (!setup.completed) {
       return { ok: false as const, error: "invalid_grant" as const };
     }
     const [profile, access, pairwiseHash] = await Promise.all([
@@ -567,5 +581,26 @@ export const deliverConnectedAppWebhookInternal = internalAction({
     }
     await ctx.runMutation(internal.connectedApps.recordDeliveryInternal, { deliveryId: args.deliveryId, ok, ...(lastError ? { lastError } : {}) });
     return { ok };
+  },
+});
+
+// Daily bounded cleanup for expired Sign in with Polynet one-time auth codes.
+export const pruneExpiredConnectedAppAuthCodesInternal = internalMutation({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const cutoffMs = nowMs - 60_000;
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 200)));
+    const expired = await ctx.db
+      .query("connectedAppAuthCodes")
+      .withIndex("by_expiresAt", (q: any) => q.lte("expiresAt", cutoffMs))
+      .take(limit);
+    for (const row of expired) {
+      await ctx.db.delete(row._id);
+    }
+    return { deleted: expired.length };
   },
 });

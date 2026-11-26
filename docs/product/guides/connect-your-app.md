@@ -222,6 +222,7 @@ If you are building a new app and want Polynet to be your only sign-in and check
    { "grant_type": "authorization_code", "code": "pcode_...", "redirect_uri": "{EXACT_CALLBACK}", "code_verifier": "..." }
    ```
    The response returns `{ "user": { "id", "email", "email_verified", "name", "avatar_url" }, "access": { "allowed", "tier", "grants" } }`. Keep checking `GET /apps/v1/access?email=...` for live grant authority (never store permanent grants in a cookie).
+   Users must have a verified email and completed Polynet account setup (profile and platform terms) to authorize; new users are guided through setup or community join automatically and returned straight back to `/oauth/authorize` to complete sign-in. Removing a callback URL in Settings immediately invalidates any unredeemed codes issued for that URL.
 4. To send a user straight to a specific plan and return them to your app automatically after buying, link to:
    `https://www.polynet.ai/c/{community-slug}?plan={tier_key}&app={APP_ID}`
 5. To report key product onboarding milestones or wins directly onto a member's Member Board card:

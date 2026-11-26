@@ -51,6 +51,7 @@ export type WebAppMainSurfaceHostProps = {
   // session (null signed out) for where they stand and to join.
   publicCommunitySlug: string | null;
   publicCommunitySession: unknown | null;
+  publicCommunitySessionCheckPending?: boolean;
   communityHostProps: ComponentProps<typeof WebCommunityHostType>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   discoverPageProps: WebCommunityDiscoverPageProps;
@@ -78,7 +79,13 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           <div className="landing-auth-hold" aria-hidden="true" />
         ) : props.showPublicCommunityFunnel ? (
           <div className="community-body">
-            {props.publicCommunitySlug ? <WebCommunityLandingPage communitySlug={props.publicCommunitySlug} session={props.publicCommunitySession} /> : null}
+            {props.publicCommunitySlug ? (
+              <WebCommunityLandingPage
+                communitySlug={props.publicCommunitySlug}
+                session={props.publicCommunitySession}
+                sessionCheckPending={props.publicCommunitySessionCheckPending}
+              />
+            ) : null}
           </div>
         ) : props.showPublicFind ? (
           <PublicFindPage {...props.publicFindProps} />

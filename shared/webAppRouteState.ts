@@ -286,18 +286,114 @@ export function buildCommunityHomePath(
 }
 
 
-// Someone who starts on a community's site and has to set up their Polynet
-// account first comes to /onboarding?community=<slug> and, once set up, goes
-// back to that community's join page. Only a slug travels (never an address),
-// so the link can't send anyone anywhere else.
+// Someone who starts on a community's site (or Sign in with Polynet) and has to
+// set up their Polynet account first comes to /onboarding and, once set up, goes
+// back to that community's join page (preserving selected plan/period/app) or to
+// the exact validated /oauth/authorize request. Only strictly validated internal
+// slugs/params or /oauth/authorize paths travel, so links can never open-redirect.
 const SETUP_RETURN_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const SETUP_RETURN_PLAN = /^[a-z0-9_-]{1,64}$/;
+const SETUP_RETURN_APP_ID = /^app_[a-f0-9]{20}$/;
 export const SETUP_RETURN_STORAGE_KEY = "polynet:setup-return-community";
+export const SETUP_RETURN_TARGET_STORAGE_KEY = "polynet:setup-return-target";
+export const OAUTH_JOIN_RETURN_STORAGE_KEY = "polynet:oauth-join-return";
+
+export type SetupReturnTarget =
+  | {
+      kind: "community";
+      community: string;
+      plan?: string | null;
+      period?: "monthly" | "annual" | null;
+      app?: string | null;
+    }
+  | {
+      kind: "oauth";
+      path: string;
+    };
+
+export function sanitizeOAuthAuthorizeReturnPath(
+  raw: string | null | undefined,
+  expectedAppId?: string | null,
+): string | null {
+  const value = String(raw ?? "").trim();
+  if (!value || !value.startsWith("/oauth/authorize?") || value.startsWith("//") || value.includes("\\")) {
+    return null;
+  }
+  if (/[\u0000-\u001f\u007f]/.test(value)) return null;
+  try {
+    const parsed = new URL(value, "https://polynet.local");
+    if (parsed.origin !== "https://polynet.local" || parsed.pathname !== "/oauth/authorize") {
+      return null;
+    }
+    const responseType = parsed.searchParams.get("response_type");
+    const clientId = String(parsed.searchParams.get("client_id") ?? "").trim();
+    const redirectUri = String(parsed.searchParams.get("redirect_uri") ?? "").trim();
+    if (responseType !== "code" || !SETUP_RETURN_APP_ID.test(clientId) || !redirectUri) {
+      return null;
+    }
+    if (expectedAppId && clientId !== expectedAppId) return null;
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
 
 export function readSetupReturnCommunity(search: string | null | undefined): string | null {
   let value = "";
   try { value = new URLSearchParams(String(search ?? "")).get("community") ?? ""; } catch { return null; }
   const slug = value.trim().toLowerCase();
   return SETUP_RETURN_SLUG.test(slug) ? slug : null;
+}
+
+export function readSetupReturnTargetFromSearch(search: string | null | undefined): SetupReturnTarget | null {
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(String(search ?? ""));
+  } catch {
+    return null;
+  }
+  const slug = (params.get("community") ?? "").trim().toLowerCase();
+  if (!SETUP_RETURN_SLUG.test(slug)) return null;
+  const rawPlan = (params.get("plan") ?? "").trim().toLowerCase();
+  const plan = SETUP_RETURN_PLAN.test(rawPlan) ? rawPlan : null;
+  const rawPeriod = (params.get("period") ?? "").trim().toLowerCase();
+  const period = rawPeriod === "monthly" || rawPeriod === "annual" ? rawPeriod : null;
+  const rawApp = (params.get("app") ?? "").trim();
+  const app = SETUP_RETURN_APP_ID.test(rawApp) ? rawApp : null;
+  return { kind: "community", community: slug, plan, period, app };
+}
+
+export function buildOnboardingUrlForCommunityReturn(args: {
+  community: string;
+  plan?: string | null;
+  period?: string | null;
+  app?: string | null;
+}): string {
+  const params = new URLSearchParams();
+  params.set("community", args.community.trim().toLowerCase());
+  const plan = String(args.plan ?? "").trim().toLowerCase();
+  if (SETUP_RETURN_PLAN.test(plan)) params.set("plan", plan);
+  const period = String(args.period ?? "").trim().toLowerCase();
+  if (period === "monthly" || period === "annual") params.set("period", period);
+  const app = String(args.app ?? "").trim();
+  if (SETUP_RETURN_APP_ID.test(app)) params.set("app", app);
+  return `/onboarding?${params.toString()}`;
+}
+
+export function buildSetupReturnUrl(target: SetupReturnTarget): string | null {
+  if (target.kind === "oauth") {
+    return sanitizeOAuthAuthorizeReturnPath(target.path);
+  }
+  const slug = target.community.trim().toLowerCase();
+  if (!SETUP_RETURN_SLUG.test(slug)) return null;
+  const funnelPath = buildCommunityFunnelPath(slug);
+  if (!funnelPath) return null;
+  const params = new URLSearchParams();
+  params.set("intent", "join");
+  if (target.plan && SETUP_RETURN_PLAN.test(target.plan)) params.set("plan", target.plan);
+  if (target.period === "monthly" || target.period === "annual") params.set("period", target.period);
+  if (target.app && SETUP_RETURN_APP_ID.test(target.app)) params.set("app", target.app);
+  return `${funnelPath}?${params.toString()}`;
 }
 
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
