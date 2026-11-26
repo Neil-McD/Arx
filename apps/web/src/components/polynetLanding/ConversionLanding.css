@@ -680,7 +680,7 @@
 .pn-landing .footer-base button { min-height: 44px; padding: 0; border: 0; background: none; color: var(--text); font-size: 13.5px; }
 
 @media (max-width: 900px) {
-  .pn-landing .cards.three,
+  .pn-landing .cards.three { grid-template-columns: 1fr; }
   /* Carousels run edge to edge: the first card lines up with the text, and
      the rest fall off the screen on both sides as they scroll. */
   .pn-landing .figs { margin-inline: calc(50% - 50vw); padding-inline: calc(50vw - 50%); scroll-padding-inline: 24px; }
