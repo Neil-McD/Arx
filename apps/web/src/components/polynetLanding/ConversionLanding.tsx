@@ -14,7 +14,6 @@ const RealAppPreview = lazy(() => import("./RealAppPreview").then((module) => ({
 const GuideScene = lazy(() => import("./GuideScene").then((module) => ({ default: module.GuideScene })));
 const BrainScene = lazy(() => import("./BrainScene").then((module) => ({ default: module.BrainScene })));
 const ChiefScene = lazy(() => import("./ChiefScene").then((module) => ({ default: module.ChiefScene })));
-const BoardScene = lazy(() => import("./BoardScene").then((module) => ({ default: module.BoardScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -171,7 +170,7 @@ const PRODUCT_MENU: Array<Array<[string, string, string]>> = [
   [
     ["The guide", "Answers your members from your courses and past posts", "/#guide"],
     ["Community brain", "What your community learns, kept and connected", "/#brain"],
-    ["Chief of Staff", "Morning briefs, member check-ins and reply drafts", "/#chief-of-staff"],
+    ["Chief of Staff", "Morning briefs, the members board and check-ins", "/#chief-of-staff"],
   ],
   [
     ["Community home", "Channels, messages, courses, events and pods", "/pricing#included"],
@@ -528,16 +527,10 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           A great answer gets posted once, sinks into an old thread, and the next member asks all over again. Polynet keeps it. The guide turns helpful answers into notes on one map, filed under your lessons, so what one member figures out, the next one finds.
         </FeatureSection>
 
-        <FeatureSection id="chief-of-staff" title={["Catch members", "before they drift away."]} sceneLabel="Try the Chief of Staff: read the 8am brief, then send, edit or skip the check-in for a quiet member and the reply drafted for an unanswered question"
+        <FeatureSection id="chief-of-staff" title={["Keep every member", "moving toward results."]} sceneLabel="Try the Chief of Staff: read the 8am brief, send, edit or skip the check-in for a quiet member, and move members on the members board behind it"
           live={<Suspense fallback={<div className="gsc-wait" />}><ChiefScene /></Suspense>}
-          features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "A monthly AI allowance you control"]}>
-          In most communities you only find out someone's gone when they cancel. Polynet sees it early: the new member who never said hello, the one stuck halfway through a course, the regular who's gone quiet. Your chief of staff drafts the right nudge for each, and you send it, change it or skip it.
-        </FeatureSection>
-
-        <FeatureSection id="members-board" title={["See who's getting", "real results."]} sceneLabel="Try the members board: move a member on, filter who needs you, and see what the guide did on each card"
-          live={<Suspense fallback={<div className="gsc-wait" />}><BoardScene /></Suspense>}
-          features={["Every member's progress, stage by stage", "Checkpoints that tick themselves", "Wins logged on each member", "A green arrow when someone's ready to move on", "Follow-ups drafted, or sent for the kinds you allow", "Board highlights in your morning brief"]}>
-          Most hosts can't tell who's actually getting results until someone posts a win or cancels. The members board shows every member's path, from the day they join to the result your community promises. Checkpoints tick themselves as they post and finish lessons. When someone stalls, your chief of staff follows up and marks it on their card. When someone finishes a stage, a green arrow appears by their name: press it to move them on.
+          features={["A morning brief at 8am, when you turn it on", "Every member's progress, stage by stage", "Checkpoints that tick themselves", "Check-ins for quiet members: send, edit or skip", "A green arrow when someone's ready to move on", "A monthly AI allowance you control"]}>
+          In most communities you only find out someone's gone when they cancel, and you can't tell who's actually getting anywhere. Polynet tracks every member's progress on one board, and checkpoints tick themselves as they post and finish lessons. Your chief of staff spots who's gone quiet or stuck and drafts the right nudge, and you send it, change it or skip it. When someone's ready for the next stage, a green arrow appears by their name.
         </FeatureSection>
 
         <section className="plans-line" aria-labelledby="plans-line-title" data-rv>
