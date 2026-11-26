@@ -117,7 +117,7 @@ export function useWebRouteAccessBoundaryController<
         if (!session) {
           setCommunityResolution({ slug, state: "failed" });
           setCommunityResolutionError(
-            "Polynet could not finish verifying community access. Try again.",
+            "We couldn't open this community. Try again.",
           );
           return;
         }
@@ -147,7 +147,7 @@ export function useWebRouteAccessBoundaryController<
         console.warn("Failed to resolve joined community route by slug:", error);
         setCommunityResolution({ slug, state: "failed" });
         setCommunityResolutionError(
-          "Polynet could not finish verifying community access. Try again.",
+          "We couldn't open this community. Try again.",
         );
       }
     })();

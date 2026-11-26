@@ -2,6 +2,7 @@ import React from "react";
 import { captureAppException } from "../instrument";
 import { attemptModuleLoadRecovery, canAttemptModuleReload } from "../lib/appUpdateRecovery";
 import { isLikelyModuleLoadFailure } from "../lib/resilientLazy";
+import { WaitScreen } from "./WaitScreen";
 
 const AUTO_RELOAD_FALLBACK_TIMEOUT_MS = 3_500;
 
@@ -18,64 +19,15 @@ type SurfaceErrorBoundaryState = {
   retryCount: number;
 };
 
+// A page or the whole app couldn't carry on: the shared in-between screen,
+// one plain line and one button (WaitScreen.tsx).
 export function RecoveryCard(props: {
-  title: string;
-  copy: string;
+  line: string;
   buttonLabel: string;
   onAction: () => void;
   fullScreen?: boolean;
 }) {
-  return (
-    <div
-      role="alert"
-      style={{
-        display: "grid",
-        placeItems: "center",
-        minHeight: props.fullScreen ? "100vh" : "50vh",
-        padding: 24,
-        ...(props.fullScreen
-          ? {
-              background: "var(--bg-app, #08090a)",
-              color: "var(--text-primary, rgba(245,245,247,0.92))",
-              fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
-            }
-          : null),
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 380,
-          padding: 20,
-          borderRadius: 12,
-          border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
-          background: "var(--bg-surface, var(--bg-card, rgba(255,255,255,0.03)))",
-          color: "var(--text-primary, inherit)",
-        }}
-      >
-        <div style={{ fontSize: 15, fontWeight: 600 }}>{props.title}</div>
-        <p style={{ margin: "8px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "var(--text-secondary, rgba(255,255,255,0.68))" }}>
-          {props.copy}
-        </p>
-        <button
-          type="button"
-          onClick={props.onAction}
-          style={{
-            marginTop: 14,
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid var(--border-subtle, rgba(255,255,255,0.16))",
-            background: "var(--bg-elevated, var(--bg-card, rgba(255,255,255,0.08)))",
-            color: "var(--text-primary, inherit)",
-            fontSize: 13.5,
-            fontWeight: 500,
-            cursor: "pointer",
-          }}
-        >
-          {props.buttonLabel}
-        </button>
-      </div>
-    </div>
-  );
+  return <WaitScreen inline={!props.fullScreen} line={props.line} action={{ label: props.buttonLabel, onClick: props.onAction }} />;
 }
 
 /**
@@ -175,16 +127,12 @@ export class SurfaceErrorBoundary extends React.Component<
       return <div aria-busy="true" style={{ minHeight: "50vh" }} />;
     }
 
-    const title = this.state.isModuleLoadError
-      ? "A newer version of Polynet is ready"
-      : "Couldn't load this page";
-    const copy = this.state.isModuleLoadError
-      ? "Polynet updated while this tab was open. Refresh to pick up the latest version."
-      : "Something interrupted this view. You can try again here, or switch to another tab.";
+    const line = this.state.isModuleLoadError
+      ? "A newer version of Polynet is ready. Refresh to get it."
+      : "This page didn't load.";
     return (
       <RecoveryCard
-        title={title}
-        copy={copy}
+        line={line}
         buttonLabel={this.state.isModuleLoadError ? "Refresh" : "Try again"}
         onAction={this.handleRecover}
       />

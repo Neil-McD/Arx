@@ -110,7 +110,7 @@ describe("resilient tab switching & lazy module recovery", () => {
     boundary.state = { ...boundary.state, ...derived };
     const alertHtml = renderToStaticMarkup(boundary.render() as React.ReactElement);
     expect(alertHtml).toContain('role="alert"');
-    expect(alertHtml).toContain("Couldn&#x27;t load this page");
+    expect(alertHtml).toContain("This page didn&#x27;t load.");
     expect(alertHtml).toContain("Try again");
 
     // Clicking Try again resets error state and bumps retryCount in-place.
@@ -142,7 +142,7 @@ describe("resilient tab switching & lazy module recovery", () => {
     );
     boundary.state = { ...boundary.state, ...derived };
     const html = renderToStaticMarkup(boundary.render() as React.ReactElement);
-    expect(html).toContain("A newer version of Polynet is ready");
+    expect(html).toContain("A newer version of Polynet is ready. Refresh to get it.");
     expect(html).toContain("Refresh");
   });
 
@@ -250,7 +250,7 @@ describe("resilient tab switching & lazy module recovery", () => {
       boundary.state = { ...boundary.state, ...secondDerived };
       expect(boundary.state.isAutoReloading).toBe(false);
       const fallbackHtml = renderToStaticMarkup(boundary.render() as React.ReactElement);
-      expect(fallbackHtml).toContain("A newer version of Polynet is ready");
+      expect(fallbackHtml).toContain("A newer version of Polynet is ready. Refresh to get it.");
       expect(fallbackHtml).toContain("Refresh");
     } finally {
       if (prevWindow === undefined) delete (globalThis as Record<string, unknown>).window;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { beginOAuthSignIn } from "../auth";
+import { WaitScreen } from "../components/WaitScreen";
 import {
   applyShellVariantToAppPath,
   DEFAULT_POST_SIGN_IN_PATH,
@@ -93,74 +94,14 @@ export function LoginTrampolineRoute() {
     };
   }, [returnTo, signInUrl]);
 
-  return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        background: "#09090b",
-        color: "#f5f7fb",
-        fontFamily: "ui-sans-serif, system-ui, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          width: "min(100%, 420px)",
-          borderRadius: 20,
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(18,18,22,0.94)",
-          boxShadow: "0 18px 50px rgba(0,0,0,0.35)",
-          padding: 24,
-        }}
-      >
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Redirecting to sign in</div>
-        <div style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(245,247,251,0.78)" }}>
-          {signInUrl && !showManualContinue
-            ? "Polynet is redirecting you to sign in and will bring you back to your original page."
-            : signInUrl
-              ? "If the redirect does not continue automatically, use the button below."
-              : "Polynet is preparing the sign-in handoff and will return you to your original page."}
-        </div>
-        {signInUrl && showManualContinue ? (
-          <button
-            type="button"
-            onClick={() => window.location.replace(signInUrl)}
-            style={{
-              marginTop: 16,
-              width: "100%",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.16)",
-              background: "#f5f7fb",
-              color: "#0b0c10",
-              fontSize: 14,
-              fontWeight: 700,
-              lineHeight: 1,
-              padding: "13px 14px",
-            }}
-          >
-            Continue to sign in
-          </button>
-        ) : null}
-        {error ? (
-          <div
-            style={{
-              marginTop: 16,
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,120,120,0.24)",
-              background: "rgba(120,20,20,0.14)",
-              color: "#ffb4b4",
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
-            {error}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
+  // The shared in-between screen (WaitScreen.tsx): "Taking you to sign in…"
+  // while the redirect runs; if it stalls, one button to carry on; if sign-in
+  // couldn't start, one plain line and Try again.
+  if (error) {
+    return <WaitScreen line="We couldn't start sign-in. Try again." action={{ label: "Try again", onClick: () => window.location.reload() }} />;
+  }
+  if (signInUrl && showManualContinue) {
+    return <WaitScreen line="Taking you to sign in…" action={{ label: "Continue to sign in", onClick: () => window.location.replace(signInUrl) }} />;
+  }
+  return <WaitScreen line="Taking you to sign in…" />;
 }

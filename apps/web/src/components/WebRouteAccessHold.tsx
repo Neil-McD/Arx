@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentProps } from "react";
 
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 import { WebShellChromeHost } from "./WebShellChromeHost";
+import { WaitScreen } from "./WaitScreen";
 
 type WebShellChromeHostProps = ComponentProps<typeof WebShellChromeHost>;
 
@@ -111,12 +112,8 @@ export function WebRouteAccessHold(props: {
       </div>
 
       {props.error ? (
-        <div className="web-route-access-hold-failure" role="alert">
-          <p>{props.errorMessage ?? "Polynet could not finish verifying your session."}</p>
-          <button type="button" onClick={props.onRetry}>
-            Try again
-          </button>
-        </div>
+        <WaitScreen overlay line={props.errorMessage ?? "We couldn't reach Polynet. Check your connection and try again."}
+          action={{ label: "Try again", onClick: props.onRetry }} />
       ) : showProgress ? (
         <p className="web-route-access-hold-progress" role="status" aria-live="polite">
           Opening Polynet…

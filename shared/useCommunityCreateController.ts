@@ -215,7 +215,7 @@ export function useCommunityCreateController<
       }
       if (!current.isAccountSetupResolved) {
         current.setCreateCommunityError(
-          "We are still verifying your account. Try again in a moment.",
+          "Still signing you in. Try again in a moment.",
         );
         return;
       }
@@ -326,7 +326,7 @@ export function useCommunityCreateController<
     }
     if (!current.isAccountSetupResolved) {
       current.setCreateCommunityError(
-        "We are still verifying your account. Try again in a moment.",
+        "Still signing you in. Try again in a moment.",
       );
       return;
     }

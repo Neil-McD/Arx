@@ -34,7 +34,8 @@ describe("web shell refresh continuity contract", () => {
       /!props\.quiet \? \([\s\S]*Opening community…[\s\S]*\) : null/,
     );
     expect(css).not.toContain(".landing-auth-hold-content");
-    expect(css).toContain(".web-route-access-hold-failure");
+    // A failed check shows the shared in-between screen over the held shell.
+    expect(hold).toContain("<WaitScreen overlay");
   });
 
   it("never redirects an unresolved valid community route to Discover", () => {

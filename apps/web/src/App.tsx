@@ -864,7 +864,7 @@ export default function App() {
     onAccountSetupRequired: openProfileSetup,
     onAccountSetupUnavailable: () => {
       showAppToastMessage(
-        "We are still verifying your account. Try again in a moment.",
+        "Still signing you in. Try again in a moment.",
       );
     },
     onCommunityCreated: (community, context) => {

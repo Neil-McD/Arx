@@ -819,7 +819,7 @@ function WebCommunityAgentDock(props, ref) {
     const desiredCommunityId =
       surfaceContext.kind === "community" ? communityId : null;
     if (surfaceContext.kind === "community" && !desiredCommunityId) {
-      setLocalError("This community context is still loading. Try again.");
+      setLocalError("Still opening this community. Try again in a moment.");
       return;
     }
 

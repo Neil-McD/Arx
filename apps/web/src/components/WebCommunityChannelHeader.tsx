@@ -13,6 +13,7 @@ import { setCloudCommunityChannelDescription } from "../../../../shared/cloudCom
 import { announceChannelDescription } from "../v1/KitChannelRail";
 import { ChannelAccessSettings } from "./ChannelAccessSettings";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
+import { askInApp } from "../../../../shared/inAppConfirm";
 
 export type WebCommunityChannelHeaderChannel = {
   id: string;
@@ -79,9 +80,11 @@ export function WebCommunityChannelHeader({
 }: WebCommunityChannelHeaderProps) {
   const sessionScope = useContext(CommunityChannelSessionContext);
   const renameTitleId = useId();
-  const deleteTitleId = useId();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [managementMode, setManagementMode] = useState<"rename" | "delete" | null>(null);
+  const [managementMode, setManagementMode] = useState<"rename" | null>(null);
+  // Deleting asks with the app's own card (askInApp); if the delete then
+  // fails, one line under the header says so.
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const [renamedChannelName, setRenamedChannelName] = useState(channel.name);
   // Design v1: the line next to the name. What you saved shows at once; the
   // channel list catches up on its next read.
@@ -93,7 +96,6 @@ export function WebCommunityChannelHeader({
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
-  const deleteCancelRef = useRef<HTMLButtonElement | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
   const canManageCustomChannel = Boolean(
     canManage &&
@@ -162,12 +164,8 @@ export function WebCommunityChannelHeader({
   useEffect(() => {
     if (!managementMode) return;
     const frame = window.requestAnimationFrame(() => {
-      if (managementMode === "rename") {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-      } else {
-        deleteCancelRef.current?.focus();
-      }
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [managementMode]);
@@ -187,7 +185,20 @@ export function WebCommunityChannelHeader({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [managementMode, managingChannelId]);
 
-  const openManagement = (mode: "rename" | "delete") => {
+  const confirmDelete = async () => {
+    setIsMenuOpen(false);
+    setDeleteFailed(false);
+    clearManageChannelError?.();
+    const yes = await askInApp({
+      message: `Delete #${channel.name}? Members won't see it any more. Its messages are kept.`,
+      yes: "Delete channel",
+      danger: true,
+    });
+    if (!yes) { restoreMenuTriggerFocus(); return; }
+    await handleDeleteChannel();
+  };
+
+  const openManagement = (mode: "rename") => {
     setIsMenuOpen(false);
     setRenamedChannelName(channel.name);
     setEditedDescription(description);
@@ -222,7 +233,7 @@ export function WebCommunityChannelHeader({
     if (!onDeleteChannel || managingChannelId) return;
     clearManageChannelError?.();
     const deleted = await onDeleteChannel(channel);
-    if (deleted) closeManagement(true);
+    setDeleteFailed(!deleted);
   };
 
   const menuPopover = isMenuOpen ? (
@@ -253,7 +264,7 @@ export function WebCommunityChannelHeader({
               className="is-danger"
               type="button"
               role="menuitem"
-              onClick={() => openManagement("delete")}
+              onClick={() => void confirmDelete()}
             >
               <Trash2 size={15} aria-hidden="true" />
               Delete channel
@@ -301,6 +312,9 @@ export function WebCommunityChannelHeader({
         )}
         {trailingAction}
       </header>
+      {deleteFailed ? (
+        <p className="community-channel-header-error" role="alert">{manageChannelError ?? "The channel wasn't deleted. Try again."}</p>
+      ) : null}
 
       {managementMode ? (
         <div
@@ -385,57 +399,7 @@ export function WebCommunityChannelHeader({
                 </button>
               </div>
             </form>
-          ) : (
-            <div
-              ref={(element) => {
-                dialogRef.current = element;
-              }}
-              className="community-channel-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={deleteTitleId}
-              tabIndex={-1}
-            >
-              <div className="community-channel-modal-header">
-                <div>
-                  <h2 id={deleteTitleId}>Delete #{channel.name}?</h2>
-                  <p>Members will no longer see this channel. Existing messages will be retained.</p>
-                </div>
-                <button
-                  type="button"
-                  className="community-channel-modal-close"
-                  onClick={() => closeManagement()}
-                  aria-label="Close delete channel dialog"
-                  disabled={Boolean(managingChannelId)}
-                >
-                  <X size={18} aria-hidden="true" />
-                </button>
-              </div>
-              {manageChannelError ? (
-                <div className="community-channel-modal-error" role="alert">
-                  {manageChannelError}
-                </div>
-              ) : null}
-              <div className="community-channel-modal-actions">
-                <button
-                  ref={deleteCancelRef}
-                  type="button"
-                  onClick={() => closeManagement()}
-                  disabled={Boolean(managingChannelId)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="is-danger"
-                  onClick={() => void handleDeleteChannel()}
-                  disabled={Boolean(managingChannelId)}
-                >
-                  {managingChannelId ? "Deleting…" : "Delete channel"}
-                </button>
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
     </>
