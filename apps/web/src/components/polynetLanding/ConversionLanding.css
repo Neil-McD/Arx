@@ -430,27 +430,21 @@
 .pn-landing .csc-allowance i { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .08); overflow: hidden; }
 .pn-landing .csc-allowance b { display: block; height: 100%; border-radius: 2px; background: #a78bfa; }
 
-/* The members board's scene (BoardScene.tsx): the brief's board line, then
-   the app's own board in its window, running off the right. */
-.pn-landing .scene.live:has(.msc) { height: auto; }
-.pn-landing .msc { position: relative; }
-.pn-landing .msc-pulse { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 18px; padding: 9px 16px; border: 1px solid rgba(var(--ai-rgb), .3); border-radius: 999px; background: rgba(var(--ai-rgb), .07); color: var(--text); font-size: 14px; }
-.pn-landing .msc-pulse svg { color: var(--ai); }
-.pn-landing .msc-pulse span { color: var(--muted); }
-.pn-landing .msc-win { position: relative; width: calc(100% + max(0px, (100vw - 100%) / 2)); height: 560px;
-  -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent), linear-gradient(180deg, #000 82%, transparent);
-  -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, #000 78%, transparent), linear-gradient(180deg, #000 82%, transparent); mask-composite: intersect; }
-.pn-landing .msc-win .gsc-win { height: 100%; min-width: 1180px; }
-.pn-landing .msc-win .rpw-head { padding: 0 24px; gap: 10px; }
-.pn-landing .msc-mode { color: #7d7f82; font-weight: 400; }
-/* Once the board is in view, Dev's green arrow glows once: the hint to press it. */
-.pn-landing .msc.is-seen .members-board-move[aria-label^="Move Dev Patel"] { animation: msc-hint 1.4s ease-in-out 2.6s 2; }
-@keyframes msc-hint {
+/* Behind the Chief of Staff card: the app's own members board, its first
+   columns clear of the card, the rest fading off to the right. */
+/* The card is 468px wide; the board starts just past it. */
+.pn-landing .csc .gsc-back { left: 360px; }
+.pn-landing .csc .gsc-win .rpw-head { gap: 10px; padding-left: 136px; }
+.pn-landing .csc-mode { color: #7d7f82; font-weight: 400; }
+.pn-landing .csc-mode::before { content: "›"; margin-right: 10px; }
+.pn-landing .csc .csc-board { height: 100%; padding: 14px 0 0 136px; }
+.pn-landing .csc .csc-board > [class*="app"] { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+/* Once in view, Dev's green arrow glows once: the hint to press it. */
+.pn-landing .csc.is-seen .members-board-move[aria-label^="Move Dev Patel"] { animation: csc-hint 1.4s ease-in-out 2.6s 2; }
+@keyframes csc-hint {
   50% { background: color-mix(in srgb, var(--mb-green) 22%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mb-green) 12%, transparent); }
 }
-@media (prefers-reduced-motion: reduce) { .pn-landing .msc.is-seen .members-board-move { animation: none; } }
-.pn-landing .msc-mode::before { content: "›"; margin-right: 10px; }
-.pn-landing .msc-win .rpw-body > [class*="app"] { display: flex; flex-direction: column; height: 100%; padding: 14px 24px 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .pn-landing .csc.is-seen .members-board-move { animation: none; } }
 
 /* The community brain's scene (BrainScene.tsx): a simple network straight on
    the page (the community, its branches named, a few dots on each), with the
@@ -557,9 +551,6 @@
      the right, running off the screen. */
   .pn-landing .scene.live:has(.gsc) { height: 460px; }
   .pn-landing .gsc { zoom: .6; height: 766px; }
-  /* The board: smaller, running off the right edge. */
-  .pn-landing .msc-win { zoom: .62; width: 1180px; height: 600px; margin-right: -100vw; }
-  .pn-landing .msc-pulse { font-size: 13px; padding: 8px 12px; border-radius: 14px; }
   .pn-landing .gsc-talk { min-height: 150px; }
   /* Chief of Staff: its card is taller, so the table sits lower and Josh's lit row shows under it. */
   .pn-landing .scene.live:has(.csc) { height: 560px; }
