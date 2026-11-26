@@ -21,10 +21,10 @@ import { PanelAction, PanelNext, PanelPart } from "./KitPanel";
 
 const LOOKAHEAD_MS = 14 * 86_400_000;
 
-// The read behind the part: the events of the coming two weeks, live
+// The read behind the part: the live events of the coming two weeks, live
 // (shared/liveQuery.ts): an event added, moved or cancelled anywhere shows at
-// once. The window moves by the hour, so the subscription isn't remade on
-// every draw. data undefined: not answered yet.
+// once. Keeps includeCancelled: false so high cancellation volume can never
+// exhaust the overlap limit and hide a live upcoming event.
 export function useNextEventRead(session: unknown, communityId: string, now: number): { data: unknown; settled: boolean } {
   const hour = Math.floor(now / 3_600_000) * 3_600_000;
   const subject = session ? resolveAuthSubject(session as AuthSessionLike) : null;
@@ -33,7 +33,7 @@ export function useNextEventRead(session: unknown, communityId: string, now: num
     communityId,
     startIso: new Date(hour - 6 * 3_600_000).toISOString(),
     endIso: new Date(hour + LOOKAHEAD_MS + 3_600_000).toISOString(),
-    includeCancelled: true,
+    includeCancelled: false,
     overlap: true,
     limit: 50,
   } : null);
@@ -47,17 +47,44 @@ export function KitNextEvent(props: {
   onOpenEvents: () => void;
 }) {
   const { data } = useNextEventRead(props.session, props.communityId, props.now);
-  const split = useMemo(
+  const hour = Math.floor(props.now / 3_600_000) * 3_600_000;
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  // Separate non-overlap read for upcoming cancelled occurrences so cancellation
+  // volume can never cause the primary live next-event query to fail.
+  const { data: withCancelledData } = useLiveQuery<unknown>(
+    props.session,
+    "communityEvents:listCommunityEvents",
+    subject
+      ? {
+          authSubject: subject,
+          communityId: props.communityId,
+          startIso: new Date(hour - 6 * 3_600_000).toISOString(),
+          endIso: new Date(hour + LOOKAHEAD_MS + 3_600_000).toISOString(),
+          includeCancelled: true,
+          overlap: false,
+          limit: 200,
+        }
+      : null,
+  );
+  const liveSplit = useMemo(
     () => (data === undefined ? undefined : splitCommunityEvents(coerceGatewayRows<CloudCommunityEvent>(data), props.now)),
     // Which event is next changes as time passes: read again each minute.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, Math.floor(props.now / 60_000)],
   );
+  const cancelledList = useMemo(
+    () =>
+      withCancelledData === undefined
+        ? []
+        : splitCommunityEvents(coerceGatewayRows<CloudCommunityEvent>(withCancelledData), props.now).cancelled,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [withCancelledData, Math.floor(props.now / 60_000)],
+  );
 
-  const event = split?.featured ?? null;
+  const event = liveSplit?.featured ?? null;
   const label = event ? featuredEventLabel(event, props.now) : null;
-  const earlierCancelled = event && split ? earlierCancelledOccurrencesForEvent(event, split.cancelled) : [];
-  const nextCancelledOnly = !event && split ? split.cancelled[0] ?? null : null;
+  const earlierCancelled = event ? earlierCancelledOccurrencesForEvent(event, cancelledList) : [];
+  const nextCancelledOnly = !event ? cancelledList[0] ?? null : null;
 
   if (!event || !label) {
     if (!nextCancelledOnly) return null;
