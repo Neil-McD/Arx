@@ -578,14 +578,15 @@
   /* Phones, the brain: the card on the left, the network to its right with
      about half of it off the screen; its left side is the part you tap. */
   /* Phones: as before (the card on the left, the network beside it with about
-     half of it off the screen), the network now inside its window. */
+     half of it off the screen; the network exactly where it was, 32% across
+     and 24px down), the window drawn around it. */
   .pn-landing .scene.live:has(.bsc) { height: auto; }
   .pn-landing .bsc { height: auto; min-height: 430px; }
   .pn-landing .bsc-card { position: relative; z-index: 2; top: auto; width: 50%; zoom: .76; }
   .pn-landing .bsc-kind small { display: none; }
-  .pn-landing .bsc-win { top: 0; left: 32%; width: 600px; height: 440px; margin-right: -100vw;
+  .pn-landing .bsc-win { top: -42px; left: calc(32% - 10px); width: 640px; height: 480px; margin-right: -100vw;
     -webkit-mask-image: linear-gradient(180deg, #000 85%, transparent); mask-image: linear-gradient(180deg, #000 85%, transparent); }
-  .pn-landing .bsc-win .rpw-head { padding-left: 24px; }
+  .pn-landing .bsc-win .rpw-head { visibility: hidden; }
   .pn-landing .bsc-net { left: 0; top: 4px; width: 520px; }
 }
 
