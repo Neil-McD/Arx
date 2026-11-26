@@ -55,19 +55,24 @@ describe("command palette", () => {
     expect(typed).toEqual([]);
   });
 
-  it("shows mobile top-bar Search on open community pages and hides it where it would duplicate or collide", async () => {
-    const { showsMobileTopBarSearch } = await import("../apps/web/src/components/WebMobileTopBar");
-    // Open community sub-pages (Knowledge, Brain, Events, Pods, Members, Analytics)
-    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, isCommunityHome: false })).toBe(true);
-    // Community Home already displays the full-width Search or ask bar in its menu
-    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, isCommunityHome: true })).toBe(false);
-    // Inside a channel or pod chat room (People / Pod panel trigger occupies top-right)
-    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, communityDetailLabel: "General" })).toBe(false);
-    // Thread page, Home/Agent, Settings, Discover, public visitor funnel
-    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, isThreadPage: true })).toBe(false);
-    expect(showsMobileTopBarSearch({ mode: "agent", rootPage: "agent", hasActiveCommunity: true })).toBe(false);
-    expect(showsMobileTopBarSearch({ mode: "settings", rootPage: "community", hasActiveCommunity: true })).toBe(false);
-    expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, canOpenCommunitySelector: false })).toBe(false);
+  it("phones have no search in the top bar, on any community page (Members included)", async () => {
+    const { createRequire } = await import("node:module");
+    const { vi } = await import("vitest");
+    const React = await import("react");
+    const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
+    const root = createRequire(import.meta.url);
+    if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { WebMobileTopBar } = await import("../apps/web/src/components/WebMobileTopBar");
+    const base = {
+      mode: "community", rootPage: "community", hasActiveCommunity: true, activeCommunityId: "c1", activeCommunityVisualIdentity: null,
+      communityLabel: "The Build Club", canViewMembers: true, memberFaces: [], memberCount: 12, onOpenDrawer: () => {},
+      canOpenCommunitySelector: true, onOpenCommunitySelector: () => {}, onOpenMembers: () => {},
+    } as any;
+    for (const page of [{ isCommunityHome: false }, { isCommunityHome: true }, { isThreadPage: true }, { communityDetailLabel: "General" }]) {
+      const html = renderToStaticMarkup(React.createElement(WebMobileTopBar, { ...base, ...page }));
+      expect(html).not.toContain("Search or ask");
+    }
   });
 
   it("mounts the command palette across desktop and mobile community shells and routes mobile picks cleanly", async () => {
