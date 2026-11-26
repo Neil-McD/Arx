@@ -723,7 +723,9 @@ export function KitMembersBoard(props: {
                               <span title={`Your note to the guide: ${card.founder_instruction}`}><PenLine size={12} aria-label="Your note to the guide" /></span>
                             ) : null}
                             {did ? (
-                              <span className="is-ai" title={[card.agent_outcome, card.agent_outcome_at ? props.timeFor(card.agent_outcome_at, props.now) : null].filter(Boolean).join(" · ")}><Sparkles size={12} aria-hidden="true" />{did}</span>
+                              <span className="is-ai" title={[did, card.agent_outcome_at ? props.timeFor(card.agent_outcome_at, props.now) : null].filter(Boolean).join(" · ")}>
+                                <Sparkles size={13} aria-label={`What the guide did: ${did}`} />
+                              </span>
                             ) : null}
                           </span>
                         </div>
