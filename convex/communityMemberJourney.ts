@@ -2235,27 +2235,33 @@ export const saveCommunityJourneyStages = mutation({
       }
     }
 
-    // When Auto-move is on, catch up any members who already finished all
-    // checkpoints on their current stage (respecting dismissed moves).
+    // When Auto-move is on, catch up all ready cards within the board's bound
+    // (respecting dismissed moves) using the already-loaded card map.
     if (autoAdvanceEnabled) {
       const liveBoard = await computeCommunityMemberJourneyBoard(ctx, {
         communityId: args.communityId,
         community,
         nowMs,
       });
-      const readyProposals = extractStageAdvanceProposalsFromBoard(liveBoard, 50);
+      const readyProposals = extractStageAdvanceProposalsFromBoard(
+        liveBoard,
+        Math.max(liveBoard.cards.length, 1),
+      );
       const userIdByMembershipId = new Map(
         liveBoard.cards.map((card) => [card.membership_id, card.db_user_id]),
       );
+      const cardRowByUserId = new Map(cards.map((card: any) => [String(card.userId), card]));
       for (const proposal of readyProposals) {
         const targetUserId = userIdByMembershipId.get(proposal.membership_id);
         if (!targetUserId) continue;
-        const cardRow = await ctx.db
-          .query("communityMemberJourneyCards")
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", targetUserId as any),
-          )
-          .unique();
+        const cardRow =
+          cardRowByUserId.get(String(targetUserId)) ??
+          (await ctx.db
+            .query("communityMemberJourneyCards")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", args.communityId).eq("userId", targetUserId as any),
+            )
+            .unique());
         const note = `Auto-moved to ${proposal.to_stage_name} after finishing ${proposal.from_stage_name} checkpoints`.slice(
           0,
           MAX_AGENT_OUTCOME_CHARS,
