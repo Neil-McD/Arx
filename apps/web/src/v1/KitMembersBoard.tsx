@@ -116,7 +116,6 @@ export function KitMembersBoard(props: {
   const [dropStageKey, setDropStageKey] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
-  const [phoneStageKey, setPhoneStageKey] = useState<string | null>(null);
   const phone = usePhoneLayout();
 
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -401,9 +400,9 @@ export function KitMembersBoard(props: {
     return <p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>;
   }
 
-  // The phone's tab, or the first stage when it's unset or its stage was deleted.
-  const phoneKey = stages.some((stage) => stage.key === phoneStageKey) ? phoneStageKey : stages[0]?.key ?? null;
-  const shownStages = phone ? stages.filter((stage) => stage.key === phoneKey) : stages;
+  // Every stage side by side, on phones too (Neil, Nov 26: the desktop board,
+  // fitted for phones; a phone swipes across the columns).
+  const shownStages = stages;
 
   return (
     <div className={phone ? "members-board-shell is-phone" : "members-board-shell"}>
@@ -462,18 +461,6 @@ export function KitMembersBoard(props: {
         </div>
       </div>
 
-      {phone ? (
-        <div className="members-board-tabs" role="tablist" aria-label="Stages">
-          {stages.map((stage) => {
-            const on = stage.key === phoneKey;
-            return (
-              <button key={stage.key} type="button" role="tab" aria-selected={on} className={on ? "is-on" : ""} onClick={() => setPhoneStageKey(stage.key)}>
-                {stage.name} <em>{visibleCards.filter((card) => card.stage_key === stage.key).length}</em>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
 
       {stageError ? (
         <p className={cx("bad")} role="alert" style={{ margin: "6px 0 0", fontSize: 12.5 }}>
@@ -773,7 +760,7 @@ export function KitMembersBoard(props: {
           );
         })}
 
-        {!phone && stages.length < MAX_JOURNEY_STAGES ? (
+        {stages.length < MAX_JOURNEY_STAGES ? (
           <button
             type="button"
             className="members-board-add-stage-col"
