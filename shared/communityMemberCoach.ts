@@ -131,6 +131,10 @@ export type MemberCoachGateInput = {
   communityTimeZone?: string | null;
   memberTemperature?: MemberHeartbeatTemperature;
   consecutiveUnanswered?: number;
+  // Live interactive joins (clicking Join or completing checkout right now)
+  // bypass quiet hours for Day-0 onboarding; asynchronous activations (host
+  // approval or external app webhook grant) respect community quiet hours.
+  isLiveJoin?: boolean;
 };
 
 export type MemberCoachGateResult =
@@ -192,11 +196,14 @@ export function evaluateMemberCoachGate(input: MemberCoachGateInput): MemberCoac
     return { allowed: false, blockReason: "cooldown_active" };
   }
 
-  // Someone who literally just joined is active right now, so Day-0 onboarding
-  // sends immediately when auto-enabled rather than waiting for morning.
+  // Someone who literally just joined interactively is active right now, so
+  // Day-0 onboarding sends immediately when auto-enabled rather than waiting
+  // for morning. Offline activations (overnight host approval or app webhook)
+  // still respect community quiet hours.
   const canAutoSendNow =
     input.autoReasonEnabled &&
-    (input.reason === "member_onboarding" || !isCommunityQuietHour(input.nowMs, input.communityTimeZone));
+    ((input.reason === "member_onboarding" && input.isLiveJoin !== false) ||
+      !isCommunityQuietHour(input.nowMs, input.communityTimeZone));
 
   return {
     allowed: true,

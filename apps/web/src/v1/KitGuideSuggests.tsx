@@ -20,8 +20,10 @@ export function replyDraftDetail(draft: Pick<ReplyDraftView, "question" | "chann
   return `“${draft.question}” in ${place} · no answer for ${replyDraftWaited(draft.hours_waiting)}.`;
 }
 
-export function coachDraftTitle(draft: Pick<MemberCoachDraftView, "member_name">): string {
-  return `Check in with ${draft.member_name}`;
+export function coachDraftTitle(draft: Pick<MemberCoachDraftView, "member_name"> & { reason?: MemberCoachDraftView["reason"] }): string {
+  return draft.reason === "member_onboarding"
+    ? `Welcome ${draft.member_name}`
+    : `Check in with ${draft.member_name}`;
 }
 
 export function stageProposalTitle(proposal: Pick<CloudJourneyStageAdvanceProposal, "member_name" | "to_stage_name">): string {
@@ -166,13 +168,13 @@ export function GuideSuggests(props: {
           {open ? (
             <div className={cx("nopen")}>
               {editing === null ? <p className={cx("gdraft")}>{draft.text}</p> : (
-                <textarea className={cx("gdraft", "edit")} aria-label="The check-in message" value={editing} maxLength={MEMBER_COACH_EDIT_MAX_CHARS} rows={4}
+                <textarea className={cx("gdraft", "edit")} aria-label={draft.reason === "member_onboarding" ? "The welcome message" : "The check-in message"} value={editing} maxLength={MEMBER_COACH_EDIT_MAX_CHARS} rows={4}
                   autoFocus onChange={(event) => setEditing(event.target.value)} />
               )}
               <span className={cx("gsrc")}><Sparkles size={13} strokeWidth={1.8} aria-hidden="true" />{draft.reason_label}</span>
               {error ? <p className={cx("gerr")}>{error}</p> : null}
               <div className={cx("gacts")}>
-                <Btn small go disabled={busy || !props.onSendCoach || (editing !== null && !editing.trim())} onClick={() => void sendCoach(draft)}>{busy ? "…" : "Send check-in"}</Btn>
+                <Btn small go disabled={busy || !props.onSendCoach || (editing !== null && !editing.trim())} onClick={() => void sendCoach(draft)}>{busy ? "…" : draft.reason === "member_onboarding" ? "Send welcome" : "Send check-in"}</Btn>
                 {editing === null
                   ? <Btn small disabled={busy} onClick={() => setEditing(draft.text)}>Edit</Btn>
                   : <Btn small disabled={busy} onClick={() => { setEditing(null); setError(null); }}>Cancel</Btn>}

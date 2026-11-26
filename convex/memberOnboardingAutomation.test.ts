@@ -208,22 +208,44 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
   expect(draftCandidate!.signalDetail).toContain("Day 1 Setup");
   expect(draftCandidate!.signalDetail).toContain("Weekly Kickoff Call");
   expect(draftCandidate!.signalDetail).toContain("Acme Studio");
+  // Releasing a skipped/aborted run frees its in-flight reservation immediately.
+  await t.mutation(internal.communityMemberCoach.releaseNewMemberOnboardingReservationInternal, {
+    communityId: ids.communityId,
+    reservationToken: draftCandidate!.reservationToken,
+    nowMs: NOW + 1_000,
+  });
 
-  // Enabling auto-send for member_onboarding delivers immediately even at 2:30am UTC (quiet hours).
+  // Enabling auto-send for member_onboarding delivers immediately for live joins even at 2:30am UTC,
+  // while offline activations (host approval / app grant) respect quiet hours and wait as drafts.
   await asOwner.mutation(api.communityMemberCoach.setMemberCoachSettings, {
     communityId: ids.communityId,
     enabled: true,
     autoReasons: ["member_onboarding"],
   });
+  const offlineCandidate = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
+    communityId: ids.communityId,
+    memberUserId: ids.memberId,
+    activationSequence: 1,
+    isLiveJoin: false,
+    nowMs: NOW + 2_000,
+  });
+  expect(offlineCandidate?.mode).toBe("draft");
+  await t.mutation(internal.communityMemberCoach.releaseNewMemberOnboardingReservationInternal, {
+    communityId: ids.communityId,
+    reservationToken: offlineCandidate!.reservationToken,
+    nowMs: NOW + 3_000,
+  });
+
   const autoCandidate = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
     communityId: ids.communityId,
     memberUserId: ids.memberId,
     activationSequence: 1,
-    nowMs: NOW,
+    isLiveJoin: true,
+    nowMs: NOW + 4_000,
   });
   expect(autoCandidate?.mode).toBe("auto");
 
-  // Deliver the Day-0 welcome atomically and verify Board outcome + dedupe.
+  // Deliver the Day-0 welcome atomically and release its in-flight reservation (now counted in drafts).
   const delivered = await t.mutation(internal.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal, {
     communityId: ids.communityId,
     memberUserId: ids.memberId,
@@ -234,9 +256,15 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
     text: "Welcome to Club chief_of_staff! Start with Day 1 Setup in Quickstart, then launch Acme Studio from your sidebar.",
     requestedMode: "auto",
     usedPrivateContext: false,
-    nowMs: NOW,
+    isLiveJoin: true,
+    nowMs: NOW + 5_000,
   });
   expect(delivered).toMatchObject({ ok: true, outcome: "sent_auto" });
+  await t.mutation(internal.communityMemberCoach.releaseNewMemberOnboardingReservationInternal, {
+    communityId: ids.communityId,
+    reservationToken: autoCandidate!.reservationToken,
+    nowMs: NOW + 5_500,
+  });
 
   // Dedupe prevents a duplicate Day-0 welcome for the same join.
   const secondCheck = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
@@ -247,7 +275,8 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
   });
   expect(secondCheck).toBeNull();
 
-  // Member Board card records clean privacy-safe outcome note.
+  // Member Board card records clean privacy-safe outcome note AND does NOT falsely
+  // mark the brand-new member as "stuck" immediately after their Day-0 welcome.
   const card: any = await t.run((ctx) =>
     ctx.db
       .query("communityMemberJourneyCards")
@@ -256,7 +285,22 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
   );
   expect(card?.agentOutcomeNote).toContain("Day-0 welcome");
 
-  // Atomic daily cap: a burst of 6 simultaneous new joins cannot exceed 5 total daily reservations (2 already reserved above -> only 3 more succeed).
+  const board = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+    communityId: ids.communityId,
+  });
+  const mayaCard = board.cards.find((entry) => entry.name === "Maya");
+  expect(mayaCard?.status).toBe("on_track");
+
+  // Two days later, quiet_newcomer does NOT send a duplicate welcome to Maya (she already got Day-0).
+  const day2Scan = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+    communityId: ids.communityId,
+    autoReasons: ["quiet_newcomer"],
+    nowMs: NOW + 2 * 86_400_000 + 60_000,
+  });
+  expect(day2Scan.candidate).toBeNull();
+
+  // Atomic daily cap: a burst of 6 simultaneous new joins cannot exceed 5 total daily touches
+  // (1 already sent above -> only 4 more succeed in-flight; releasing one immediately frees a slot).
   const burstIds = await t.run(async (ctx) => {
     const out: any[] = [];
     for (let i = 0; i < 6; i += 1) {
@@ -296,7 +340,22 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
       }),
     ),
   );
-  expect(claimed.filter(Boolean)).toHaveLength(3);
+  const winners = claimed.filter(Boolean);
+  expect(winners).toHaveLength(4);
+  // Release one failed/skipped slot and verify the 5th burst member can now claim cleanly.
+  await t.mutation(internal.communityMemberCoach.releaseNewMemberOnboardingReservationInternal, {
+    communityId: ids.communityId,
+    reservationToken: winners[0]!.reservationToken,
+    nowMs: NOW + 61_000,
+  });
+  const loserIdx = claimed.findIndex((item) => !item);
+  const recovered = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
+    communityId: ids.communityId,
+    memberUserId: burstIds[loserIdx]!,
+    activationSequence: 1,
+    nowMs: NOW + 62_000,
+  });
+  expect(recovered).not.toBeNull();
 });
 
 test("activateCommunityMembershipCore schedules onboarding only for Chief of Staff members, never Free", async () => {
@@ -439,4 +498,66 @@ test("POST /apps/v1/milestones records verified member milestones & outcomes ont
   expect(card?.outcomes).toMatchObject([
     { text: "Launched first workflow in Acme Studio", source: "app" },
   ]);
+
+  // Retrying the same app outcome is idempotent (no duplicate win rows).
+  const retry = await postMilestone(app.secret, {
+    email: "maya-chief_of_staff@example.com",
+    milestone: "launched_workflow",
+    outcome: "Launched first workflow in Acme Studio",
+  });
+  expect(retry.status).toBe(200);
+  const cardAfterRetry: any = await t.run((ctx) =>
+    ctx.db
+      .query("communityMemberJourneyCards")
+      .withIndex("by_community_user", (q) => q.eq("communityId", ids.communityId).eq("userId", ids.memberId))
+      .unique(),
+  );
+  expect(cardAfterRetry?.outcomes).toHaveLength(1);
+
+  // Unconfigured custom app milestones surface cleanly as an app win instead of disappearing silently.
+  const customRes = await postMilestone(app.secret, {
+    email: "maya-chief_of_staff@example.com",
+    milestone: "first_win",
+    label: "Completed first workspace export",
+  });
+  expect(customRes.status).toBe(200);
+  expect(await customRes.json()).toMatchObject({
+    recorded: true,
+    milestone_key: "first_win",
+    done: true,
+    outcome: "Completed first workspace export",
+  });
+
+  // Turning on autoAdvanceEnabled moves a card automatically once its final stage checkpoint completes.
+  await asOwner.mutation(api.communityMemberJourney.saveCommunityJourneyStages, {
+    communityId: ids.communityId,
+    stages: [
+      {
+        key: "new",
+        name: "New",
+        goal: "Introduce yourself and launch your first workflow in Acme Studio.",
+        checkpoints: [
+          { key: "first_post", label: "Posted or replied once", kind: "first_post" },
+          { key: "launched_workflow", label: "Launched first workflow", kind: "custom" },
+        ],
+      },
+      {
+        key: "active",
+        name: "Active",
+        goal: "Shipping weekly.",
+        checkpoints: [],
+      },
+    ],
+    autoAdvanceEnabled: true,
+  });
+  const autoAdvanced = await postMilestone(app.secret, {
+    email: "maya-chief_of_staff@example.com",
+    milestone: "first_post",
+  });
+  expect(autoAdvanced.status).toBe(200);
+  expect(await autoAdvanced.json()).toMatchObject({
+    recorded: true,
+    stage_key: "active",
+    stage_name: "Active",
+  });
 });

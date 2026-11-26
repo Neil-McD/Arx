@@ -2230,6 +2230,14 @@ export default defineSchema({
     // cannot exceed MEMBER_COACH_DAILY_COMMUNITY_CAP before inference runs.
     onboardingReservedDayKey: v.optional(v.string()),
     onboardingReservedCount: v.optional(v.number()),
+    onboardingInFlightReservations: v.optional(
+      v.array(
+        v.object({
+          token: v.string(),
+          expiresAt: v.number(),
+        }),
+      ),
+    ),
     usageBoostCapCents: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
