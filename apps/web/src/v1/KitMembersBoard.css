@@ -1,13 +1,15 @@
 /* The Members board (KitMembersBoard.tsx), calm (Neil, Nov 25): one surface,
    columns that are a stage name and what moves someone on, cards of three
-   lines. Grey for everything; amber only for who needs you; violet only for
-   the AI (the Move to … line, what the guide did). Colours are the new
+   lines. Grey for everything; amber only for who needs you; green only for
+   who is ready to move on (an arrow by the name); violet only for the AI
+   (the guide's star). Colours are the new
    design's own (kit.module.css, set on .app: --ink, --line, --s1, --panel2),
    the ones every other v1 screen uses. The app-wide names (--border-default,
    --bg-primary …) are near-invisible or missing under the live theme. */
 .members-board-shell {
   --mb-amber: #d9a45b;
   --mb-violet: #a78bfa;
+  --mb-green: #5cbf86;
   --mb-violet-ink: color-mix(in srgb, var(--mb-violet) 78%, var(--ink, #e6e7e9));
   --mb-card: var(--panel2, #141516);
   --mb-card-hi: color-mix(in srgb, var(--ink, #e6e7e9) 5%, var(--panel2, #141516));
@@ -74,7 +76,7 @@
 .members-board-filter em { font-style: normal; opacity: .75; font-variant-numeric: tabular-nums; }
 .members-board-filter:hover { color: var(--ink); }
 .members-board-filter.is-on { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
-.members-board-filter.is-ready { color: var(--mb-violet-ink); }
+.members-board-filter.is-ready { color: color-mix(in srgb, var(--mb-green) 80%, var(--ink, #e6e7e9)); }
 .members-board-pulse { margin-left: auto; font-size: 12px; color: var(--ink3); white-space: nowrap; }
 .members-board-pulse strong { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -82,7 +84,7 @@
 .members-board-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink3); }
 .is-needs_you .members-board-dot, .is-stuck .members-board-dot { background: var(--mb-amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mb-amber) 16%, transparent); }
 .is-quiet .members-board-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink3); }
-.members-board-filter.is-ready .members-board-dot { background: var(--mb-violet); }
+.members-board-filter.is-ready .members-board-dot { background: var(--mb-green); }
 
 /* Phones: one stage at a time. */
 .members-board-tabs { flex: none; display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
@@ -299,23 +301,29 @@
 .members-board-card-bar { display: flex; flex: none; gap: 3px; width: 56px; }
 .members-board-card-bar i { flex: 1; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 11%, transparent); }
 .members-board-card-bar i.is-done { background: color-mix(in srgb, var(--ink) 55%, transparent); }
+/* The note and the guide's star sit in the card's bottom-right corner. */
 .members-board-card-marks { display: inline-flex; align-items: center; gap: 10px; min-width: 0; margin-left: auto; color: var(--ink3); }
 .members-board-card-marks span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .members-board-card-marks svg { flex: none; }
 .members-board-card-marks .is-ai { color: var(--mb-violet-ink); font-size: 11.5px; }
+/* Ready to move on: a green arrow by the name, in place of the dot.
+   Pressing it moves them to the next stage. */
 .members-board-move {
-  align-self: flex-start;
-  margin-top: 1px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -3px -4px -3px 0;
   padding: 0;
   border: 0;
+  border-radius: 5px;
   background: none;
-  color: var(--mb-violet-ink);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
+  color: var(--mb-green);
   cursor: pointer;
 }
-.members-board-move:hover { color: var(--ink); }
+.members-board-move:hover { background: color-mix(in srgb, var(--mb-green) 16%, transparent); }
+.members-board-move:focus-visible { outline: 2px solid color-mix(in srgb, var(--mb-green) 60%, transparent); outline-offset: 1px; }
 .members-board-move:disabled { opacity: .5; cursor: default; }
 
 .members-board-add-stage-col {

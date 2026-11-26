@@ -495,7 +495,7 @@ function sampleJourneyBoard(now: number): CloudMemberJourneyBoard {
     ["Priya Shah", "getting_started", "on_track", 1, 1, { activity_summary: "5+ posts · 1 lesson", working_on: "A founding-member offer" }],
     ["Josh Reed", "getting_started", "quiet", 1, 31, { activity_summary: "2 posts · 1 lesson", working_on: "Pricing his first course", founder_instruction: "He was keen on pricing. Point him at Friday's call.", agent_outcome: "Guide drafted a check-in (waiting on Home)" }],
     ["Hana Sato", "getting_started", "needs_you", 1, 2, { money_kind: "on_hold", activity_summary: "3 posts · 1 lesson", working_on: "A launch-week checklist" }],
-    ["Jon Park", "active", "on_track", 1, 0, { activity_summary: "5+ posts · 4 lessons", working_on: "Grow to 200 members", latest_outcome: { text: "Passed 100 members", at: new Date(now - day).toISOString() } }],
+    ["Jon Park", "active", "on_track", 1, 0, { activity_summary: "5+ posts · 4 lessons", working_on: "Grow to 200 members", latest_outcome: { text: "Passed 100 members", at: new Date(now - day).toISOString() }, agent_outcome: "Guide sent a congrats" }],
     ["Amir Khan", "active", "stuck", 0, 12, { activity_summary: "2 posts · 3 lessons", working_on: "Weekly calls people attend", agent_outcome: "Guide sent check-in" }],
     ["Lena Novak", "active", "on_track", 0, 1, { activity_summary: "2 posts · 3 lessons", working_on: "Her first workshop" }],
     ["Maya Chen", "graduated", "done", 0, 0, { activity_summary: "5+ posts · 7 lessons", latest_outcome: { text: "Ran her second cohort", at: new Date(now - 6 * day).toISOString() } }],
