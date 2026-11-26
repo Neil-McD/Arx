@@ -51,6 +51,7 @@ export const QUIET_MEMBER_EVENT_HORIZON_MS = 7 * DAY_MS;
 
 // Per-reason dedupe windows:
 export const DEDUPE_WINDOW_MS: Record<MemberCoachReason, number> = {
+  member_onboarding: 60 * DAY_MS,
   commitment_followup: 7 * DAY_MS,
   board_coaching: 14 * DAY_MS,
   quiet_newcomer: 60 * DAY_MS,
@@ -191,8 +192,11 @@ export function evaluateMemberCoachGate(input: MemberCoachGateInput): MemberCoac
     return { allowed: false, blockReason: "cooldown_active" };
   }
 
+  // Someone who literally just joined is active right now, so Day-0 onboarding
+  // sends immediately when auto-enabled rather than waiting for morning.
   const canAutoSendNow =
-    input.autoReasonEnabled && !isCommunityQuietHour(input.nowMs, input.communityTimeZone);
+    input.autoReasonEnabled &&
+    (input.reason === "member_onboarding" || !isCommunityQuietHour(input.nowMs, input.communityTimeZone));
 
   return {
     allowed: true,

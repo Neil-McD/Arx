@@ -2183,6 +2183,7 @@ export default defineSchema({
     enabled: v.boolean(),
     autoReasons: v.array(
       v.union(
+        v.literal("member_onboarding"),
         v.literal("commitment_followup"),
         v.literal("board_coaching"),
         v.literal("quiet_newcomer"),
@@ -2225,6 +2226,10 @@ export default defineSchema({
     allowanceAlertNotifiedPercent: v.optional(v.number()),
     // Founder-chosen monthly safety cap for prepaid community usage boosts in USD cents
     // (0 or absent = paused at $20 included allowance).
+    // Per-day atomic reservation for Day-0 onboarding bursts so concurrent joins
+    // cannot exceed MEMBER_COACH_DAILY_COMMUNITY_CAP before inference runs.
+    onboardingReservedDayKey: v.optional(v.string()),
+    onboardingReservedCount: v.optional(v.number()),
     usageBoostCapCents: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
@@ -2241,6 +2246,7 @@ export default defineSchema({
     communityId: v.id("communities"),
     memberUserId: v.id("users"),
     reason: v.union(
+      v.literal("member_onboarding"),
       v.literal("commitment_followup"),
       v.literal("board_coaching"),
       v.literal("quiet_newcomer"),

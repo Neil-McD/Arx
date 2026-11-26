@@ -21,6 +21,8 @@ import {
   resolveCommunityInferenceFundingAdmission,
 } from "./founderInferenceCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { verifiedUserIdForEmail } from "./communityCheckoutBuyer";
+import { communityIsActive } from "../shared/communityLifecycle";
 import { factVisibleToHost, moneyFor, planFor } from "../shared/communityMemberRecords";
 import type { CommunityMemberJourneySelfSummary } from "../shared/communityMemberSelfContext";
 import {
@@ -1437,6 +1439,75 @@ async function applyCardPatchForMember(
     ...(removedOutcomeId ? { removed_outcome_id: removedOutcomeId } : {}),
   };
 }
+
+// Connected apps (POST /apps/v1/milestones): report a verified member's
+// product milestone or win directly onto their Member Board card so onboarding
+// and Chief of Staff check-ins reflect real software progress.
+export const recordConnectedAppMilestoneInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    email: v.string(),
+    milestone: v.optional(v.string()),
+    label: v.optional(v.string()),
+    done: v.optional(v.boolean()),
+    outcome: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (!community || !communityIsActive(community)) return { recorded: false as const };
+    const email = args.email.trim().toLowerCase();
+    const userId = email ? await verifiedUserIdForEmail(ctx, email) : null;
+    if (!userId || String(userId) === String(community.ownerId)) {
+      return { recorded: false as const };
+    }
+    const [membership, block] = await Promise.all([
+      getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId }),
+      getActiveCommunityBlock({ ctx, communityId: args.communityId, userId }),
+    ]);
+    if (!membership || !communityMembershipRowIsActive(membership) || block) {
+      return { recorded: false as const };
+    }
+
+    const { stages } = await readStagesForCommunity(ctx, args.communityId);
+    const rawMilestone = typeof args.milestone === "string" ? args.milestone.trim() : "";
+    const rawOutcome = typeof args.outcome === "string" ? normalizeOutcomeText(args.outcome) : null;
+    if (!rawMilestone && !rawOutcome) return { recorded: false as const };
+
+    let toggleMilestone: { key: string; label?: string; completed: boolean } | undefined;
+    if (rawMilestone) {
+      const lower = rawMilestone.toLowerCase();
+      const configured = stages
+        .flatMap((stage) => stage.checkpoints)
+        .find((cp) => cp.key.toLowerCase() === lower || cp.label.trim().toLowerCase() === lower);
+      const key = configured ? configured.key : slugifyJourneyStageKey(rawMilestone, 0);
+      const label =
+        typeof args.label === "string" && args.label.trim()
+          ? args.label.trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS)
+          : configured?.label ?? rawMilestone.slice(0, MAX_CHECKPOINT_LABEL_CHARS);
+      toggleMilestone = { key, label, completed: args.done !== false };
+    }
+
+    const updated = await applyCardPatchForMember(ctx, {
+      actorUserId: community.ownerId,
+      communityId: args.communityId,
+      community,
+      stages,
+      targetUserId: userId,
+      nowMs: Date.now(),
+      source: "app",
+      ...(toggleMilestone ? { toggleMilestone } : {}),
+      ...(rawOutcome ? { addOutcomeText: rawOutcome } : {}),
+    });
+
+    return {
+      recorded: true as const,
+      stage_key: updated.stage_key,
+      stage_name: updated.stage_name,
+      ...(updated.milestone_key ? { milestone_key: updated.milestone_key, done: updated.done } : {}),
+      ...(updated.outcome ? { outcome: updated.outcome.text } : {}),
+    };
+  },
+});
 
 // Builder-only Member Board actions invoked via Official Polynet MCP or Studio
 // Guide chat through convex/communityOperations.ts (atomic with receipt).

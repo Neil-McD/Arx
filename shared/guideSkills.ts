@@ -42,6 +42,7 @@ export const MEMBER_BOARD_SKILL_MD = [
   "- When the host asks for a specific update (move someone to a stage, pin or reset a status, check off a milestone, log a win, save a coaching note, approve/dismiss a stage move, or skip a waiting draft), do it directly and report back using names and stage titles rather than raw keys.",
   "- To rename, reorder, or add stages or checkpoints, pass the full ordered list to polynet_update_journey_stages and keep every existing stage key.",
   "- Removing a stage uses polynet_remove_journey_stage, and sending a waiting Guide check-in or channel reply draft uses polynet_send_guide_draft; both always ask Yes or No first.",
+  "- On Chief of Staff communities, Stage 1 of the Member Board drives automated Day-0 member onboarding (using Stage 1's goal, checkpoints, handbook, starter course, and connected app), followed by Day 2+ newcomer and stage check-ins. Connected software products can also check off custom Member Board milestones automatically via POST /apps/v1/milestones.",
   "- Coaching notes steer how the guide helps a member privately without ever telling the member a note exists. Never expose a member's private one-on-one conversation words when summarizing the board.",
 ].join("\n");
 
