@@ -206,3 +206,26 @@ export function goToMembersPage(memberKey: string | null = null, communitySlug: 
   window.history.pushState({}, "", `${prefix}/c/${slug}/members${key ? `/${encodeURIComponent(key)}` : ""}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
+
+// A guide's check-in waiting for the host, opened from a member's profile
+// (Neil, Nov 26: the AI's line is purple and takes you to where you act on
+// it). Home, with that member's check-in opened once; a refresh just shows
+// Home as usual.
+let pendingHomeDraftHandle: string | null = null;
+export function goToHomeDraft(memberHandle: string | null, communitySlug: string | null = null): void {
+  if (typeof window === "undefined") return;
+  const match = window.location.pathname.match(/^(\/m)?\/c\/([^/]+)/);
+  const prefix = match?.[1] ?? (window.location.pathname.startsWith("/m/") ? "/m" : "");
+  const slug = communitySlug ? encodeURIComponent(communitySlug) : match?.[2];
+  if (!slug) return;
+  pendingHomeDraftHandle = String(memberHandle ?? "").trim().replace(/^@+/, "").toLowerCase() || null;
+  window.history.pushState({}, "", `${prefix}/c/${slug}/home`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+// Home asks once which member's check-in to open; the answer is used up.
+export function takeHomeDraftHandle(): string | null {
+  const handle = pendingHomeDraftHandle;
+  pendingHomeDraftHandle = null;
+  return handle;
+}

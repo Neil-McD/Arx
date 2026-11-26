@@ -17,7 +17,8 @@
 //
 // A member sees only what any member can already see
 // (convex/communityFounderBrief.ts, convex/communityHomeMoments.ts).
-import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { takeHomeDraftHandle } from "../../../../shared/routeDetails";
 import { createPortal } from "react-dom";
 import { KitHomeRail } from "../v1/KitHomeRail";
 import { BriefText, usePlaceBriefRead } from "../v1/KitBrief";
@@ -287,6 +288,13 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // What the guide drafted and offers to post/send (a host with a guide).
   const [drafts, setDrafts] = useState<ReplyDraftView[] | null>(null);
   const [coachDrafts, setCoachDrafts] = useState<MemberCoachDraftView[] | null>(null);
+  // Opened from a member's profile ("Review on Home"): that member's check-in, open.
+  const [draftHandle] = useState(() => takeHomeDraftHandle());
+  const openCoachRow = useMemo(() => {
+    if (!draftHandle || !coachDrafts) return null;
+    const draft = coachDrafts.find((entry) => String(entry.member_handle ?? "").toLowerCase() === draftHandle);
+    return draft ? `coach:${draft.id}` : null;
+  }, [draftHandle, coachDrafts]);
   const [stageProposals, setStageProposals] = useState<CloudJourneyStageAdvanceProposal[] | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
   const isHost = props.audience === "host";
@@ -554,6 +562,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
               stageProposals={stageProposals ?? []}
               onApproveStageProposal={approveStageProposal}
               onDismissStageProposal={dismissStageProposal}
+              openRow={openCoachRow}
             />
           </Suspense>
         ) : ready ? (

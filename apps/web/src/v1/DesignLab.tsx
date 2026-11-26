@@ -43,7 +43,7 @@ import { sampleJourneyBoard } from "../components/polynetLanding/boardSample";
 import { KitEventsList, eventClock } from "./KitEventsList";
 import { KitEventForm } from "./KitEventForm";
 import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
-import { memberTimeFor, paymentText, shortDay } from "./KitMembersPage";
+import { memberTimeFor, shortDay } from "./KitMembersPage";
 import type { ProfileHost, JourneyPatch } from "./KitProfileHost";
 import { matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { coursesExample, fullExample, labBrainContent, middlingExample, sunriseExample } from "./brainExamples";
@@ -672,7 +672,7 @@ function ProfileLab() {
   useEffectLab(() => { void import("../index.css"); }, []);
   const hostFor = (person: ReturnType<typeof labPerson>, set: (next: ReturnType<typeof labPerson>) => void): ProfileHost => ({
     record: person.record, card: person.card, stages: person.stages, aiTier: "chief_of_staff", agentOn: true, payments: person.payments,
-    timeFor: memberTimeFor, paymentText,
+    timeFor: memberTimeFor,
     onUpdateJourney: async (patch: JourneyPatch) => {
       const card = { ...person.card };
       if (patch.stageKey) {
@@ -684,11 +684,13 @@ function ProfileLab() {
       if (patch.addOutcomeText) card.outcomes = [{ id: `o${Date.now()}`, text: patch.addOutcomeText, at: new Date().toISOString(), source: "founder" }, ...card.outcomes];
       if (patch.removeOutcomeId) card.outcomes = card.outcomes.filter((item) => item.id !== patch.removeOutcomeId);
       if (patch.founderInstruction !== undefined) card.founder_instruction = patch.founderInstruction || null;
+      if (patch.statusOverride) { card.status_is_manual = patch.statusOverride !== "auto"; if (patch.statusOverride !== "auto") card.status = patch.statusOverride; }
       set({ ...person, card });
     },
     onAddNote: async (body) => set({ ...person, record: { ...person.record, notes: [{ id: `n${Date.now()}`, body, author: "you", at: new Date().toISOString(), can_delete: true }, ...person.record.notes] } }),
     onDeleteNote: async (id) => set({ ...person, record: { ...person.record, notes: person.record.notes.filter((item) => item.id !== id) } }),
     onSetRole: async () => undefined, onRemove: async () => undefined, onBlock: async () => undefined,
+    onOpenDraft: () => undefined,
   });
   const column = (title: string, node: JSX.Element) => (
     <div style={{ width: 380, flex: "none" }}>

@@ -1,16 +1,18 @@
 // Design system v1: what a host sees on a person's profile, on top of what
-// every member sees (Neil, Nov 26: one Rashid, everywhere). A summary line
-// under the name, then, fenced off below the profile, the person's progress,
-// what the guide did, notes, history and the host's actions. The server sends
-// all of this only to someone who manages members (communityMemberRecords).
-import { ArrowRight, Lock, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+// every member sees (Neil, Nov 26: one Rashid, everywhere; as automatic as
+// possible, least friction). Mostly something to read: a summary line under
+// the name, and below the profile, fenced off, their progress, what the guide
+// did, your note to the guide and your notes. Every control lives in one ⋯
+// menu by their name; a menu item that needs words opens one small box in
+// place. The server sends all of this only to someone who manages members
+// (communityMemberRecords).
+import { ArrowRight, Lock, MoreHorizontal, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import type { CloudMemberRecord } from "../../../../shared/cloudCommunityMemberRecordsGateway";
 import type { CloudMemberJourneyCard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import type { CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
 import {
-  JOURNEY_CARD_STATUSES,
   JOURNEY_CARD_STATUS_LABELS,
   MAX_FOUNDER_INSTRUCTION_CHARS,
   MAX_OUTCOME_TEXT_CHARS,
@@ -19,7 +21,6 @@ import {
 } from "../../../../shared/communityMemberJourney";
 import { Btn, cx } from "./kit";
 import { cardReason, guideDidShort } from "./KitMembersBoard";
-import "./KitMembersBoard.css";
 import "./KitProfileHost.css";
 
 export type JourneyPatch = {
@@ -47,7 +48,8 @@ export type ProfileHost = {
   onSetRole?: (role: "admin" | "moderator" | "member") => Promise<void>;
   onRemove?: () => Promise<void>;
   onBlock?: () => Promise<void>;
-  paymentText?: (event: CloudCommunityMemberBillingHistory["events"][number]) => string;
+  // A check-in the guide drafted and is waiting on you: open it on Home.
+  onOpenDraft?: () => void;
   timeFor: (iso: string | null, now: number) => string;
 };
 
@@ -73,12 +75,31 @@ function nextStageFor(host: ProfileHost): JourneyStageDefinition | null {
   return ready ? stages[at + 1] : null;
 }
 
-// Under the name: where they are, how they're doing, what they pay, when they
-// were last here. The green arrow when they're ready for the next stage.
-export function HostSummary(props: { host: ProfileHost; now: number }) {
-  const { host, now } = props;
+// One box at a time, opened from the menu.
+type Writing = "note" | "win" | "guide" | null;
+
+// The profile's host state: which box is open, and running the actions.
+// Shared by the menu (top) and the fenced part (bottom) of one profile.
+export function useProfileHost(host: ProfileHost | null | undefined) {
+  const [writing, setWriting] = useState<Writing>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setWriting(null); setError(null); }, [host?.record.membership_id]);
+  const run = (work: Promise<void> | undefined, failed: string, after?: () => void) => {
+    if (!work || busy) return;
+    setBusy(true);
+    setError(null);
+    void work.then(() => after?.()).catch(() => setError(failed)).finally(() => setBusy(false));
+  };
+  return { writing, setWriting, error, busy, run };
+}
+export type ProfileHostState = ReturnType<typeof useProfileHost>;
+
+// Under the name: where they are, how they're doing, what they pay. The green
+// arrow when they're ready for the next stage: one press moves them on.
+export function HostSummary(props: { host: ProfileHost; now: number; state: ProfileHostState }) {
+  const { host, now, state } = props;
   const { record, card } = host;
-  const [moving, setMoving] = useState(false);
   const stage = card && host.stages ? host.stages.find((entry) => entry.key === card.stage_key) ?? null : null;
   const reason = card ? cardReason(card, now) : null;
   const status = card ? reason ?? JOURNEY_CARD_STATUS_LABELS[card.status] : null;
@@ -96,11 +117,8 @@ export function HostSummary(props: { host: ProfileHost; now: number }) {
         {[stage?.name, plan, last].filter(Boolean).map((part) => <span key={part}>{part}</span>)}
       </p>
       {next && host.onUpdateJourney ? (
-        <button type="button" className="pfh-move" disabled={moving}
-          onClick={() => {
-            setMoving(true);
-            void host.onUpdateJourney?.({ stageKey: next.key }).finally(() => setMoving(false));
-          }}>
+        <button type="button" className="pfh-move" disabled={state.busy}
+          onClick={() => state.run(host.onUpdateJourney?.({ stageKey: next.key }), `${record.name.split(/\s+/)[0]} wasn't moved. Try again.`)}>
           Ready for {next.name}<ArrowRight size={14} aria-hidden="true" />
         </button>
       ) : null}
@@ -108,157 +126,162 @@ export function HostSummary(props: { host: ProfileHost; now: number }) {
   );
 }
 
-// Below the profile, fenced off: everything only hosts see.
-export function HostPart(props: { host: ProfileHost; now: number; self: boolean }) {
-  const { host, now } = props;
+// The ⋯ by their name: every control for this person, in one place.
+export function HostMenu(props: { host: ProfileHost; state: ProfileHostState; self: boolean }) {
+  const { host, state } = props;
   const { record, card } = host;
   const first = record.name.split(/\s+/)[0] || record.name;
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [win, setWin] = useState("");
-  const [instruction, setInstruction] = useState(card?.founder_instruction ?? "");
-  const [note, setNote] = useState("");
-  useEffect(() => { setInstruction(card?.founder_instruction ?? ""); setWin(""); setError(null); }, [record.membership_id, card?.founder_instruction]);
-  const run = (work: Promise<void> | undefined, failed: string, after?: () => void) => {
-    if (!work || busy) return;
-    setBusy(true);
-    setError(null);
-    void work.then(() => after?.()).catch(() => setError(failed)).finally(() => setBusy(false));
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => { if (!(event.target instanceof Node) || !wrap.current?.contains(event.target)) setOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const pick = (action: () => void) => () => { setOpen(false); action(); };
+  const canAct = !props.self && !record.out && record.role !== "owner";
+  const role = record.role === "admin" || record.role === "moderator" ? record.role : "member";
+  const roleWords = { member: "a member", moderator: "a moderator", admin: "an admin" } as const;
+  const otherStages = card && host.stages ? host.stages.filter((stage) => stage.key !== card.stage_key) : [];
+  const ask = (message: string, yes: string, danger: boolean, work: () => Promise<void> | undefined, failed: string) => {
+    void askInApp({ message, yes, danger }).then((ok) => { if (ok) state.run(work(), failed); });
   };
-  const addWin = () => { const text = win.trim(); if (text) run(host.onUpdateJourney?.({ addOutcomeText: text }), "That win didn't save. Try again.", () => setWin("")); };
-  const addNote = () => { const body = note.trim(); if (body) run(host.onAddNote?.(body), "The note didn't save. Try again.", () => setNote("")); };
-  const did = guideDidShort(card?.agent_outcome ?? null);
-  // Joining, plan changes and leaving, with payments, newest first.
-  const history = [
-    ...record.events.filter((event) => event.kind !== "joined").map((event) => ({ text: event.text, at: event.at })),
-    ...(host.payments?.events ?? []).map((event) => ({ text: host.paymentText ? host.paymentText(event) : "Payment", at: event.occurred_at })),
-  ].sort((a, b) => Date.parse(b.at ?? "") - Date.parse(a.at ?? "")).slice(0, 8);
-  const canAct = !props.self && !record.out && record.role !== "owner" && Boolean(host.onSetRole || host.onRemove || host.onBlock);
-  const roleValue = record.role === "admin" || record.role === "moderator" ? record.role : "member";
+  return (
+    <div className="pfh-menu" ref={wrap}>
+      <button type="button" className="pfh-menu-btn" aria-label={`Options for ${first}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <MoreHorizontal size={16} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="pfh-menu-pop" role="menu" aria-label={`Options for ${first}`}>
+          {card && host.onUpdateJourney ? (
+            <>
+              {otherStages.map((stage) => (
+                <button key={stage.key} type="button" role="menuitem" onClick={pick(() => state.run(host.onUpdateJourney?.({ stageKey: stage.key }), `${first} wasn't moved. Try again.`))}>Move to {stage.name}</button>
+              ))}
+              {card.status_is_manual ? (
+                <button type="button" role="menuitem" onClick={pick(() => state.run(host.onUpdateJourney?.({ statusOverride: "auto" }), "That didn't save. Try again."))}>Let the status update itself</button>
+              ) : (
+                <button type="button" role="menuitem" onClick={pick(() => state.run(host.onUpdateJourney?.({ statusOverride: "needs_you" }), "That didn't save. Try again."))}>Mark as needs you</button>
+              )}
+              <i role="separator" />
+              <button type="button" role="menuitem" onClick={pick(() => state.setWriting("win"))}>Log a win</button>
+              <button type="button" role="menuitem" onClick={pick(() => state.setWriting("guide"))}>{card.founder_instruction ? "Change your note to the guide" : `Tell the guide about ${first}`}</button>
+            </>
+          ) : null}
+          {host.onAddNote ? <button type="button" role="menuitem" onClick={pick(() => state.setWriting("note"))}>Add a private note</button> : null}
+          {canAct && host.onSetRole ? (
+            <>
+              <i role="separator" />
+              {(["member", "moderator", "admin"] as const).filter((next) => next !== role).map((next) => (
+                <button key={next} type="button" role="menuitem" onClick={pick(() => ask(`Make ${first} ${roleWords[next]}?`, "Change role", false, () => host.onSetRole?.(next), "The role didn't change. Try again."))}>
+                  Make {roleWords[next]}
+                </button>
+              ))}
+            </>
+          ) : null}
+          {canAct && (host.onRemove || host.onBlock) ? (
+            <>
+              <i role="separator" />
+              {host.onRemove ? <button type="button" role="menuitem" className="is-danger" onClick={pick(() => ask(`Remove ${first} from the community? They can ask to join again.`, "Remove", true, () => host.onRemove?.(), `${first} wasn't removed. Try again.`))}>Remove from community</button> : null}
+              {host.onBlock ? <button type="button" role="menuitem" className="is-danger" onClick={pick(() => ask(`Block ${first}? They're removed and can't join again.`, "Block", true, () => host.onBlock?.(), `${first} wasn't blocked. Try again.`))}>Block</button> : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
+// One small box, opened from the menu: a win, a note, or your note to the guide.
+function WriteBox(props: { label: string; placeholder: string; initial?: string; max: number; busy: boolean; onSave: (text: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(props.initial ?? "");
+  return (
+    <div className="pfh-write">
+      <textarea value={text} rows={2} maxLength={props.max} autoFocus aria-label={props.label} placeholder={props.placeholder}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) props.onSave(text.trim());
+          if (event.key === "Escape") props.onCancel();
+        }} />
+      <div className={cx("acts")}>
+        <Btn small go disabled={props.busy || (!text.trim() && !props.initial)} onClick={() => props.onSave(text.trim())}>{props.busy ? "Saving…" : "Save"}</Btn>
+        <Btn small txt onClick={props.onCancel}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+// Below the profile, fenced off: what only hosts see, to read.
+export function HostPart(props: { host: ProfileHost; now: number; state: ProfileHostState }) {
+  const { host, now, state } = props;
+  const { record, card } = host;
+  const first = record.name.split(/\s+/)[0] || record.name;
+  const did = guideDidShort(card?.agent_outcome ?? null);
+  const waiting = /waiting on Home/i.test(card?.agent_outcome ?? "");
+  const done = card ? card.checkpoints.filter((cp) => cp.done) : [];
+  const left = card ? card.checkpoints.filter((cp) => !cp.done) : [];
+  const close = () => state.setWriting(null);
   return (
     <section className="pfh" aria-label="Only hosts see this">
       <div className="pfh-h"><Lock size={12} strokeWidth={1.8} aria-hidden="true" />Only hosts see this</div>
 
-      {card && host.stages && host.onUpdateJourney ? (
-        <div className="pfh-sec" id="profile-progress" data-focus={host.focus === "progress" ? "" : undefined}>
-          <span className="pfh-lab">Progress</span>
-          <div className="pfh-row">
-            <select aria-label="Stage" value={card.stage_key} disabled={busy}
-              onChange={(event) => run(host.onUpdateJourney?.({ stageKey: event.target.value }), "The stage didn't change. Try again.")}>
-              {host.stages.map((stage) => <option key={stage.key} value={stage.key}>{stage.name}</option>)}
-            </select>
-            <select aria-label="Status" value={card.status_is_manual ? card.status : "auto"} disabled={busy}
-              onChange={(event) => run(host.onUpdateJourney?.({ statusOverride: event.target.value as JourneyCardStatus | "auto" }), "The status didn't change. Try again.")}>
-              <option value="auto">Status: automatic</option>
-              {JOURNEY_CARD_STATUSES.map((status) => <option key={status} value={status}>Mark {JOURNEY_CARD_STATUS_LABELS[status].toLowerCase()}</option>)}
-            </select>
-          </div>
-          {card.checkpoints.length ? (
-            <ul className="pfh-checks" aria-label="Checkpoints">
-              {card.checkpoints.map((cp) => (
-                <li key={cp.key}>
-                  <button type="button" className={cp.done ? "is-done" : ""} disabled={busy || cp.auto}
-                    onClick={() => run(host.onUpdateJourney?.({ toggleMilestone: { key: cp.key, label: cp.label, completed: !cp.done } }), "That checkpoint didn't save. Try again.")}>
-                    <i aria-hidden="true" />{cp.label}
-                  </button>
-                  <em>{cp.auto ? "Ticks itself" : cp.done ? "Done" : "Tick when done"}</em>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="pfh-wins">
-            {card.outcomes.map((item) => (
-              <div key={item.id} className="pfh-win">
-                <span>{item.text}</span><em>{host.timeFor(item.at, now)}</em>
-                <button type="button" aria-label={`Remove win ${item.text}`} disabled={busy}
-                  onClick={() => run(host.onUpdateJourney?.({ removeOutcomeId: item.id }), "That win wasn't removed. Try again.")}>×</button>
-              </div>
-            ))}
-            <form className="pfh-add" onSubmit={(event) => { event.preventDefault(); addWin(); }}>
-              <input value={win} maxLength={MAX_OUTCOME_TEXT_CHARS} onChange={(event) => setWin(event.target.value)} placeholder={`Log a win for ${first}`} aria-label={`Log a win for ${first}`} />
-              {win.trim() ? <Btn small go disabled={busy} onClick={addWin}>Log</Btn> : null}
-            </form>
-          </div>
-        </div>
+      {/* What the AI did is purple; when it's waiting on you, it takes you there. */}
+      {card && did ? (
+        waiting && host.onOpenDraft ? (
+          <button type="button" className="pfh-did is-action" onClick={host.onOpenDraft}>
+            <Sparkles size={13} aria-hidden="true" /><span>{did}, waiting for you</span>
+            <b>Review<ArrowRight size={13} aria-hidden="true" /></b>
+          </button>
+        ) : (
+          <p className="pfh-did"><Sparkles size={13} aria-hidden="true" /><span>{did}</span>
+            {card.agent_outcome_at ? <em>{host.timeFor(card.agent_outcome_at, now)}</em> : null}</p>
+        )
       ) : null}
 
       {card ? (
+        <div className="pfh-sec" id="profile-progress" data-focus={host.focus === "progress" ? "" : undefined}>
+          {card.checkpoints.length ? (
+            <p className="pfh-line"><span>Done</span>{done.length ? done.map((cp) => cp.label).join(", ") : "Nothing yet"}</p>
+          ) : null}
+          {left.length ? <p className="pfh-line"><span>Next</span>{left.map((cp) => cp.label).join(", ")}</p> : null}
+          {card.outcomes.length ? (
+            <p className="pfh-line"><span>Wins</span>{card.outcomes.slice(0, 3).map((item) => item.text).join(" · ")}</p>
+          ) : null}
+          {state.writing === "win" ? (
+            <WriteBox label={`A win for ${first}`} placeholder={`What did ${first} achieve?`} max={MAX_OUTCOME_TEXT_CHARS} busy={state.busy}
+              onCancel={close} onSave={(text) => { if (text) state.run(host.onUpdateJourney?.({ addOutcomeText: text }), "That win didn't save. Try again.", close); }} />
+          ) : null}
+          {card.founder_instruction && state.writing !== "guide" ? (
+            <p className="pfh-line"><span>To the guide</span>{card.founder_instruction}</p>
+          ) : null}
+          {state.writing === "guide" ? (
+            <WriteBox label={`Your note to the guide about ${first}`} placeholder={`e.g. "Point ${first} at Friday's call"`}
+              initial={card.founder_instruction ?? ""} max={MAX_FOUNDER_INSTRUCTION_CHARS} busy={state.busy}
+              onCancel={close} onSave={(text) => state.run(host.onUpdateJourney?.({ founderInstruction: text }), "Your note to the guide didn't save. Try again.", close)} />
+          ) : null}
+        </div>
+      ) : null}
+
+      {record.notes.length || state.writing === "note" ? (
         <div className="pfh-sec">
-          <span className="pfh-lab">The guide</span>
-          <p className={did ? "pfh-did" : "pfh-did is-none"}>
-            <Sparkles size={13} aria-hidden="true" />
-            {did ? <>{did}{card.agent_outcome_at ? <em>{host.timeFor(card.agent_outcome_at, now)}</em> : null}</> : `Nothing for ${first} yet.`}
-          </p>
-          <textarea className="pfh-text" value={instruction} rows={instruction ? 2 : 1} maxLength={MAX_FOUNDER_INSTRUCTION_CHARS}
-            onChange={(event) => setInstruction(event.target.value)} aria-label={`Your note to the guide about ${first}`}
-            placeholder={`Your note to the guide about ${first}, e.g. "Point him at Friday's call"`} />
-          {instruction.trim() !== (card.founder_instruction ?? "") ? (
-            <div className={cx("acts")}>
-              <Btn small go disabled={busy} onClick={() => run(host.onUpdateJourney?.({ founderInstruction: instruction.trim() }), "Your note to the guide didn't save. Try again.")}>Save</Btn>
-              <Btn small txt onClick={() => setInstruction(card.founder_instruction ?? "")}>Cancel</Btn>
+          {record.notes.slice(0, 3).map((item) => (
+            <div key={item.id} className="pfh-note">
+              <p>{item.body}</p>
+              <em>{item.author === "you" ? "You" : item.author} · {host.timeFor(item.at, now)}
+                {item.can_delete && host.onDeleteNote ? <button type="button" onClick={() => state.run(host.onDeleteNote?.(item.id), "That note wasn't deleted. Try again.")}>Delete</button> : null}</em>
             </div>
-          ) : null}
-          {host.aiTier === "free" || host.agentOn === false ? (
-            <p className="pfh-hint">The guide acts on this once Guide or Chief of Staff is on.</p>
+          ))}
+          {state.writing === "note" ? (
+            <WriteBox label={`A private note about ${first}`} placeholder="A private note. Only hosts see it." max={2000} busy={state.busy}
+              onCancel={close} onSave={(text) => { if (text) state.run(host.onAddNote?.(text), "The note didn't save. Try again.", close); }} />
           ) : null}
         </div>
       ) : null}
 
-      <div className="pfh-sec">
-        <span className="pfh-lab">Notes</span>
-        {record.notes.map((item) => (
-          <div key={item.id} className="pfh-note">
-            <p>{item.body}</p>
-            <em>{item.author === "you" ? "You" : item.author} · {host.timeFor(item.at, now)}
-              {item.can_delete && host.onDeleteNote ? <button type="button" onClick={() => run(host.onDeleteNote?.(item.id), "That note wasn't deleted. Try again.")}>Delete</button> : null}</em>
-          </div>
-        ))}
-        {host.onAddNote ? (
-          <form className="pfh-add" onSubmit={(event) => { event.preventDefault(); addNote(); }}>
-            <textarea className="pfh-text" value={note} rows={note ? 3 : 1} maxLength={2000} onChange={(event) => setNote(event.target.value)}
-              placeholder="A private note. Only hosts see it." aria-label={`A private note about ${first}`} />
-            {note.trim() ? <Btn small disabled={busy} onClick={addNote}>Save note</Btn> : null}
-          </form>
-        ) : null}
-      </div>
-
-      {history.length ? (
-        <div className="pfh-sec">
-          <span className="pfh-lab">History</span>
-          {history.map((item, index) => <p key={index} className="pfh-hist">{item.text}<em>{host.timeFor(item.at, now)}</em></p>)}
-        </div>
-      ) : null}
-
-      {canAct ? (
-        <div className="pfh-sec pfh-acts">
-          {host.onSetRole ? (
-            <label className="pfh-role">Role
-              <select value={roleValue} disabled={busy} onChange={(event) => {
-                const role = event.target.value as "admin" | "moderator" | "member";
-                void askInApp({ message: `Make ${first} ${role === "member" ? "a member" : `a ${role}`}?`, yes: "Change role" })
-                  .then((yes) => { if (yes) run(host.onSetRole?.(role), "The role didn't change. Try again."); });
-              }}>
-                <option value="member">Member</option>
-                <option value="moderator">Moderator</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-          ) : null}
-          <span className="pfh-acts-end">
-            {host.onRemove ? <Btn small txt disabled={busy} onClick={() => {
-              void askInApp({ message: `Remove ${first} from the community? They can ask to join again.`, yes: "Remove", danger: true })
-                .then((yes) => { if (yes) run(host.onRemove?.(), `${first} wasn't removed. Try again.`); });
-            }}>Remove</Btn> : null}
-            {host.onBlock ? <Btn small txt disabled={busy} onClick={() => {
-              void askInApp({ message: `Block ${first}? They're removed and can't join again.`, yes: "Block", danger: true })
-                .then((yes) => { if (yes) run(host.onBlock?.(), `${first} wasn't blocked. Try again.`); });
-            }}>Block</Btn> : null}
-          </span>
-        </div>
-      ) : null}
-
-      {error ? <p className="pfh-error" role="alert">{error}</p> : null}
+      {state.error ? <p className="pfh-error" role="alert">{state.error}</p> : null}
     </section>
   );
 }

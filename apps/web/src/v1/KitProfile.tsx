@@ -22,7 +22,7 @@ import {
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import { SocialProfileIcon } from "../components/SocialProfileIcon";
 import { Btn, cx, KitApp, Rail, Sep } from "./kit";
-import { HostPart, HostSummary, type ProfileHost } from "./KitProfileHost";
+import { HostMenu, HostPart, HostSummary, useProfileHost, type ProfileHost } from "./KitProfileHost";
 
 type Avatars = { getAvatarColor: (id: string) => string; getInitials: (name: string) => string };
 const LINK_LABELS: Record<SocialProfileKind, string> = { youtube: "YouTube", x: "X", instagram: "Instagram" };
@@ -146,6 +146,7 @@ export function KitProfile(props: Avatars & {
   const canMessage = !profile.you && profile.can_message && Boolean(props.onMessage);
   const here = props.communityName ? `In ${props.communityName}` : "Here";
   const first = profile.name.split(/\s+/)[0] || profile.name;
+  const hostState = useProfileHost(props.host);
   return (
     <div className={cx("pf")}>
       <div className={cx("pf-top")}>
@@ -155,17 +156,20 @@ export function KitProfile(props: Avatars & {
             fallback={<span>{props.getInitials(profile.name)}</span>} fallbackStyle={{ backgroundColor: props.getAvatarColor(profile.user_id) }} />
           {profile.here_now && !profile.you ? <i role="img" aria-label="Here now" /> : null}
         </span>
-        {canMessage ? (
-          <button type="button" className={cx("pf-msg")} onClick={() => props.onMessage?.(profile.user_id, profile.message_community_id)}>
-            <MessageCircle size={15} strokeWidth={1.8} aria-hidden="true" />Message
-          </button>
-        ) : null}
+        <span className="pf-top-acts">
+          {canMessage ? (
+            <button type="button" className={cx("pf-msg")} onClick={() => props.onMessage?.(profile.user_id, profile.message_community_id)}>
+              <MessageCircle size={15} strokeWidth={1.8} aria-hidden="true" />Message
+            </button>
+          ) : null}
+          {props.host ? <HostMenu host={props.host} state={hostState} self={Boolean(profile.you)} /> : null}
+        </span>
       </div>
       <div className={cx("pf-id")}>
         <div className={cx("pf-name")}><b>{profile.name}</b>{tag ? <span className={cx("tag")}>{tag}</span> : null}</div>
         {sub ? <span className={cx("sub")}>{sub}</span> : null}
       </div>
-      {props.host ? <HostSummary host={props.host} now={now} /> : null}
+      {props.host ? <HostSummary host={props.host} now={now} state={hostState} /> : null}
       {profile.bio ? <p className={cx("pf-bio")}>{profile.bio}</p> : null}
       {links.length ? (
         <div className={cx("pf-links")}>
@@ -206,7 +210,7 @@ export function KitProfile(props: Avatars & {
         </section>
       ) : null}
 
-      {props.host ? <HostPart host={props.host} now={now} self={Boolean(profile.you)} />
+      {props.host ? <HostPart host={props.host} now={now} state={hostState} />
         : props.record ? <HostBlock record={props.record} now={now} onAddNote={props.onAddNote} onOpenMembers={props.onOpenMembers} /> : null}
     </div>
   );
