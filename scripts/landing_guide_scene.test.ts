@@ -68,19 +68,20 @@ test("the Chief of Staff scene: the 8am brief and the guide's suggestions, and o
   expect(morningBrief(1)).toContain("One thing needs you.");
   expect(morningBrief(0)).toContain("That's everything for today.");
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
-  expect(page).toContain("Keep every member<br/>moving toward results.");
-  // Behind the card is the app's own members board, with Josh's card picked out.
-  expect(html).toContain("members-board-card");
-  expect(html).toContain("Josh Reed");
+  expect(page).toContain("Catch members<br/>before they drift away.");
   // Nothing reaches people who already left; the buttons say Send, Edit, Skip.
   expect(page).not.toMatch(/Win-backs|Approve, edit or skip|Usage and limits/);
 });
 
-test("the members board behind the Chief of Staff card only claims what the AI really does", async () => {
+test("the members board section is the app's own board, and only claims what the AI really does", async () => {
+  const { boardPulse } = await import("../apps/web/src/components/polynetLanding/BoardScene");
+  const { sampleJourneyBoard } = await import("../apps/web/src/components/polynetLanding/boardSample");
+  const board = sampleJourneyBoard(Date.UTC(2026, 10, 25, 12));
+  // Dev and Jon have every checkpoint done; Rosa, Josh, Amir are stuck and Hana's payment is on hold.
+  expect(boardPulse(board)).toBe("2 ready to move on · 4 need you · Jon: passed 100 members");
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
-  // One section now: no separate members board section.
-  expect(page).not.toContain('id="members-board"');
-  expect(page).toContain("a green arrow appears by their name.");
+  expect(page).toContain("See who's getting<br/>real results.");
+  expect(page).toContain("press it to move them on.");
   expect(page).not.toContain("on its own");
   // The AI suggests moves and follows up; it never moves anyone or judges progress by itself.
   expect(page).not.toMatch(/moves (members|them|people) (on )?(by itself|automatically|on its own)|judges? (their )?progress/i);
