@@ -184,6 +184,7 @@
 
 .app .veil{position:absolute;inset:0;z-index:20;display:none;background:var(--veil);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:fade .2s var(--ease) both}
 @keyframes fade{from{opacity:0}to{opacity:1}}
+.app .veil>label.shut{position:absolute;inset:0;cursor:default}
 .app .pal{position:absolute;left:50%;top:136px;width:580px;margin-left:-290px;border-radius:16px;border:1px solid var(--line2);background:var(--pop);box-shadow:var(--pop-shadow);overflow:hidden;animation:pop .28s var(--ease) both}
 @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 .app .pal .q{display:flex;align-items:center;gap:12px;height:56px;padding:0 18px;border-bottom:1px solid var(--line);font-size:16px;color:var(--ink3)}
