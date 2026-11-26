@@ -22,11 +22,47 @@ import { recordCommunityJoinStarted } from "./communityFunnelEvents";
 import { incrementCommunityDailyAnalytics } from "./communityAnalyticsRollups";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { joinPublicCommunityInternal } from "./communityPublic";
+import { webhookUrlIsAllowed } from "./connectedApps";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const APP_ID_PATTERN = /^app_[a-f0-9]{20}$/;
 const UPCOMING_EVENTS = 3;
 const VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
+
+function cleanAppId(raw: unknown): string | null {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  return APP_ID_PATTERN.test(value) ? value : null;
+}
+
+export function buildLandingCheckoutReturnQuery(args: {
+  plan?: string | null;
+  billingPeriod?: "monthly" | "annual";
+  appId?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (args.plan) parts.push(`plan=${encodeURIComponent(args.plan)}`);
+  else if (args.billingPeriod === "annual") parts.push("period=annual");
+  if (args.appId) parts.push(`app=${encodeURIComponent(args.appId)}`);
+  return parts.length ? `&${parts.join("&")}` : "";
+}
+
+export const resolveReturnAppForLandingInternal = internalQuery({
+  args: { communitySlug: v.string(), appId: v.string() },
+  handler: async (ctx, args) => {
+    const appId = cleanAppId(args.appId);
+    if (!appId) return null;
+    const community = await activeCommunityBySlug(ctx, args.communitySlug);
+    if (!community) return null;
+    const row = await ctx.db
+      .query("connectedApps")
+      .withIndex("by_appId", (q: any) => q.eq("appId", appId))
+      .first();
+    if (!row || row.revokedAt || String(row.communityId) !== String(community._id)) return null;
+    if (typeof row.appUrl !== "string" || !webhookUrlIsAllowed(row.appUrl)) return null;
+    return { app_id: row.appId as string, name: String(row.name ?? "").slice(0, 80), url: row.appUrl as string };
+  },
+});
 
 function cleanSlug(raw: string): string {
   const slug = String(raw ?? "").trim().toLowerCase();
@@ -69,7 +105,7 @@ async function requiredUserId(ctx: any, authSubject: string | undefined): Promis
 
 // The page: the community, its join card, and what's inside it.
 export const getCommunityLandingPage = query({
-  args: { communitySlug: v.string(), authSubject: v.optional(v.string()) },
+  args: { communitySlug: v.string(), authSubject: v.optional(v.string()), appId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const community = await activeCommunityBySlug(ctx, args.communitySlug);
     if (!community) return { ok: false as const };
@@ -98,9 +134,12 @@ export const getCommunityLandingPage = query({
       }
       : null;
     // The community's own app, where members open it (Settings → Your app).
-    const app = (apps as any[]).find((row) => !row.revokedAt && typeof row.appUrl === "string" && /^https:\/\//.test(row.appUrl)) ?? null;
+    const activeApps = (apps as any[]).filter((row) => !row.revokedAt && typeof row.appUrl === "string" && webhookUrlIsAllowed(row.appUrl));
+    const app = activeApps[0] ?? null;
     let appHost: string | null = null;
     try { appHost = app ? new URL(app.appUrl).host : null; } catch { appHost = null; }
+    const requestedAppId = cleanAppId(args.appId);
+    const returnAppRow = requestedAppId ? activeApps.find((row) => row.appId === requestedAppId) ?? null : null;
 
     return {
       ok: true as const,
@@ -132,6 +171,9 @@ export const getCommunityLandingPage = query({
       // memory, not something the page counts for visitors.
       guide: agentOn ? {} : null,
       app: app && appHost ? { name: String(app.name ?? "").slice(0, 80), url: app.appUrl, host: appHost } : null,
+      return_app: returnAppRow
+        ? { app_id: String(returnAppRow.appId), name: String(returnAppRow.name ?? "").slice(0, 80), url: String(returnAppRow.appUrl) }
+        : null,
     };
   },
 });
@@ -166,6 +208,7 @@ export const startCommunityLandingCheckout = action({
     communitySlug: v.string(),
     billingPeriod: v.union(v.literal("monthly"), v.literal("annual")),
     plan: v.optional(v.string()),
+    appId: v.optional(v.string()),
     authSubject: v.string(),
   },
   handler: async (ctx, args): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> => {
@@ -173,13 +216,22 @@ export const startCommunityLandingCheckout = action({
     if (!slug) throw new Error("community_unavailable");
     const plan = args.plan ?? null;
     if (plan !== null && (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(plan) || args.billingPeriod !== "monthly")) throw new Error("invalid_request");
+    const requestedAppId = cleanAppId(args.appId);
+    const verifiedApp = requestedAppId
+      ? await ctx.runQuery(internal.communityLanding.resolveReturnAppForLandingInternal, { communitySlug: slug, appId: requestedAppId })
+      : null;
+    const returnQuery = buildLandingCheckoutReturnQuery({
+      plan,
+      billingPeriod: args.billingPeriod,
+      appId: verifiedApp?.app_id ?? null,
+    });
     const origin = readCanonicalPublicAppOrigin();
     const page = `${origin}/c/${encodeURIComponent(slug)}`;
     const started = await startCommunityJoinCheckoutCore(ctx, {
       communitySlug: slug,
       billingPeriod: args.billingPeriod,
-      successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${page}?checkout=canceled`,
+      successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${returnQuery}`,
+      cancelUrl: `${page}?checkout=canceled${returnQuery}`,
       ...(plan ? { tierKey: plan } : {}),
       authSubject: args.authSubject,
     });

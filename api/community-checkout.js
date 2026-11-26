@@ -57,6 +57,7 @@ export default async function handler(req, res) {
         communitySlug: body?.communitySlug,
         billingPeriod: body?.billingPeriod,
         plan: body?.plan ?? null,
+        appId: typeof body?.appId === "string" ? body.appId : null,
         visitorHash: visitorHash(address, secret),
       }),
     });

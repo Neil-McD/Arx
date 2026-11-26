@@ -1522,6 +1522,8 @@ export default defineSchema({
     webhookUrl: v.optional(v.string()),
     // Where members open the app: shown in the community's left column.
     appUrl: v.optional(v.string()),
+    // Exact OAuth 2.1 callback URLs allowed for "Sign in with Polynet".
+    redirectUrls: v.optional(v.array(v.string())),
     createdByUserId: v.id("users"),
     revokedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -1530,6 +1532,22 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_appId", ["appId"])
     .index("by_secretHash", ["secretHash"]),
+  // Short-lived one-time OAuth 2.1 + PKCE authorization codes for connected apps
+  // ("Sign in with Polynet", connectedApps.ts). Only the SHA-256 hash is stored.
+  connectedAppAuthCodes: defineTable({
+    codeHash: v.string(),
+    appId: v.string(),
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    redirectUri: v.string(),
+    codeChallenge: v.string(),
+    codeChallengeMethod: v.literal("S256"),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_codeHash", ["codeHash"])
+    .index("by_user_createdAt", ["userId", "createdAt"]),
   // Sales a connected app made through its own checkout and reported
   // (communityAppSales.ts): its latest word per email. No fee. userId is set
   // once an account with that verified email exists.

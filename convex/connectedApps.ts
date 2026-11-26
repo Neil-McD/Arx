@@ -14,12 +14,21 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
+import { getActiveCommunityBlock, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { sha256Hex, verifiedUserIdForEmail } from "./communityCheckoutBuyer";
 import { resolveMemberGrants } from "./communityTiers";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 const APPS_MAX = 3;
 const NAME_MAX = 60;
+const REDIRECT_URLS_MAX = 5;
+const REDIRECT_URL_MAX_CHARS = 512;
+const AUTH_CODE_TTL_MS = 5 * 60_000;
+const AUTH_CODE_RATE_WINDOW_MS = 60_000;
+const AUTH_CODE_RATE_MAX = 20;
+const PKCE_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43,128}$/;
+const PKCE_VERIFIER_PATTERN = /^[A-Za-z0-9._~-]{43,128}$/;
 // Retries: 1 min, 5 min, 30 min, 2 h, 6 h, 24 h; then the delivery is kept as failed.
 const RETRY_DELAYS_MS = [60_000, 300_000, 1_800_000, 7_200_000, 21_600_000, 86_400_000];
 const DELIVERY_TIMEOUT_MS = 10_000;
@@ -32,6 +41,28 @@ function randomToken(bytes = 24): string {
 
 function newAppSecret(): string { return `psk_${randomToken(24)}`; }
 function newSigningSecret(): string { return `whsec_${btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24))))}`; }
+function newAuthCode(): string { return `pcode_${randomToken(24)}`; }
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function pkceS256Challenge(codeVerifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier));
+  const binary = Array.from(new Uint8Array(digest), (byte) => String.fromCharCode(byte)).join("");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export function isValidPkceChallenge(raw: string): boolean {
+  return PKCE_CHALLENGE_PATTERN.test(raw);
+}
+
+export function isValidPkceVerifier(raw: string): boolean {
+  return PKCE_VERIFIER_PATTERN.test(raw);
+}
 
 // Webhooks go to the builder's own server: https only, and never a local or
 // private address (so Polynet can't be pointed at its own network).
@@ -47,6 +78,46 @@ export function webhookUrlIsAllowed(raw: string): boolean {
   // What limits that: the body is fixed (an event id and an email), only the
   // status is read, and redirects are never followed.
   return host.includes(".");
+}
+
+// OAuth 2.1 callback URLs ("Sign in with Polynet"): browser redirects only.
+// Public https URLs (no fragment, no credentials), plus loopback http for local dev.
+export function redirectUrlIsAllowed(raw: string): boolean {
+  const value = String(raw ?? "").trim();
+  if (!value || value.length > REDIRECT_URL_MAX_CHARS) return false;
+  if (/[\u0000-\u001f\u007f#]/.test(value)) return false;
+  if (/^https?:\/\/[^/?#]*\.(?:[:/?#]|$)/i.test(value)) return false;
+  let url: URL;
+  try { url = new URL(value); } catch { return false; }
+  if (url.username || url.password || url.hash) return false;
+  if (url.searchParams.has("code") || url.searchParams.has("state") || url.searchParams.has("error")) return false;
+  const rawHost = url.hostname.toLowerCase();
+  if (url.protocol === "http:") {
+    return rawHost === "localhost" || rawHost === "127.0.0.1" || rawHost === "[::1]";
+  }
+  if (url.protocol !== "https:") return false;
+  const host = rawHost.replace(/\.+$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || host.startsWith("[") || /^0x|^\d+$/.test(host)) return false;
+  return host.includes(".");
+}
+
+function normalizeRedirectUrls(rawList: string[] | undefined): string[] | undefined {
+  if (rawList === undefined) return undefined;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of rawList) {
+    const trimmed = String(item ?? "").trim();
+    if (!trimmed) continue;
+    if (!redirectUrlIsAllowed(trimmed)) throw new Error("connected_app_redirect_url_invalid");
+    const canonical = new URL(trimmed).toString();
+    if (!seen.has(canonical)) {
+      seen.add(canonical);
+      out.push(canonical);
+    }
+    if (out.length > REDIRECT_URLS_MAX) throw new Error("connected_app_redirect_urls_full");
+  }
+  return out;
 }
 
 // The app's own address, linked from the community: public https only.
@@ -78,6 +149,7 @@ async function appsOf(ctx: any, communityId: any) {
 function appView(row: any) {
   return {
     app_id: row.appId, name: row.name, webhook_url: row.webhookUrl ?? null, app_url: row.appUrl ?? null,
+    redirect_urls: Array.isArray(row.redirectUrls) ? row.redirectUrls : [],
     secret_hint: row.secretHint, created_at: new Date(row.createdAt).toISOString(),
   };
 }
@@ -92,10 +164,18 @@ export const listConnectedApps = query({
 
 // Register an app. The secret and signing secret are returned this once.
 export const registerConnectedApp = mutation({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), name: v.string(), webhookUrl: v.optional(v.string()), appUrl: v.optional(v.string()) },
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    name: v.string(),
+    webhookUrl: v.optional(v.string()),
+    appUrl: v.optional(v.string()),
+    redirectUrls: v.optional(v.array(v.string())),
+  },
   handler: async (ctx, args) => {
     const userId = await manager(ctx, args);
     const appUrl = normalizeAppUrl(args.appUrl);
+    const redirectUrls = normalizeRedirectUrls(args.redirectUrls);
     const name = args.name.replace(/\s+/g, " ").trim().slice(0, NAME_MAX);
     if (!name) throw new Error("connected_app_name_required");
     if ((await appsOf(ctx, args.communityId)).length >= APPS_MAX) throw new Error("connected_apps_full");
@@ -106,7 +186,9 @@ export const registerConnectedApp = mutation({
     const nowMs = Date.now();
     await ctx.db.insert("connectedApps", {
       communityId: args.communityId, appId, name, secretHash: await sha256Hex(secret), secretHint: secret.slice(-4),
-      signingSecret, ...(webhookUrl ? { webhookUrl } : {}), ...(appUrl ? { appUrl } : {}), createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
+      signingSecret, ...(webhookUrl ? { webhookUrl } : {}), ...(appUrl ? { appUrl } : {}),
+      ...(redirectUrls?.length ? { redirectUrls } : {}),
+      createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
     });
     return { app_id: appId, secret, webhook_signing_secret: signingSecret };
   },
@@ -119,7 +201,15 @@ async function ownApp(ctx: any, communityId: any, appId: string) {
 }
 
 export const updateConnectedApp = mutation({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), appId: v.string(), name: v.optional(v.string()), webhookUrl: v.optional(v.string()), appUrl: v.optional(v.string()) },
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    appId: v.string(),
+    name: v.optional(v.string()),
+    webhookUrl: v.optional(v.string()),
+    appUrl: v.optional(v.string()),
+    redirectUrls: v.optional(v.array(v.string())),
+  },
   handler: async (ctx, args) => {
     await manager(ctx, args);
     const row = await ownApp(ctx, args.communityId, args.appId);
@@ -131,6 +221,7 @@ export const updateConnectedApp = mutation({
     }
     if (args.webhookUrl !== undefined) patch.webhookUrl = normalizeWebhookUrl(args.webhookUrl);
     if (args.appUrl !== undefined) patch.appUrl = normalizeAppUrl(args.appUrl);
+    if (args.redirectUrls !== undefined) patch.redirectUrls = normalizeRedirectUrls(args.redirectUrls);
     await ctx.db.patch(row._id, patch);
     return null;
   },
@@ -193,6 +284,200 @@ export const accessForEmailInternal = internalQuery({
     const userId = email ? await verifiedUserIdForEmail(ctx, email) : null;
     if (!userId) return { allowed: false, tier: null, grants: [] as string[] };
     return await resolveMemberGrants(ctx, args.communityId, userId);
+  },
+});
+
+// ---- Sign in with Polynet (OAuth 2.1 + PKCE S256, per connected app)
+
+async function resolveActiveAppForOAuth(ctx: any, clientId: string, rawRedirectUri: string) {
+  const app = await ctx.db.query("connectedApps").withIndex("by_appId", (q: any) => q.eq("appId", clientId)).first();
+  if (!app || app.revokedAt) return { ok: false as const, error: "invalid_client" as const };
+  const community = await ctx.db.get(app.communityId) as any;
+  if (!community || !communityIsActive(community)) return { ok: false as const, error: "invalid_client" as const };
+  const registered: string[] = Array.isArray(app.redirectUrls) ? app.redirectUrls : [];
+  let canonicalRedirect = "";
+  try {
+    canonicalRedirect = redirectUrlIsAllowed(rawRedirectUri) ? new URL(rawRedirectUri.trim()).toString() : "";
+  } catch {
+    canonicalRedirect = "";
+  }
+  if (!canonicalRedirect || !registered.includes(canonicalRedirect)) {
+    return { ok: false as const, error: "invalid_redirect_uri" as const };
+  }
+  return { ok: true as const, app, community, redirectUri: canonicalRedirect };
+}
+
+export const getConnectedAppAuthorizeContext = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    clientId: v.string(),
+    redirectUri: v.string(),
+    codeChallenge: v.string(),
+    codeChallengeMethod: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    if (args.codeChallengeMethod !== "S256" || !isValidPkceChallenge(args.codeChallenge)) {
+      return { ok: false as const, error: "invalid_pkce" as const };
+    }
+    const resolved = await resolveActiveAppForOAuth(ctx, args.clientId.trim(), args.redirectUri);
+    if (!resolved.ok) return resolved;
+    const { app, community, redirectUri } = resolved;
+    const [user, profile, block, access] = await Promise.all([
+      ctx.db.get(userId),
+      resolveUserProfileDisplayProjection(ctx, userId),
+      getActiveCommunityBlock({ ctx, communityId: community._id, userId }),
+      resolveMemberGrants(ctx, community._id, userId),
+    ]);
+    const email = typeof (user as any)?.email === "string" ? (user as any).email.trim().toLowerCase() : null;
+    const emailVerified = Boolean(email && (user as any)?.emailVerifiedAt);
+    return {
+      ok: true as const,
+      redirect_uri: redirectUri,
+      app: {
+        app_id: app.appId as string,
+        name: app.name as string,
+        app_url: (app.appUrl as string | undefined) ?? null,
+      },
+      community: {
+        slug: String(community.slug ?? ""),
+        name: String(community.name ?? ""),
+      },
+      user: {
+        email: emailVerified ? email : null,
+        email_verified: emailVerified,
+        display_name: profile?.display_name ?? (String((user as any)?.displayName ?? "").trim() || null),
+        is_blocked: Boolean(block),
+      },
+      access,
+    };
+  },
+});
+
+export const approveConnectedAppAuthorization = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    clientId: v.string(),
+    redirectUri: v.string(),
+    codeChallenge: v.string(),
+    codeChallengeMethod: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    if (args.codeChallengeMethod !== "S256" || !isValidPkceChallenge(args.codeChallenge)) {
+      throw new Error("oauth_invalid_pkce");
+    }
+    const resolved = await resolveActiveAppForOAuth(ctx, args.clientId.trim(), args.redirectUri);
+    if (!resolved.ok) throw new Error(`oauth_${resolved.error}`);
+    const { app, community, redirectUri } = resolved;
+    const user: any = await ctx.db.get(userId);
+    const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
+    if (!email || !user?.emailVerifiedAt) throw new Error("oauth_verified_email_required");
+    const block = await getActiveCommunityBlock({ ctx, communityId: community._id, userId });
+    if (block) throw new Error("oauth_community_user_blocked");
+
+    const nowMs = Date.now();
+    const recentCodes = await ctx.db
+      .query("connectedAppAuthCodes")
+      .withIndex("by_user_createdAt", (q: any) => q.eq("userId", userId).gte("createdAt", nowMs - AUTH_CODE_RATE_WINDOW_MS))
+      .take(AUTH_CODE_RATE_MAX);
+    if (recentCodes.length >= AUTH_CODE_RATE_MAX) {
+      throw new Error("oauth_rate_limited");
+    }
+
+    const code = newAuthCode();
+    await ctx.db.insert("connectedAppAuthCodes", {
+      codeHash: await sha256Hex(code),
+      appId: app.appId,
+      communityId: community._id,
+      userId,
+      redirectUri,
+      codeChallenge: args.codeChallenge,
+      codeChallengeMethod: "S256",
+      expiresAt: nowMs + AUTH_CODE_TTL_MS,
+      createdAt: nowMs,
+    });
+    return { code, redirect_uri: redirectUri };
+  },
+});
+
+export const exchangeConnectedAppAuthCodeInternal = internalMutation({
+  args: {
+    appId: v.string(),
+    communityId: v.id("communities"),
+    codeHash: v.string(),
+    redirectUri: v.string(),
+    codeVerifier: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("connectedAppAuthCodes")
+      .withIndex("by_codeHash", (q: any) => q.eq("codeHash", args.codeHash))
+      .first();
+    if (!row) return { ok: false as const, error: "invalid_grant" as const };
+    const nowMs = Date.now();
+    let canonicalRedirect = "";
+    try {
+      canonicalRedirect = redirectUrlIsAllowed(args.redirectUri) ? new URL(args.redirectUri.trim()).toString() : "";
+    } catch {
+      canonicalRedirect = "";
+    }
+    if (
+      row.usedAt !== undefined ||
+      nowMs > row.expiresAt ||
+      row.appId !== args.appId ||
+      String(row.communityId) !== String(args.communityId) ||
+      !canonicalRedirect ||
+      !constantTimeEqual(row.redirectUri, canonicalRedirect)
+    ) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    if (!isValidPkceVerifier(args.codeVerifier)) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const computedChallenge = await pkceS256Challenge(args.codeVerifier);
+    if (!constantTimeEqual(computedChallenge, row.codeChallenge)) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    // Atomically mark used before returning so concurrent replays always fail closed.
+    await ctx.db.patch(row._id, { usedAt: nowMs });
+
+    const app = await ctx.db
+      .query("connectedApps")
+      .withIndex("by_appId", (q: any) => q.eq("appId", row.appId))
+      .first();
+    if (!app || app.revokedAt || String(app.communityId) !== String(row.communityId)) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const community: any = await ctx.db.get(row.communityId);
+    if (!community || !communityIsActive(community)) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const block = await getActiveCommunityBlock({ ctx, communityId: row.communityId, userId: row.userId });
+    if (block) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const user: any = await ctx.db.get(row.userId);
+    const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
+    if (!user || !email || !user.emailVerifiedAt) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const [profile, access, pairwiseHash] = await Promise.all([
+      resolveUserProfileDisplayProjection(ctx, row.userId),
+      resolveMemberGrants(ctx, row.communityId, row.userId),
+      sha256Hex(`${args.appId}:${String(row.userId)}`),
+    ]);
+    return {
+      ok: true as const,
+      user: {
+        id: `pusr_${pairwiseHash.slice(0, 32)}`,
+        email,
+        email_verified: true as const,
+        name: profile?.display_name ?? (String(user.displayName ?? "").trim() || null),
+        avatar_url: profile?.avatar_url ?? null,
+      },
+      access,
+    };
   },
 });
 

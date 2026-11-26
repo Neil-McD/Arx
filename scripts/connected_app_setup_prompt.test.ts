@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
+  buildCommunityPlanCheckoutUrl,
   buildConnectedAppSetupPrompt,
   buildCustomLandingPagePrompt,
+  buildUnifiedGateAppPrompt,
 } from "../shared/connectedAppSetupPrompt";
 
 const guide = readFileSync(join(__dirname, "..", "docs", "product", "guides", "connect-your-app.md"), "utf8");
@@ -89,9 +91,50 @@ test("custom landing page prompt routes every CTA to the community join link and
     appUrl: "https://app.de.example",
   });
   expect(prompt).toContain("https://www.polynet.ai/c/distribution-engineer");
+  expect(prompt).toContain("https://www.polynet.ai/c/distribution-engineer?plan=pro");
   expect(prompt).toContain("Distribution Engineer");
   expect(prompt).toContain("Ship AI agents that print distribution.");
   expect(prompt).toContain("DE App (https://app.de.example)");
   expect(prompt).toContain("Connect (includes: de:connect)");
   expect(prompt).toContain("do not build a separate signup form or checkout flow");
+});
+
+test("direct plan checkout URLs and unified gate prompt wire Sign in with Polynet and per-plan checkout without secrets", () => {
+  expect(
+    buildCommunityPlanCheckoutUrl({
+      communityUrl: "https://www.polynet.ai/c/de",
+      tierKey: "member",
+      appId: "app_0123456789abcdef0123",
+    }),
+  ).toBe("https://www.polynet.ai/c/de?app=app_0123456789abcdef0123");
+  expect(
+    buildCommunityPlanCheckoutUrl({
+      communityUrl: "https://www.polynet.ai/c/de",
+      tierKey: "pro",
+      appId: "app_0123456789abcdef0123",
+    }),
+  ).toBe("https://www.polynet.ai/c/de?plan=pro&app=app_0123456789abcdef0123");
+
+  const prompt = buildUnifiedGateAppPrompt({
+    communityName: "Distribution Engineer",
+    appName: "DE Studio",
+    appId: "app_0123456789abcdef0123",
+    appOrigin: "https://www.polynet.ai",
+    apiOrigin: "https://example.convex.site",
+    communityUrl: "https://www.polynet.ai/c/de",
+    redirectUrls: ["https://studio.de.example/api/auth/polynet/callback"],
+    hasWebhook: true,
+    tiers: [
+      { key: "member", name: "Connect", grants: ["de:connect"] },
+      { key: "pro", name: "Pro", grants: ["de:pro"] },
+    ],
+  });
+  expect(prompt).toContain("https://www.polynet.ai/oauth/authorize");
+  expect(prompt).toContain("POST https://example.convex.site/apps/v1/oauth/token");
+  expect(prompt).toContain("GET https://example.convex.site/apps/v1/access");
+  expect(prompt).toContain("https://studio.de.example/api/auth/polynet/callback");
+  expect(prompt).toContain("https://www.polynet.ai/c/de?plan=pro&app=app_0123456789abcdef0123");
+  expect(prompt).toContain("code_challenge_method=S256");
+  expect(prompt).not.toMatch(/psk_[a-f0-9]{48}/);
+  expect(prompt).not.toMatch(/whsec_[A-Za-z0-9+/=]{20,}/);
 });

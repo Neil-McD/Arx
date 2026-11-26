@@ -204,6 +204,27 @@ Open it in a new tab. Show it only to people whose plan includes the community
 (everyone with an active plan, unless you sell plans without it). Use your own
 design system; the word "Community" (or your community's name) is enough.
 
+## 5. Sign In With Polynet & Direct Plan Checkout Links (Unified Gate)
+
+If you are building a new app and want Polynet to be your only sign-in and checkout (zero separate password auth or Stripe code):
+
+1. Register your exact callback URL(s) under **Settings → Your app → Sign-in callbacks** (public `https://` URLs, or `http://localhost` for local development; no `#` fragments).
+2. Redirect users to:
+   ```text
+   https://www.polynet.ai/oauth/authorize?client_id={APP_ID}&redirect_uri={EXACT_CALLBACK}&response_type=code&code_challenge={S256_CHALLENGE}&code_challenge_method=S256&state={RANDOM_STATE}
+   ```
+3. On callback, verify `state`, then exchange the one-time `code` server-to-server with PKCE `code_verifier`:
+   ```http
+   POST {POLYNET_API_ORIGIN}/apps/v1/oauth/token
+   Authorization: Bearer {POLYNET_APP_SECRET}
+   Content-Type: application/json
+
+   { "grant_type": "authorization_code", "code": "pcode_...", "redirect_uri": "{EXACT_CALLBACK}", "code_verifier": "..." }
+   ```
+   The response returns `{ "user": { "id", "email", "email_verified", "name", "avatar_url" }, "access": { "allowed", "tier", "grants" } }`. Keep checking `GET /apps/v1/access?email=...` for live grant authority (never store permanent grants in a cookie).
+4. To send a user straight to a specific plan and return them to your app automatically after buying, link to:
+   `https://www.polynet.ai/c/{community-slug}?plan={tier_key}&app={APP_ID}`
+
 ## Rules
 
 - The secrets live in server environment variables only.

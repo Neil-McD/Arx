@@ -2,7 +2,8 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { signStandardWebhook, webhookUrlIsAllowed } from "./connectedApps";
+import { buildLandingCheckoutReturnQuery } from "./communityLanding";
+import { pkceS256Challenge, redirectUrlIsAllowed, signStandardWebhook, webhookUrlIsAllowed } from "./connectedApps";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 const NOW = Date.now();
@@ -135,4 +136,285 @@ test("members see the app's name and address to open it, and nothing else; outsi
   expect((await asBuyer.query(api.connectedApps.listCommunityAppLinks, { communityId: ids.communityId })).apps).toEqual([{ name: "Distribution Engineer", url: "https://app.de.example.com" }]);
   await asOwner.mutation(api.connectedApps.updateConnectedApp, { communityId: ids.communityId, appId: app.app_id, appUrl: "" });
   expect((await asBuyer.query(api.connectedApps.listCommunityAppLinks, { communityId: ids.communityId })).apps).toEqual([]);
+});
+
+test("OAuth redirect URL validation allows public https and localhost dev callbacks, rejecting fragments and private hosts", () => {
+  for (const ok of [
+    "https://de.example.com/api/auth/polynet/callback",
+    "http://localhost:3000/api/auth/polynet/callback",
+    "http://127.0.0.1:5173/callback",
+  ]) {
+    expect(redirectUrlIsAllowed(ok), ok).toBe(true);
+  }
+  for (const bad of [
+    "http://de.example.com/callback",
+    "https://de.example.com/callback#frag",
+    "https://de.example.com/callback#",
+    "https://de.example.com/\tcallback",
+    "http://localhost./callback",
+    "http://127.0.0.1./callback",
+    "https://de.example.com/callback?code=1",
+    "https://de.example.com/callback?state=1",
+    "https://de.example.com/callback?error=1",
+    "https://user:pass@de.example.com/callback",
+    "https://10.0.0.5/callback",
+    "https://box.internal/callback",
+    "javascript:alert(1)",
+    "not-a-url",
+  ]) {
+    expect(redirectUrlIsAllowed(bad), bad).toBe(false);
+  }
+});
+
+test("Sign in with Polynet enforces PKCE S256, exact callback match, single-use codes, cross-app isolation, and pairwise user IDs", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const asOwner = t.withIdentity({ subject: "owner-subject" });
+  const asBuyer = t.withIdentity({ subject: "buyer-subject" });
+  const asUnverified = t.withIdentity({ subject: "unverified-subject" });
+
+  const callbackA = "https://app-a.example.com/api/auth/polynet/callback";
+  const callbackB = "https://app-b.example.com/api/auth/polynet/callback";
+  const appA = await asOwner.mutation(api.connectedApps.registerConnectedApp, {
+    communityId: ids.communityId,
+    name: "App A",
+    appUrl: "https://app-a.example.com",
+    redirectUrls: [callbackA],
+  });
+  const appB = await asOwner.mutation(api.connectedApps.registerConnectedApp, {
+    communityId: ids.communityId,
+    name: "App B",
+    appUrl: "https://app-b.example.com",
+    redirectUrls: [callbackB],
+  });
+
+  const verifier = "polynet_test_pkce_verifier_0123456789abcdefghijklmnopqrstuvwxyz";
+  const challenge = await pkceS256Challenge(verifier);
+
+  // Unregistered redirect URI and non-S256 PKCE fail closed.
+  expect(
+    await asBuyer.query(api.connectedApps.getConnectedAppAuthorizeContext, {
+      clientId: appA.app_id,
+      redirectUri: "https://evil.example.com/callback",
+      codeChallenge: challenge,
+      codeChallengeMethod: "S256",
+    }),
+  ).toEqual({ ok: false, error: "invalid_redirect_uri" });
+  expect(
+    await asBuyer.query(api.connectedApps.getConnectedAppAuthorizeContext, {
+      clientId: appA.app_id,
+      redirectUri: callbackA,
+      codeChallenge: challenge,
+      codeChallengeMethod: "plain",
+    }),
+  ).toEqual({ ok: false, error: "invalid_pkce" });
+
+  // Valid consent context returns verified user and live community access.
+  const ctxRes = await asBuyer.query(api.connectedApps.getConnectedAppAuthorizeContext, {
+    clientId: appA.app_id,
+    redirectUri: callbackA,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  expect(ctxRes).toMatchObject({
+    ok: true,
+    redirect_uri: callbackA,
+    app: { app_id: appA.app_id, name: "App A" },
+    community: { slug: "de-pilot", name: "Distribution Engineer" },
+    user: { email: "buyer@example.com", email_verified: true, is_blocked: false },
+    access: { allowed: true, tier: { key: "member", name: "Connect" }, grants: ["community", "de:connect"] },
+  });
+
+  // Unverified user cannot approve sign-in.
+  await expect(
+    asUnverified.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+      clientId: appA.app_id,
+      redirectUri: callbackA,
+      codeChallenge: challenge,
+      codeChallengeMethod: "S256",
+    }),
+  ).rejects.toThrow(/oauth_verified_email_required/);
+
+  // Approve mints a one-time code; only its SHA-256 hash is stored.
+  const approvedA = await asBuyer.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+    clientId: appA.app_id,
+    redirectUri: callbackA,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  expect(approvedA.code).toMatch(/^pcode_[a-f0-9]{48}$/);
+  const storedCodes = await t.run((ctx) => ctx.db.query("connectedAppAuthCodes").collect());
+  expect(storedCodes).toHaveLength(1);
+  expect(JSON.stringify(storedCodes)).not.toContain(approvedA.code);
+
+  const exchange = (secret: string, body: Record<string, string>, form = false) =>
+    t.fetch("/apps/v1/oauth/token", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "content-type": form ? "application/x-www-form-urlencoded" : "application/json",
+      },
+      body: form ? new URLSearchParams(body).toString() : JSON.stringify(body),
+    });
+
+  // Cross-app theft (App B trying to exchange App A's code) fails closed.
+  expect(
+    (await exchange(appB.secret, { grant_type: "authorization_code", code: approvedA.code, redirect_uri: callbackA, code_verifier: verifier })).status,
+  ).toBe(400);
+  // Wrong PKCE verifier fails closed.
+  expect(
+    (await exchange(appA.secret, { grant_type: "authorization_code", code: approvedA.code, redirect_uri: callbackA, code_verifier: `${verifier}X` })).status,
+  ).toBe(400);
+  // Wrong redirect_uri fails closed.
+  expect(
+    (await exchange(appA.secret, { grant_type: "authorization_code", code: approvedA.code, redirect_uri: callbackB, code_verifier: verifier })).status,
+  ).toBe(400);
+
+  // Valid exchange succeeds with verified user + pairwise ID + live access.
+  const okRes = await exchange(appA.secret, {
+    grant_type: "authorization_code",
+    code: approvedA.code,
+    redirect_uri: callbackA,
+    code_verifier: verifier,
+  });
+  expect(okRes.status).toBe(200);
+  const payloadA = await okRes.json();
+  expect(payloadA).toMatchObject({
+    user: { email: "buyer@example.com", email_verified: true, name: "buyer" },
+    access: { allowed: true, tier: { key: "member", name: "Connect" }, grants: ["community", "de:connect"] },
+  });
+  expect(payloadA.user.id).toMatch(/^pusr_[a-f0-9]{32}$/);
+  expect(payloadA.user.id).not.toContain(String(ids.buyerId));
+
+  // Replay of the exact same code fails closed!
+  const replay = await exchange(appA.secret, {
+    grant_type: "authorization_code",
+    code: approvedA.code,
+    redirect_uri: callbackA,
+    code_verifier: verifier,
+  });
+  expect(replay.status).toBe(400);
+  expect(await replay.json()).toEqual({ error: "invalid_grant" });
+
+  // Form-encoded exchange works for App B and returns a distinct pairwise user ID.
+  const approvedB = await asBuyer.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+    clientId: appB.app_id,
+    redirectUri: callbackB,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  const okResB = await exchange(
+    appB.secret,
+    { grant_type: "authorization_code", code: approvedB.code, redirect_uri: callbackB, code_verifier: verifier },
+    true,
+  );
+  expect(okResB.status).toBe(200);
+  const payloadB = await okResB.json();
+  expect(payloadB.user.id).toMatch(/^pusr_[a-f0-9]{32}$/);
+  expect(payloadB.user.id).not.toBe(payloadA.user.id);
+
+  // Blocked users are refused both new authorizations AND token exchange for previously issued codes.
+  const preBlockCode = await asBuyer.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+    clientId: appA.app_id,
+    redirectUri: callbackA,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityBlocks", {
+      communityId: ids.communityId,
+      userId: ids.buyerId,
+      createdByUserId: ids.ownerId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as any);
+  });
+  const blockedExchange = await exchange(appA.secret, {
+    grant_type: "authorization_code",
+    code: preBlockCode.code,
+    redirect_uri: callbackA,
+    code_verifier: verifier,
+  });
+  expect(blockedExchange.status).toBe(400);
+  expect(await blockedExchange.json()).toEqual({ error: "invalid_grant" });
+
+  // Malformed JSON and oversized token requests fail closed with invalid_request; lowercase bearer works.
+  const malformedRes = await t.fetch("/apps/v1/oauth/token", {
+    method: "POST",
+    headers: { authorization: `bearer ${appA.secret}`, "content-type": "application/json" },
+    body: "{not-json",
+  });
+  expect(malformedRes.status).toBe(400);
+  expect(await malformedRes.json()).toEqual({ error: "invalid_request" });
+  const oversizedRes = await t.fetch("/apps/v1/oauth/token", {
+    method: "POST",
+    headers: { authorization: `bearer ${appA.secret}`, "content-type": "application/json" },
+    body: "x".repeat(4_100),
+  });
+  expect(oversizedRes.status).toBe(413);
+
+  await expect(
+    asBuyer.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+      clientId: appA.app_id,
+      redirectUri: callbackA,
+      codeChallenge: challenge,
+      codeChallengeMethod: "S256",
+    }),
+  ).rejects.toThrow(/oauth_community_user_blocked/);
+});
+
+test("community landing page resolves return_app only for an active app belonging to that exact community", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const asOwner = t.withIdentity({ subject: "owner-subject" });
+
+  const ownApp = await asOwner.mutation(api.connectedApps.registerConnectedApp, {
+    communityId: ids.communityId,
+    name: "DE Studio",
+    appUrl: "https://de.example.com",
+  });
+  const otherCommunityId = await t.run(async (ctx) =>
+    ctx.db.insert("communities", {
+      ownerId: ids.ownerId,
+      slug: "other-club",
+      name: "Other Club",
+      lifecycleStatus: "active",
+      lifecycleGeneration: 0,
+      visibility: "published",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as any),
+  );
+  const otherApp = await asOwner.mutation(api.connectedApps.registerConnectedApp, {
+    communityId: otherCommunityId,
+    name: "Other App",
+    appUrl: "https://other.example.com",
+  });
+
+  const matching: any = await t.query(api.communityLanding.getCommunityLandingPage, {
+    communitySlug: "de-pilot",
+    appId: ownApp.app_id,
+  });
+  expect(matching.return_app).toEqual({
+    app_id: ownApp.app_id,
+    name: "DE Studio",
+    url: "https://de.example.com",
+  });
+
+  // Cross-community appId fails closed (returns null, never leaks or redirects).
+  const cross: any = await t.query(api.communityLanding.getCommunityLandingPage, {
+    communitySlug: "de-pilot",
+    appId: otherApp.app_id,
+  });
+  expect(cross.return_app).toBeNull();
+
+  // Checkout return query preserves selected tier / annual period alongside verified appId.
+  expect(buildLandingCheckoutReturnQuery({ plan: "pro", billingPeriod: "monthly", appId: ownApp.app_id }))
+    .toBe(`&plan=pro&app=${ownApp.app_id}`);
+  expect(buildLandingCheckoutReturnQuery({ plan: null, billingPeriod: "annual", appId: ownApp.app_id }))
+    .toBe(`&period=annual&app=${ownApp.app_id}`);
+  expect(buildLandingCheckoutReturnQuery({ plan: null, billingPeriod: "monthly", appId: null })).toBe("");
 });

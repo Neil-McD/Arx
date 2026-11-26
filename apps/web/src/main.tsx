@@ -8,6 +8,7 @@ import "./base.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { hasRecentAuthFlowPending } from "./authBrowserMarkers";
 import { resolvePublicEntryRoute } from "../../../shared/publicEntryRoute";
+import { stripShellVariantFromPathname } from "../../../shared/webAppRouteState";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
 import {
@@ -179,6 +180,8 @@ class ErrorBoundary extends React.Component<
 }
 
 const isLoginTrampoline = isLoginTrampolinePathname(window.location.pathname || "/");
+const isConnectedAppAuthorize =
+  (stripShellVariantFromPathname(window.location.pathname || "/").replace(/\/+$/, "") || "/") === "/oauth/authorize";
 
 if (typeof window !== "undefined") {
   installAppUpdateWakeupListeners();
@@ -228,13 +231,16 @@ if (typeof window !== "undefined") {
 const isDesignLab =
   document.documentElement.dataset.design === "v1" && window.location.pathname === "/design-lab";
 const DesignLab = React.lazy(() => resilientImport(() => import("./v1/DesignLab")).then((m) => ({ default: m.DesignLab })));
+const WebConnectedAppAuthorizePage = React.lazy(() =>
+  resilientImport(() => import("./components/WebConnectedAppAuthorizePage")).then((m) => ({ default: m.WebConnectedAppAuthorizePage })),
+);
 const App = React.lazy(() => resilientImport(() => import("./App")));
 const WebPublicVisitorShell = React.lazy(() =>
   resilientImport(() => import("./components/WebPublicVisitorShell")).then((m) => ({ default: m.WebPublicVisitorShell })),
 );
 
 const publicEntryRoute =
-  !isDesignLab && !isLoginTrampoline
+  !isDesignLab && !isLoginTrampoline && !isConnectedAppAuthorize
     ? resolvePublicEntryRoute({
         pathname: window.location.pathname || "/",
         search: window.location.search || "",
@@ -246,9 +252,11 @@ const rootView = isDesignLab
   ? <React.Suspense fallback={null}><DesignLab /></React.Suspense>
   : isLoginTrampoline
     ? <LoginTrampolineRoute />
-    : publicEntryRoute
-      ? <React.Suspense fallback={null}><WebPublicVisitorShell initialRoute={publicEntryRoute} /></React.Suspense>
-      : <React.Suspense fallback={null}><App /></React.Suspense>;
+    : isConnectedAppAuthorize
+      ? <React.Suspense fallback={null}><WebConnectedAppAuthorizePage /></React.Suspense>
+      : publicEntryRoute
+        ? <React.Suspense fallback={null}><WebPublicVisitorShell initialRoute={publicEntryRoute} /></React.Suspense>
+        : <React.Suspense fallback={null}><App /></React.Suspense>;
 
 document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);
 

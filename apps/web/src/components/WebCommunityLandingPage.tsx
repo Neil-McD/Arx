@@ -92,6 +92,31 @@ function loginHref(returnTo: string): string {
   return `/login?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
+export function selectInitialLandingPlanIndex(
+  plans: readonly Pick<CommunityLandingPlan, "plan" | "billing_period">[],
+  requestedPlan: string | null | undefined,
+  requestedPeriod?: string | null | undefined,
+): number {
+  if (!plans.length) return 0;
+  const planKey = String(requestedPlan ?? "").trim().toLowerCase();
+  const period = String(requestedPeriod ?? "").trim().toLowerCase();
+  if (planKey && planKey !== "member") {
+    const exactTier = plans.findIndex((item) => item.plan === planKey);
+    if (exactTier >= 0) return exactTier;
+  }
+  if (period === "annual" || period === "monthly") {
+    const matchingBase = plans.findIndex(
+      (item) => item.plan === null && item.billing_period === period,
+    );
+    if (matchingBase >= 0) return matchingBase;
+  }
+  if (planKey === "member") {
+    const base = plans.findIndex((item) => item.plan === null);
+    if (base >= 0) return base;
+  }
+  return 0;
+}
+
 export function WebCommunityLandingPage(props: Props) {
   const slug = props.communitySlug.toLowerCase();
   const [page, setPage] = useState<CommunityLandingPage | null | "missing" | "unreachable">(null);
@@ -107,21 +132,32 @@ export function WebCommunityLandingPage(props: Props) {
   const checkoutParam = params.get("checkout");
   const returnSessionId = checkoutParam && /^chk_[a-f0-9]{32}$/.test(checkoutParam) ? checkoutParam : null;
   const intent = params.get("intent");
+  const requestedPlan = params.get("plan");
+  const requestedPeriod = params.get("period");
+  const appParam = params.get("app")?.trim() ?? "";
+  const requestedAppId = /^app_[a-f0-9]{20}$/.test(appParam) ? appParam : null;
+  const initializedPlanSelection = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const next = await fetchCommunityLanding(props.session, slug);
+      const next = await fetchCommunityLanding(props.session, slug, { appId: requestedAppId });
       setPage(next ?? "missing");
       return next;
     } catch {
       setPage((current) => (current && typeof current === "object" ? current : "unreachable"));
       return null;
     }
-  }, [props.session, slug]);
+  }, [props.session, slug, requestedAppId]);
 
   useEffect(() => { void load(); }, [load]);
 
   const data = page && typeof page === "object" ? page : null;
+
+  useEffect(() => {
+    if (!data || initializedPlanSelection.current || data.plans.length === 0) return;
+    initializedPlanSelection.current = true;
+    setPlanIndex(selectInitialLandingPlanIndex(data.plans, requestedPlan, requestedPeriod));
+  }, [data, requestedPlan, requestedPeriod]);
 
   useEffect(() => {
     if (data) document.title = `${data.community.name} · Polynet`;
@@ -136,9 +172,17 @@ export function WebCommunityLandingPage(props: Props) {
     void recordCommunityLandingVisit(slug, visitorKey()).catch(() => undefined);
   }, [data, props.sessionCheckPending, slug]);
 
+  const returnApp = data?.return_app ?? null;
   const openCommunity = useCallback(() => {
     window.location.assign(`/c/${encodeURIComponent(slug)}/home`);
   }, [slug]);
+  const openAfterJoin = useCallback(() => {
+    if (returnApp?.url) {
+      window.location.assign(returnApp.url);
+      return;
+    }
+    openCommunity();
+  }, [openCommunity, returnApp?.url]);
 
   // Back from Stripe: signed out, the card asks them to sign in; signed in,
   // the membership finishes (Stripe's verified notice decides), then in.
@@ -155,7 +199,7 @@ export function WebCommunityLandingPage(props: Props) {
         if (result.status === "joined") {
           writeStored(CHECKOUT_SECRET_KEY(returnSessionId), null);
           setPhase({ kind: "joined" });
-          window.setTimeout(openCommunity, 900);
+          window.setTimeout(openAfterJoin, 900);
           return;
         }
         if (result.status === "pending") {
@@ -172,22 +216,27 @@ export function WebCommunityLandingPage(props: Props) {
     };
     void tryFinish(0);
     return () => { cancelled = true; };
-  }, [returnSessionId, Boolean(data), props.session, slug, openCommunity, finishAttempt]);
+  }, [returnSessionId, Boolean(data), props.session, slug, openAfterJoin, finishAttempt]);
 
   const join = useCallback(async () => {
     if (!data) return;
-    if (!props.session) { window.location.assign(loginHref(`/c/${slug}?intent=join`)); return; }
+    if (!props.session) {
+      const nextParams = new URLSearchParams(window.location.search);
+      nextParams.set("intent", "join");
+      window.location.assign(loginHref(`/c/${slug}?${nextParams.toString()}`));
+      return;
+    }
     setPhase({ kind: "busy" }); setError(null);
     try {
       await joinCommunityFromLanding(props.session, slug);
       const next = await load();
-      if (next?.viewer?.state === "member") { setPhase({ kind: "joined" }); window.setTimeout(openCommunity, 600); return; }
+      if (next?.viewer?.state === "member") { setPhase({ kind: "joined" }); window.setTimeout(openAfterJoin, 600); return; }
       setPhase({ kind: "idle" });
     } catch (joinError) {
       setError(joinErrorText(joinError, data.community.name));
       setPhase({ kind: "idle" });
     }
-  }, [data, props.session, slug, load, openCommunity]);
+  }, [data, props.session, slug, load, openAfterJoin]);
 
   const cancelRequest = useCallback(async () => {
     if (!props.session) return;
@@ -207,6 +256,7 @@ export function WebCommunityLandingPage(props: Props) {
         communitySlug: slug,
         billingPeriod: plan.billing_period === "annual" ? "annual" : "monthly",
         plan: plan.plan,
+        appId: requestedAppId,
       });
       if (started.buyer_secret) writeStored(CHECKOUT_SECRET_KEY(started.session_id), started.buyer_secret);
       window.location.assign(started.checkout_url);
@@ -214,7 +264,7 @@ export function WebCommunityLandingPage(props: Props) {
       setError(joinErrorText(checkoutError, data.community.name));
       setPhase({ kind: "idle" });
     }
-  }, [data, planIndex, props.session, props.sessionCheckPending, slug]);
+  }, [data, planIndex, props.session, props.sessionCheckPending, slug, requestedAppId]);
 
   // Signed in to join (intent=join): do it once they're back.
   useEffect(() => {
@@ -250,10 +300,18 @@ export function WebCommunityLandingPage(props: Props) {
     const footer = d.terms_url ? (
       <p className="cl-fine">By joining you agree to the <a href={d.terms_url}>Terms</a>{d.privacy_url ? <> and <a href={d.privacy_url}>Privacy policy</a></> : null}.</p>
     ) : null;
-    const signInLine = !d.signed_in ? <p className="cl-signin">Already a member? <a href={loginHref(`/c/${slug}`)}>Sign in</a></p> : null;
+    const signInLine = !d.signed_in ? <p className="cl-signin">Already a member? <a href={loginHref(hereNow)}>Sign in</a></p> : null;
     const errorLine = error ? <p className="cl-error" role="alert">{error}</p> : null;
 
-    if (phase.kind === "joined") return <Card title="You're in" note={`Opening ${name}…`} />;
+    if (phase.kind === "joined") {
+      return (
+        <Card title="You're in" note={returnApp ? `Returning to ${returnApp.name}…` : `Opening ${name}…`}>
+          {returnApp ? (
+            <button type="button" className="cl-secondary" onClick={openCommunity}>Stay in {name}</button>
+          ) : null}
+        </Card>
+      );
+    }
     if (phase.kind === "finishing") return <Card title={<><span className="cl-spin" aria-hidden="true" />Finishing your membership…</>} note="This takes a few seconds. You'll go straight in." />;
     if (phase.kind === "paid_signed_out") {
       return (
@@ -272,14 +330,52 @@ export function WebCommunityLandingPage(props: Props) {
     if (phase.kind === "checkout_expired") {
       return (
         <Card title="That checkout didn't complete" note="Stripe didn't finish this payment. You can start again.">
-          <button type="button" className="cl-primary" onClick={() => { setPhase({ kind: "idle" }); window.history.replaceState({}, "", `/c/${slug}`); }}>Try again</button>
+          <button
+            type="button"
+            className="cl-primary"
+            onClick={() => {
+              setPhase({ kind: "idle" });
+              const clean = new URLSearchParams(window.location.search);
+              clean.delete("checkout");
+              const qs = clean.toString();
+              window.history.replaceState({}, "", `/c/${slug}${qs ? `?${qs}` : ""}`);
+            }}
+          >
+            Try again
+          </button>
         </Card>
       );
     }
     if (viewer?.state === "member") {
+      const wantsPlanChange = Boolean(requestedPlan && !d.is_owner && d.gate === "checkout");
       return (
-        <Card title={d.is_owner ? "Your community" : "You're a member"} note={d.is_owner ? "This is the page people see when you share your link." : null}>
-          <button type="button" className="cl-primary" onClick={openCommunity}>Open community</button>
+        <Card
+          title={d.is_owner ? "Your community" : wantsPlanChange ? "Change your plan" : "You're a member"}
+          note={
+            d.is_owner
+              ? "This is the page people see when you share your link."
+              : wantsPlanChange
+                ? "You're already a member. Switch plans anytime from your community settings."
+                : null
+          }
+        >
+          {wantsPlanChange ? (
+            <>
+              <a className="cl-primary" href={`/c/${encodeURIComponent(slug)}/settings`}>Manage plan in Settings</a>
+              {returnApp ? (
+                <a className="cl-secondary" style={{ marginTop: 8 }} href={returnApp.url}>Return to {returnApp.name}</a>
+              ) : (
+                <button type="button" className="cl-secondary" style={{ marginTop: 8 }} onClick={openCommunity}>Open community</button>
+              )}
+            </>
+          ) : returnApp ? (
+            <>
+              <a className="cl-primary" href={returnApp.url}>Return to {returnApp.name}</a>
+              <button type="button" className="cl-secondary" style={{ marginTop: 8 }} onClick={openCommunity}>Open community</button>
+            </>
+          ) : (
+            <button type="button" className="cl-primary" onClick={openCommunity}>Open community</button>
+          )}
         </Card>
       );
     }
@@ -357,7 +453,7 @@ export function WebCommunityLandingPage(props: Props) {
     <div className="cl-page">
       <header className="cl-top">
         <a href="/" className="cl-brand">Polynet</a>
-        {!data!.signed_in ? <a href={loginHref(`/c/${slug}`)} className="cl-top-signin">Sign in</a> : null}
+        {!data!.signed_in ? <a href={loginHref(hereNow)} className="cl-top-signin">Sign in</a> : null}
       </header>
 
       <section className="cl-cover">
