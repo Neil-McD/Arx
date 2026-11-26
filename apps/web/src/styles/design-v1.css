@@ -3792,16 +3792,11 @@
   backdrop-filter: none;
 }
 
-:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-left .mobile-topbar-icon,
-:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-right .mobile-topbar-search {
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-left .mobile-topbar-icon {
   width: 44px;
   height: 44px;
   border-radius: 10px;
   color: var(--nav-ink);
-}
-:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-right .mobile-topbar-search svg {
-  width: 18px;
-  height: 18px;
 }
 
 :root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center {
