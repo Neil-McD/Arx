@@ -54,6 +54,7 @@ import { cx, Icon, KitApp, Rail, TextLink, useMinWidth } from "./kit";
 import { KitCourseInline, StatsButton, type CourseEditPatch } from "./KitCourseEdit";
 import { useDragOrder } from "./useDragOrder";
 import { askInApp } from "../../../../shared/inAppConfirm";
+import { recallKnowledgeRail, rememberKnowledgeRail, shouldReserveKnowledgeRail } from "../../../../shared/channelRowsMemory";
 import { KitKnowledgeAddButtons, KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
@@ -538,6 +539,14 @@ export function KitClassroom(props: {
     ) : null,
   ].filter(Boolean);
   const shelfRail = shelfSettled && shelfParts.length ? <>{shelfParts}</> : null;
+  const rememberedShelfRail = useMemo(
+    () => recallKnowledgeRail(props.communityId, props.canManage),
+    [props.communityId, props.canManage],
+  );
+  useEffect(() => {
+    if (!shelfSettled) return;
+    rememberKnowledgeRail(props.communityId, props.canManage, shelfParts.length > 0);
+  }, [props.communityId, props.canManage, shelfSettled, shelfParts.length]);
 
   // Courses are put in order by dragging a card by its grip.
   const courseDrag = useDragOrder(courses.map((entry) => entry.course.id), (ids) => {
@@ -968,8 +977,14 @@ export function KitClassroom(props: {
     const start = props.canManage ? null : shelfStart(coursePath(courses, done));
     const here = start?.kind === "course" ? start.step : null;
     const hereAt = start?.kind === "course" ? start.index : -1;
+    const reserveShelfRail = wide && shouldReserveKnowledgeRail({
+      canManage: props.canManage,
+      remembered: rememberedShelfRail,
+      settled: shelfSettled,
+      hasContent: shelfParts.length > 0,
+    });
     page = (
-      <div className={`knowledge-shelf ${cx("page")}`} style={{ padding: 0, overflow: "visible" }}>
+      <div className={`knowledge-shelf ${cx("page")}`} data-reserve-rail={reserveShelfRail ? "true" : undefined} style={{ padding: 0, overflow: "visible" }}>
         {props.canManage || !courses.length || start?.kind === "all_finished" ? (
           <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
             {!props.loaded ? " " : props.canManage ? hostLead(courses.map((entry) => entry.course), learning)

@@ -9,6 +9,7 @@ import { ArrowRight, BookOpen, Check, ChevronDown, MessageSquare, Sparkles } fro
 import { REPLY_DRAFT_EDIT_MAX_CHARS, replyDraftWaited, type ReplyDraftView } from "../../../../shared/communityReplyDrafts";
 import { MEMBER_COACH_EDIT_MAX_CHARS, type MemberCoachDraftView } from "../../../../shared/communityMemberCoachTypes";
 import type { CloudJourneyStageAdvanceProposal } from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import { NeedsYouJoinRow, NeedsYouPlainRow, type HomeThing, type NeedsYouJoinReview } from "./KitNeedsYou";
 import { Btn, cx } from "./kit";
 
 export function replyDraftTitle(draft: Pick<ReplyDraftView, "author">): string {
@@ -38,11 +39,22 @@ export function stageProposalDetail(proposal: Pick<CloudJourneyStageAdvancePropo
 }
 
 type GuideSuggestionItem =
+  | { key: string; kind: "thing"; thing: HomeThing }
+  | { key: string; kind: "join"; waiting: number }
   | { key: string; kind: "reply"; draft: ReplyDraftView }
   | { key: string; kind: "coach"; draft: MemberCoachDraftView }
   | { key: string; kind: "stage"; proposal: CloudJourneyStageAdvanceProposal };
 
 export function GuideSuggests(props: {
+  // Heading label. Defaults to "Your guide suggests" (e.g. landing previews);
+  // host Home passes "Needs you" for one unified guide-styled list.
+  label?: string;
+  // Optional direct host items unified ahead of guide drafts (tags, join requests, noticed items).
+  tags?: HomeThing[];
+  join?: NeedsYouJoinReview | null;
+  joinCount?: number;
+  onShowAllJoinRequests?: () => void;
+  things?: HomeThing[];
   drafts: ReplyDraftView[];
   // Posts the reply draft (with the host's words, when given). Resolves to what
   // went wrong, in plain words, or null.
@@ -63,9 +75,16 @@ export function GuideSuggests(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const label = props.label ?? "Your guide suggests";
+  const tags = props.tags ?? [];
+  const things = props.things ?? [];
+  const waitingJoin = props.join ? props.join.requests.length : (props.joinCount ?? 0);
   const coachDrafts = props.coachDrafts ?? [];
   const stageProposals = props.stageProposals ?? [];
   const items: GuideSuggestionItem[] = [
+    ...tags.map((thing) => ({ key: `tag:${thing.key}`, kind: "thing" as const, thing })),
+    ...(waitingJoin > 0 ? [{ key: "join", kind: "join" as const, waiting: waitingJoin }] : []),
+    ...things.map((thing) => ({ key: `thing:${thing.key}`, kind: "thing" as const, thing })),
     ...props.drafts.map((draft) => ({ key: `reply:${draft.id}`, kind: "reply" as const, draft })),
     ...coachDrafts.map((draft) => ({ key: `coach:${draft.id}`, kind: "coach" as const, draft })),
     ...stageProposals.map((proposal) => ({
@@ -124,6 +143,21 @@ export function GuideSuggests(props: {
 
   const renderItem = (item: GuideSuggestionItem) => {
     const open = openKey === item.key;
+    if (item.kind === "thing") {
+      return <NeedsYouPlainRow key={item.key} thing={item.thing} />;
+    }
+    if (item.kind === "join") {
+      return (
+        <NeedsYouJoinRow
+          key={item.key}
+          join={props.join ?? null}
+          waiting={item.waiting}
+          open={open}
+          onToggle={() => { setOpenKey(open ? null : item.key); setEditing(null); setError(null); }}
+          onShowAllJoinRequests={props.onShowAllJoinRequests ?? (() => undefined)}
+        />
+      );
+    }
     if (item.kind === "reply") {
       const { draft } = item;
       return (
@@ -225,8 +259,8 @@ export function GuideSuggests(props: {
   };
 
   return (
-    <section className={cx("gprops")} aria-label="Your guide suggests">
-      <h3><Sparkles size={14} strokeWidth={1.8} aria-hidden="true" />Your guide suggests <i>{totalCount}</i></h3>
+    <section className={cx("gprops")} aria-label={label}>
+      <h3><Sparkles size={14} strokeWidth={1.8} aria-hidden="true" />{label} <i>{totalCount}</i></h3>
       <div className={cx("gstack", stacked && "is-stacked")}>
         <div className={cx("nlist")}>
           {visibleItems.map(renderItem)}

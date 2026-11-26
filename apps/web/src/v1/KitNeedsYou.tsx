@@ -90,6 +90,67 @@ function Row(props: { icon: ReactNode; title: string; detail: string; open?: boo
   );
 }
 
+export function NeedsYouPlainRow(props: { thing: HomeThing }) {
+  const { thing } = props;
+  return (
+    <Row icon={ICONS[thing.icon]} title={thing.title} detail={thing.detail} side={<>
+      {thing.onNotNow ? <Btn small txt onClick={thing.onNotNow}>Not now</Btn> : null}
+      <Btn small go={thing.strong} onClick={thing.onAction}>{thing.action}</Btn>
+    </>} />
+  );
+}
+
+export function NeedsYouJoinRow(props: {
+  join: NeedsYouJoinReview | null;
+  waiting: number;
+  open: boolean;
+  onToggle: () => void;
+  onShowAllJoinRequests: () => void;
+}) {
+  const requests = props.join?.requests ?? [];
+  return (
+    <Row icon={<UserPlus size={16} strokeWidth={1.7} />} title={joinRowTitle(props.waiting)}
+      detail={joinRowNames(requests.map((request) => request.displayName), props.waiting)}
+      open={props.open} onToggle={props.join ? props.onToggle : undefined}
+      side={props.join ? undefined : <Btn small go onClick={props.onShowAllJoinRequests}>Review</Btn>}>
+      {!props.join ? null : props.open ? (
+        <div className={cx("nopen")}>
+          {requests.slice(0, NEEDS_YOU_JOIN_SHOWN).map((request) => (
+            <div key={request.id} className={cx("nperson")}>
+              <UserAvatar
+                className={cx("nface")}
+                name={request.displayName ?? "Someone"}
+                imageUrl={request.avatarUrl}
+                focusX={request.avatarFocusX}
+                focusY={request.avatarFocusY}
+                zoom={request.avatarZoom}
+                fallback={(request.displayName ?? "S").trim().charAt(0).toUpperCase()}
+                alt=""
+                aria-hidden
+              />
+              <span className={cx("ntext")}>
+                <b>{request.displayName ?? "Someone"}</b>
+                <span>Asked {request.createdAtLabel}</span>
+              </span>
+              <span className={cx("nbtns")}>
+                <Btn small txt disabled={props.join!.decidingId === request.id} onClick={() => props.join!.onDecline(request.id)}>Decline</Btn>
+                <Btn small disabled={props.join!.decidingId === request.id} onClick={() => props.join!.onApprove(request.id)}>
+                  {props.join!.decidingId === request.id ? "…" : "Approve"}
+                </Btn>
+              </span>
+            </div>
+          ))}
+          {requests.length > NEEDS_YOU_JOIN_SHOWN ? (
+            <button type="button" className={cx("nmore")} onClick={props.onShowAllJoinRequests}>
+              {requests.length - NEEDS_YOU_JOIN_SHOWN} more · Show all
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </Row>
+  );
+}
+
 export function NeedsYou(props: {
   label: string;
   join: NeedsYouJoinReview | null;
@@ -109,57 +170,20 @@ export function NeedsYou(props: {
   if (total === 0) return null;
 
   const rows: ReactNode[] = [];
-  const plainRow = (thing: HomeThing) => (
-    <Row key={thing.key} icon={ICONS[thing.icon]} title={thing.title} detail={thing.detail} side={<>
-      {thing.onNotNow ? <Btn small txt onClick={thing.onNotNow}>Not now</Btn> : null}
-      <Btn small go={thing.strong} onClick={thing.onAction}>{thing.action}</Btn>
-    </>} />
-  );
-  rows.push(...tags.map(plainRow));
+  rows.push(...tags.map((thing) => <NeedsYouPlainRow key={thing.key} thing={thing} />));
   if (waiting > 0) {
     rows.push(
-      <Row key="join" icon={<UserPlus size={16} strokeWidth={1.7} />} title={joinRowTitle(waiting)}
-        detail={joinRowNames(requests.map((request) => request.displayName), waiting)}
-        open={open} onToggle={props.join ? () => setOpen(!open) : undefined}
-        side={props.join ? undefined : <Btn small go onClick={props.onShowAllJoinRequests}>Review</Btn>}>
-        {!props.join ? null : open ? (
-          <div className={cx("nopen")}>
-            {requests.slice(0, NEEDS_YOU_JOIN_SHOWN).map((request) => (
-              <div key={request.id} className={cx("nperson")}>
-                <UserAvatar
-                  className={cx("nface")}
-                  name={request.displayName ?? "Someone"}
-                  imageUrl={request.avatarUrl}
-                  focusX={request.avatarFocusX}
-                  focusY={request.avatarFocusY}
-                  zoom={request.avatarZoom}
-                  fallback={(request.displayName ?? "S").trim().charAt(0).toUpperCase()}
-                  alt=""
-                  aria-hidden
-                />
-                <span className={cx("ntext")}>
-                  <b>{request.displayName ?? "Someone"}</b>
-                  <span>Asked {request.createdAtLabel}</span>
-                </span>
-                <span className={cx("nbtns")}>
-                  <Btn small txt disabled={props.join!.decidingId === request.id} onClick={() => props.join!.onDecline(request.id)}>Decline</Btn>
-                  <Btn small disabled={props.join!.decidingId === request.id} onClick={() => props.join!.onApprove(request.id)}>
-                    {props.join!.decidingId === request.id ? "…" : "Approve"}
-                  </Btn>
-                </span>
-              </div>
-            ))}
-            {requests.length > NEEDS_YOU_JOIN_SHOWN ? (
-              <button type="button" className={cx("nmore")} onClick={props.onShowAllJoinRequests}>
-                {requests.length - NEEDS_YOU_JOIN_SHOWN} more · Show all
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </Row>,
+      <NeedsYouJoinRow
+        key="join"
+        join={props.join}
+        waiting={waiting}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        onShowAllJoinRequests={props.onShowAllJoinRequests}
+      />,
     );
   }
-  rows.push(...props.things.map(plainRow));
+  rows.push(...props.things.map((thing) => <NeedsYouPlainRow key={thing.key} thing={thing} />));
   const hiddenCount = Math.max(0, rows.length - HOME_THINGS_SHOWN);
   return (
     <section className={cx("nyou")} aria-label={props.label}>
