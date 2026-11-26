@@ -58,6 +58,13 @@ function Face(props: { name: string; id: string; size?: number }) {
   return <span className="mb-face" style={{ background: tone, width: props.size ?? 22, height: props.size ?? 22 }}>{props.name.charAt(0)}</span>;
 }
 
+// "Guide drafted a check-in (waiting on Home)" → "Drafted a check-in".
+function guideDid(outcome: string | null): string | null {
+  if (!outcome) return null;
+  const short = outcome.replace(/^Guide\s+/, "").split(/\s[(·]/)[0].trim();
+  return short ? short.charAt(0).toUpperCase() + short.slice(1) : null;
+}
+
 function readyToMove(card: CloudMemberJourneyCard, lastStage: string): boolean {
   return card.checkpoints_total > 0 && card.checkpoints_done === card.checkpoints_total && card.stage_key !== lastStage;
 }
@@ -78,14 +85,17 @@ export function BoardScene(props: { start?: { open?: string; phone?: boolean; st
   const cardView = (card: CloudMemberJourneyCard) => {
     const ready = readyToMove(card, last);
     const next = nextOf(card.stage_key);
-    const line = card.latest_outcome ? <><Award size={12} aria-hidden="true" />{card.latest_outcome.text}</> : card.working_on ?? card.activity_summary;
+    // Off track: the reason comes first. Otherwise their latest win, or what they're working on.
+    const offTrack = card.status === "needs_you" || card.status === "stuck" || card.status === "quiet";
+    const line = offTrack ? card.activity_summary : card.latest_outcome ? <><Award size={12} aria-hidden="true" />{card.latest_outcome.text}</> : card.working_on ?? card.activity_summary;
+    const did = guideDid(card.agent_outcome);
     return (
       <div key={card.membership_id} className={["mb-card", `s-${card.status}`, ready ? "ready" : "", open === card.membership_id ? "on" : ""].filter(Boolean).join(" ")}>
         <button type="button" className="mb-card-hit" aria-label={`Open ${card.name}`} onClick={() => setOpen(open === card.membership_id ? null : card.membership_id)} />
         <div className="mb-card-top">
           <Face name={card.name} id={card.membership_id} />
           <b>{card.name}</b>
-          <i className="mb-dot" title={STATUS_WORD[card.status]} aria-label={STATUS_WORD[card.status]} />
+          {offTrack ? <i className="mb-dot" title={STATUS_WORD[card.status]} aria-label={STATUS_WORD[card.status]} /> : null}
         </div>
         {line ? <p className="mb-line">{line}</p> : null}
         <div className="mb-card-foot">
@@ -96,7 +106,7 @@ export function BoardScene(props: { start?: { open?: string; phone?: boolean; st
           ) : <span className="mb-bar empty" />}
           <span className="mb-marks">
             {card.founder_instruction ? <span title={`Your note: ${card.founder_instruction}`}><PenLine size={12} aria-label="Your note to the guide" /></span> : null}
-            {card.agent_outcome ? <span className="ai" title={card.agent_outcome}><Sparkles size={12} aria-label="What the guide did" /></span> : null}
+            {did ? <span className="ai" title={card.agent_outcome ?? undefined}><Sparkles size={12} aria-hidden="true" />{did}</span> : null}
           </span>
         </div>
         {ready && next ? (
@@ -113,6 +123,7 @@ export function BoardScene(props: { start?: { open?: string; phone?: boolean; st
         <header className="mb-col-head" title={stage.goal}>
           <b>{stage.name}</b><em>{list.length}</em>
           <MoreHorizontal size={15} aria-hidden="true" className="mb-col-more" />
+          <span className="mb-col-rule">{stage.checkpoints.length ? `To move on: ${stage.checkpoints.map((cp) => cp.label.toLowerCase()).join(", ")}` : "The last stage"}</span>
         </header>
         <div className="mb-col-list">{list.map(cardView)}</div>
       </section>
@@ -160,6 +171,7 @@ export function BoardScene(props: { start?: { open?: string; phone?: boolean; st
         <span className="mb-seg"><span>Table</span><span className="on">Board</span></span>
         <span className="mb-search"><Search size={13} aria-hidden="true" />Search</span>
         <span className="mb-filters">
+          <span className="mb-filter ready"><i className="mb-dot" />Ready to move {board.cards.filter((card) => readyToMove(card, last)).length}</span>
           {(["needs_you", "stuck", "quiet"] as JourneyCardStatus[]).map((status) => (
             <span key={status} className={`mb-filter s-${status}`}><i className="mb-dot" />{STATUS_WORD[status]} {counts.get(status) ?? 0}</span>
           ))}
