@@ -516,28 +516,28 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
         <StatementFigures />
 
-        <FeatureSection id="guide" title={["Stop answering", "the same question twice."]} sceneLabel="Try the guide: pick a member's question, read the answer, and see the lesson, channel or event it points to"
+        <FeatureSection id="guide" title={["An answer for every", "member, at any hour."]} sceneLabel="Try the guide: pick a member's question, read the answer, and see the lesson, channel or event it points to"
           live={<Suspense fallback={<div className="gsc-wait" />}><GuideScene /></Suspense>}
           features={["A private guide for every member", "Replies when tagged in a channel", "Points to the lesson, channel or event it means"]}>
-          Every member gets a private guide. It answers from your courses, notes and past discussions, at any hour, and points to where the answer lives.
+          Members ask the same questions again and again, and every one lands on you. Polynet gives each member a private guide. It answers from your courses, notes and past discussions, at any hour, and points to the lesson, channel or event where the answer lives.
         </FeatureSection>
 
-        <FeatureSection id="brain" title={["Good answers get", "buried in old threads."]} sceneLabel="Try the community brain: click a node or something it learned, see the posts it came from, and correct or remove it"
+        <FeatureSection id="brain" title={["Every good answer,", "kept and found again."]} sceneLabel="Try the community brain: click a node or something it learned, see the posts it came from, and correct or remove it"
           live={<Suspense fallback={<div className="gsc-wait" />}><BrainScene /></Suspense>}
           features={["A map of what your community knows", "Notes the guide writes from posts and conversations", "Every note shows where it came from", "Correct or remove any note"]}>
-          Polynet keeps them. Helpful answers become notes on one map, filed under your lessons, so what one member figures out, the next one finds.
+          A great answer gets posted once, sinks into an old thread, and the next member asks all over again. Polynet keeps it. The guide turns helpful answers into notes on one map, filed under your lessons, so what one member figures out, the next one finds.
         </FeatureSection>
 
-        <FeatureSection id="chief-of-staff" title={["Members drift away", "before you notice."]} sceneLabel="Try the Chief of Staff: read the 8am brief, then send, edit or skip the check-in for a quiet member and the reply drafted for an unanswered question"
+        <FeatureSection id="chief-of-staff" title={["Catch members", "before they drift away."]} sceneLabel="Try the Chief of Staff: read the 8am brief, then send, edit or skip the check-in for a quiet member and the reply drafted for an unanswered question"
           live={<Suspense fallback={<div className="gsc-wait" />}><ChiefScene /></Suspense>}
           features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "A monthly AI allowance you control"]}>
           In most communities you only find out someone's gone when they cancel. Polynet sees it early: the new member who never said hello, the one stuck halfway through a course, the regular who's gone quiet. Your chief of staff drafts the right nudge for each, and you send it, change it or skip it.
         </FeatureSection>
 
-        <FeatureSection id="members-board" title={["Nobody can see who's", "getting results."]} sceneLabel="Try the members board: move a member on, filter who needs you, and see what the guide did on each card"
+        <FeatureSection id="members-board" title={["See who's getting", "real results."]} sceneLabel="Try the members board: move a member on, filter who needs you, and see what the guide did on each card"
           live={<Suspense fallback={<div className="gsc-wait" />}><BoardScene /></Suspense>}
-          features={["Every member's progress, stage by stage", "Checkpoints that tick themselves", "Wins logged on each member", "Who's ready to move on, one click to approve", "Follow-ups that run on their own", "Board highlights in your morning brief"]}>
-          The members board tracks everyone from the day they join to the result your community promises. Checkpoints tick themselves as they post and finish lessons. Your chief of staff works the board: it spots who's ready to move on and who's stuck, follows up on its own, logs what happened, and brings the wins to your morning brief. You approve each move.
+          features={["Every member's progress, stage by stage", "Checkpoints that tick themselves", "Wins logged on each member", "A green arrow when someone's ready to move on", "Follow-ups drafted, or sent for the kinds you allow", "Board highlights in your morning brief"]}>
+          Most hosts can't tell who's actually getting results until someone posts a win or cancels. The members board shows every member's path, from the day they join to the result your community promises. Checkpoints tick themselves as they post and finish lessons. When someone stalls, your chief of staff follows up and marks it on their card. When someone finishes a stage, a green arrow appears by their name: press it to move them on.
         </FeatureSection>
 
         <section className="plans-line" aria-labelledby="plans-line-title" data-rv>

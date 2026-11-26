@@ -32,7 +32,7 @@ test("the scene draws the guide chat with its questions and box", () => {
 
 test("the guide section leads with the pain, has no plan chip, and lists only what's true", () => {
   const html = renderToStaticMarkup(React.createElement(ConversionLanding));
-  expect(html).toContain("Stop answering<br/>the same question twice.");
+  expect(html).toContain("An answer for every<br/>member, at any hour.");
   expect(html).not.toContain("plan-tag");
   expect(html).not.toMatch(/Answers with their source|Follow-ups in active threads|cites? (its|their) sources?/i);
 });
@@ -51,7 +51,7 @@ test("the brain graph: only the middle and each cluster are named, and each kind
   // The guide learns from posts; courses are where notes are filed.
   expect(html).not.toMatch(/learn(s|ed)? from (your )?courses/i);
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
-  expect(page).toContain("Good answers get<br/>buried in old threads.");
+  expect(page).toContain("Every good answer,<br/>kept and found again.");
   expect(page).not.toMatch(/Learned from courses and posts|Memory for each member/);
 });
 
@@ -68,7 +68,7 @@ test("the Chief of Staff scene: the 8am brief and the guide's suggestions, and o
   expect(morningBrief(1)).toContain("One thing needs you.");
   expect(morningBrief(0)).toContain("That's everything for today.");
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
-  expect(page).toContain("Members drift away<br/>before you notice.");
+  expect(page).toContain("Catch members<br/>before they drift away.");
   // Nothing reaches people who already left; the buttons say Send, Edit, Skip.
   expect(page).not.toMatch(/Win-backs|Approve, edit or skip|Usage and limits/);
 });
@@ -80,8 +80,9 @@ test("the members board section is the app's own board, and only claims what the
   // Dev and Jon have every checkpoint done; Rosa, Josh, Amir are stuck and Hana's payment is on hold.
   expect(boardPulse(board)).toBe("2 ready to move on · 4 need you · Jon: passed 100 members");
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
-  expect(page).toContain("Nobody can see who's<br/>getting results.");
-  expect(page).toContain("You approve each move.");
+  expect(page).toContain("See who's getting<br/>real results.");
+  expect(page).toContain("press it to move them on.");
+  expect(page).not.toContain("on its own");
   // The AI suggests moves and follows up; it never moves anyone or judges progress by itself.
   expect(page).not.toMatch(/moves (members|them|people) (on )?(by itself|automatically|on its own)|judges? (their )?progress/i);
 });

@@ -442,6 +442,12 @@
 .pn-landing .msc-win .gsc-win { height: 100%; min-width: 1180px; }
 .pn-landing .msc-win .rpw-head { padding: 0 24px; gap: 10px; }
 .pn-landing .msc-mode { color: #7d7f82; font-weight: 400; }
+/* Once the board is in view, Dev's green arrow glows once: the hint to press it. */
+.pn-landing .msc.is-seen .members-board-move[aria-label^="Move Dev Patel"] { animation: msc-hint 1.4s ease-in-out 2.6s 2; }
+@keyframes msc-hint {
+  50% { background: color-mix(in srgb, var(--mb-green) 22%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mb-green) 12%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .pn-landing .msc.is-seen .members-board-move { animation: none; } }
 .pn-landing .msc-mode::before { content: "›"; margin-right: 10px; }
 .pn-landing .msc-win .rpw-body > [class*="app"] { display: flex; flex-direction: column; height: 100%; padding: 14px 24px 0; overflow: hidden; }
 
@@ -875,6 +881,8 @@
   font-size: 13px;
 }
 .pn-landing .rpw button { font: inherit; color: inherit; }
+/* The board's ready arrow keeps its green inside the site's app windows. */
+.pn-landing .rpw .members-board-move { color: var(--mb-green); }
 .pn-landing .rpw-nav { display: flex; flex-direction: column; min-height: 0; padding: 0 12px 12px; }
 .pn-landing .rpw-cover { margin: 12px 0 2px; }
 .pn-landing .rpw-search { display: flex; align-items: center; gap: 8px; height: 28px; margin: 8px 0 4px; padding: 0 8px; border-radius: 6px; color: var(--faint); }

@@ -13,7 +13,8 @@ import { sampleJourneyBoard } from "./boardSample";
 // app's own board (KitMembersBoard), not a copy, with the Build Club's
 // members. Above it, the board's line from the morning brief. As it comes
 // into view the guide follows up with Amir, who's stuck: its star appears on
-// his card. Move to …, the filters and dragging all work as in the app.
+// his card, then Dev's green arrow glows once, the hint to move him on.
+// The arrows, the filters and dragging all work as in the app.
 
 function track(action: string) {
   captureProductAnalyticsEvent("board_scene_used", { action });
@@ -42,25 +43,27 @@ export function BoardScene() {
   });
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  const [seen, setSeen] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const node = root.current;
     if (!node || typeof IntersectionObserver === "undefined") return;
-    const seen = new IntersectionObserver((entries) => {
+    const watch = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
-      seen.disconnect();
+      watch.disconnect();
+      setSeen(true);
       window.setTimeout(() => setBoard((last) => ({
         ...last,
         cards: last.cards.map((card) => card.name === "Amir Khan" ? { ...card, agent_outcome: "Guide sent check-in", agent_outcome_at: new Date().toISOString() } : card),
       })), 1200);
     }, { threshold: 0.4 });
-    seen.observe(node);
-    return () => seen.disconnect();
+    watch.observe(node);
+    return () => watch.disconnect();
   }, []);
 
   return (
-    <div className="msc" ref={root}>
+    <div className={seen ? "msc is-seen" : "msc"} ref={root}>
       <p className="msc-pulse"><Sparkles size={13} aria-hidden="true" /><span>From your morning brief</span>{boardPulse(board)}</p>
       <div className="msc-win">
         <div className="rpw gsc-win">
