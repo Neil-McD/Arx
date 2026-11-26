@@ -96,7 +96,10 @@ export function KitMembersBoard(props: {
   timeFor: (iso: string | null, now: number) => string;
   onOpenCard: (membershipId: string) => void;
   onMoveCard: (membershipId: string, stageKey: string) => Promise<void>;
-  onSaveStages: (stages: StageSaveInput[]) => Promise<JourneyStageDefinition[] | null | void>;
+  onSaveStages: (
+    stages: StageSaveInput[],
+    options?: { autoAdvanceEnabled?: boolean },
+  ) => Promise<JourneyStageDefinition[] | null | void>;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
 }) {
@@ -149,12 +152,15 @@ export function KitMembersBoard(props: {
     };
   }, [openMenuStageKey, openCpStageKey]);
 
-  const persistStages = async (nextStages: StageSaveInput[]) => {
+  const persistStages = async (
+    nextStages: StageSaveInput[],
+    options?: { autoAdvanceEnabled?: boolean },
+  ) => {
     if (savingStage) return false;
     setSavingStage(true);
     setStageError(null);
     try {
-      const saved = await props.onSaveStages(nextStages);
+      const saved = await props.onSaveStages(nextStages, options);
       if (Array.isArray(saved)) {
         stagesRef.current = saved;
         setLocalStages(saved);
@@ -432,10 +438,28 @@ export function KitMembersBoard(props: {
             </button>
           ))}
         </div>
-        <span className="members-board-pulse" aria-label="Board summary">
-          <strong>{activatedPercent}%</strong> activated
-          {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
-        </span>
+        <div className="members-board-toolbar-end">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={Boolean(props.board?.auto_advance_enabled)}
+            disabled={savingStage || !props.board}
+            className={`members-board-automove${props.board?.auto_advance_enabled ? " is-on" : ""}`}
+            title="Automatically move members to the next stage when all checkpoints are done"
+            onClick={() =>
+              void persistStages(toSaveList(stagesRef.current), {
+                autoAdvanceEnabled: !props.board?.auto_advance_enabled,
+              })
+            }
+          >
+            <i className="members-board-automove-dot" aria-hidden="true" />
+            <span>Auto-move</span>
+          </button>
+          <span className="members-board-pulse" aria-label="Board summary">
+            <strong>{activatedPercent}%</strong> activated
+            {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
+          </span>
+        </div>
       </div>
 
       {phone ? (

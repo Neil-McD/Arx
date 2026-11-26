@@ -114,15 +114,34 @@ export const getCommunityLandingPage = query({
     const nowMs = Date.now();
     const ownerId = (community as any).ownerId;
 
-    const [hostFace, hostDetail, events, apps, agentOn] = await Promise.all([
+    const [hostFace, hostDetail, upcomingEvents, earlierEvents, apps, agentOn] = await Promise.all([
       ownerId ? resolveUserProfileDisplayProjection(ctx, ownerId) : null,
       ownerId ? ctx.db.query("userProfileDetails").withIndex("by_user", (q: any) => q.eq("userId", ownerId)).first() : null,
       ctx.db.query("communityEvents")
         .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", community._id).eq("status", "live").gte("startsAt", nowMs))
         .take(20),
+      ctx.db.query("communityEvents")
+        .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", community._id).eq("status", "live").lt("startsAt", nowMs))
+        .order("desc")
+        .take(50),
       ctx.db.query("connectedApps").withIndex("by_community", (q: any) => q.eq("communityId", community._id)).collect(),
       communityAgentIsOn(ctx, community._id),
     ]);
+    const seenEventIds = new Set<string>();
+    const events: any[] = [];
+    for (const row of upcomingEvents as any[]) {
+      const id = String(row._id);
+      if (seenEventIds.has(id)) continue;
+      seenEventIds.add(id);
+      events.push(row);
+    }
+    for (const row of earlierEvents as any[]) {
+      if (!row.recurrenceFrequency || row.recurrenceFrequency === "none") continue;
+      const id = String(row._id);
+      if (seenEventIds.has(id)) continue;
+      seenEventIds.add(id);
+      events.push(row);
+    }
     const host = join.community.host
       ? {
         name: join.community.host.name,

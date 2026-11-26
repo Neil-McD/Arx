@@ -1372,6 +1372,79 @@ async function resolveAutoAdvanceStageMove(
   };
 }
 
+export async function maybeAutoAdvanceMemberOnActivity(
+  ctx: any,
+  args: { communityId: any; userId: any; nowMs: number },
+): Promise<boolean> {
+  const config = await ctx.db
+    .query("communityJourneyConfig")
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+    .unique();
+  if (!config || config.autoAdvanceEnabled !== true) return false;
+
+  const community: any = await ctx.db.get(args.communityId);
+  if (!community || !communityIsActive(community)) return false;
+  if (String(args.userId) === String(community.ownerId)) return false;
+
+  const [membership, existing] = await Promise.all([
+    getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    }),
+    ctx.db
+      .query("communityMemberJourneyCards")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
+      )
+      .unique(),
+  ]);
+  if (!membership || !communityMembershipRowIsActive(membership)) return false;
+
+  const { stages } = await readStagesForCommunity(ctx, args.communityId);
+  const validKeys = new Set(stages.map((stage) => stage.key));
+  const currentStageKey =
+    existing && validKeys.has(existing.stageKey)
+      ? String(existing.stageKey)
+      : await resolveDerivedStageKeyForMember(ctx, {
+          communityId: args.communityId,
+          userId: args.userId,
+          stages,
+          membership,
+          nowMs: args.nowMs,
+        });
+  const autoMove = await resolveAutoAdvanceStageMove(ctx, {
+    communityId: args.communityId,
+    targetUserId: args.userId,
+    stages,
+    currentStageKey,
+    dismissedAdvanceForStageKey: existing?.dismissedAdvanceForStageKey,
+    completedMilestones: existing?.completedMilestones,
+  });
+  if (!autoMove) return false;
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      stageKey: autoMove.nextStageKey,
+      dismissedAdvanceForStageKey: undefined,
+      agentOutcomeNote: autoMove.outcomeNote,
+      agentOutcomeAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  } else {
+    await ctx.db.insert("communityMemberJourneyCards", {
+      communityId: args.communityId,
+      userId: args.userId,
+      stageKey: autoMove.nextStageKey,
+      agentOutcomeNote: autoMove.outcomeNote,
+      agentOutcomeAt: args.nowMs,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+  return true;
+}
+
 async function applyCardPatchForMember(
   ctx: any,
   args: {
@@ -2109,7 +2182,7 @@ export const saveCommunityJourneyStages = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({
+    const { community } = await requireCommunityManager({
       ctx,
       communityId: args.communityId,
       userId: actorUserId,
@@ -2159,6 +2232,55 @@ export const saveCommunityJourneyStages = mutation({
           updatedByUserId: actorUserId,
           updatedAt: nowMs,
         });
+      }
+    }
+
+    // When Auto-move is on, catch up any members who already finished all
+    // checkpoints on their current stage (respecting dismissed moves).
+    if (autoAdvanceEnabled) {
+      const liveBoard = await computeCommunityMemberJourneyBoard(ctx, {
+        communityId: args.communityId,
+        community,
+        nowMs,
+      });
+      const readyProposals = extractStageAdvanceProposalsFromBoard(liveBoard, 50);
+      const userIdByMembershipId = new Map(
+        liveBoard.cards.map((card) => [card.membership_id, card.db_user_id]),
+      );
+      for (const proposal of readyProposals) {
+        const targetUserId = userIdByMembershipId.get(proposal.membership_id);
+        if (!targetUserId) continue;
+        const cardRow = await ctx.db
+          .query("communityMemberJourneyCards")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", targetUserId as any),
+          )
+          .unique();
+        const note = `Auto-moved to ${proposal.to_stage_name} after finishing ${proposal.from_stage_name} checkpoints`.slice(
+          0,
+          MAX_AGENT_OUTCOME_CHARS,
+        );
+        if (cardRow) {
+          await ctx.db.patch(cardRow._id, {
+            stageKey: proposal.to_stage_key,
+            dismissedAdvanceForStageKey: undefined,
+            agentOutcomeNote: note,
+            agentOutcomeAt: nowMs,
+            updatedByUserId: actorUserId,
+            updatedAt: nowMs,
+          });
+        } else {
+          await ctx.db.insert("communityMemberJourneyCards", {
+            communityId: args.communityId,
+            userId: targetUserId as any,
+            stageKey: proposal.to_stage_key,
+            agentOutcomeNote: note,
+            agentOutcomeAt: nowMs,
+            updatedByUserId: actorUserId,
+            createdAt: nowMs,
+            updatedAt: nowMs,
+          });
+        }
       }
     }
 
