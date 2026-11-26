@@ -294,8 +294,20 @@
 .members-board-confirm button { padding: 5px 10px; border: 1px solid var(--line2); border-radius: 6px; background: none; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
 .members-board-confirm button.is-danger { border-color: transparent; background: #c9524a; color: #fff; }
 
-/* Cards: three lines at most. */
-.members-board-col-list { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding: 1px; }
+/* Cards: three lines at most. Hide column scrollbar tracks so scrollable and
+   non-scrollable stages keep identical card widths and even inter-column gaps. */
+.members-board-col-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 1px 1px 14px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.members-board-col-list::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .members-board-col-empty { padding: 14px 4px; color: var(--ink3); font-size: 12px; }
 .members-board-card {
   display: flex;

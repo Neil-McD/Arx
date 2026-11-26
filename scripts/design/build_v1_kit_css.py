@@ -582,9 +582,8 @@ css += """
 .app .evnext-cancelled{grid-column:1/-1;display:flex;align-items:flex-start;flex-wrap:nowrap;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:8px;border:1px solid var(--bad-line,rgba(240,104,104,.28));background:rgba(240,104,104,.07);font:inherit;font-size:13px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),border-color .14s var(--ease)}
 .app .evnext-cancelled>span:last-child{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
 .app .evnext-cancelled:hover{background:rgba(240,104,104,.12);border-color:var(--bad-line,rgba(240,104,104,.4));color:var(--ink)}
-.app .nx-cancel{display:flex;align-items:center;gap:7px;width:100%;margin-bottom:8px;padding:6px 8px;border-radius:7px;border:1px solid var(--bad-line,rgba(240,104,104,.28));background:rgba(240,104,104,.07);font:inherit;font-size:12px;line-height:1.35;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),color .14s var(--ease)}
-.app .nx-cancel>span:last-child{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.app .nx-cancel:hover{background:rgba(240,104,104,.12);color:var(--ink)}
+.app .nx-cancel{display:block;max-width:100%;margin:4px 0 0;padding:0;border:0;background:none;font:inherit;font-size:12px;line-height:1.4;color:var(--bad,#f38b8b);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;opacity:.88;transition:opacity .14s var(--ease)}
+.app .nx-cancel:hover{opacity:1;text-decoration:underline;text-underline-offset:2px}
 .app .evnext h2{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0 0;font-size:22px;font-weight:600;letter-spacing:-.012em;color:var(--ink)}
 .app .evsoon{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--aurora-ink)}
 .app .evsoon i{width:6px;height:6px;border-radius:50%;background:var(--aurora-ink);box-shadow:0 0 0 4px rgba(var(--au),.18)}

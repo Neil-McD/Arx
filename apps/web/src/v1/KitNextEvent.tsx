@@ -107,23 +107,26 @@ export function KitNextEvent(props: {
     );
   }
   const sub = [label.live ? null : eventClock(event.starts_at), eventRepeatWord(event), eventPlaceWord(event)].filter(Boolean).join(" · ");
+  const formatCancelledDay = (startsAtIso: string) => {
+    const word = eventDayWord(startsAtIso, props.now);
+    return /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/.test(word) ? `This ${word}` : word;
+  };
   const cancelledNotice =
     earlierCancelled.length === 1
-      ? `${eventDayWord(earlierCancelled[0]!.starts_at, props.now)} is cancelled`
+      ? `${formatCancelledDay(earlierCancelled[0]!.starts_at)} is cancelled`
       : earlierCancelled.length >= 2
-        ? `${eventDayWord(earlierCancelled[0]!.starts_at, props.now)} & ${eventDayWord(earlierCancelled[1]!.starts_at, props.now)}${earlierCancelled.length > 2 ? ` (+${earlierCancelled.length - 2})` : ""} cancelled`
+        ? `${formatCancelledDay(earlierCancelled[0]!.starts_at)} & ${eventDayWord(earlierCancelled[1]!.starts_at, props.now)}${earlierCancelled.length > 2 ? ` (+${earlierCancelled.length - 2})` : ""} cancelled`
         : null;
   return (
     <PanelPart label="Next up" fact={label.live ? null : label.text} action={<PanelAction onClick={props.onOpenEvents}>All events</PanelAction>}>
       {label.live ? <span className={cx("livepill")}><i />{label.text}</span> : null}
-      {cancelledNotice ? (
-        <button type="button" className={cx("nx-cancel")} onClick={props.onOpenEvents}>
-          <span className={cx("evtag bad")}>Cancelled</span>
-          <span>{cancelledNotice}</span>
-        </button>
-      ) : null}
       <PanelNext title={event.title} sub={sub} onClick={props.onOpenEvents} ariaLabel={`Open ${event.title} in Events`}
         action={label.live && event.url ? <a className={cx("btn go")} href={event.url} target="_blank" rel="noreferrer">Join</a> : null} />
+      {cancelledNotice ? (
+        <button type="button" className={cx("nx-cancel")} onClick={props.onOpenEvents}>
+          {cancelledNotice}
+        </button>
+      ) : null}
     </PanelPart>
   );
 }
