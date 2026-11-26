@@ -9,8 +9,7 @@ import type {
   CommunitySettingsPane,
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
-import { needsLeaveCheck } from "../../../../shared/communityUnsavedGuard";
-import { askInApp } from "../../../../shared/inAppConfirm";
+import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../../shared/communityUnsavedGuard";
 import {
   buildCommunityTabPath,
   type AppShellVariant,
@@ -52,15 +51,17 @@ export function useWebCommunityNavigationActions(params: {
   ) => void;
   pushNavSnapshot: () => void;
 }) {
-  // Switching community with a save still running or failed: the app's own
-  // card asks, never the browser's box (Neil, Nov 26).
-  const hasUnsavedChangesFor = useCallback(
-    (nextCommunityId: string) => needsLeaveCheck({
-      isCommunitySettingsDirty: params.communitySettingsDirtyRef.current,
-      isCommunityAgentConfigDirty: params.communityAgentConfigDirtyRef.current,
-      activeCommunityId: params.selectedActiveCommunityId,
-      nextCommunityId,
-    }),
+  const confirmCommunityChange = useCallback(
+    (nextCommunityId: string) =>
+      confirmDiscardUnsavedCommunitySettingsWeb({
+        isCommunitySettingsDirty:
+          params.communitySettingsDirtyRef.current,
+        isCommunityAgentConfigDirty:
+          params.communityAgentConfigDirtyRef.current,
+        activeCommunityId: params.selectedActiveCommunityId,
+        nextCommunityId,
+        confirmDiscard: (message) => window.confirm(message),
+      }),
     [
       params.communityAgentConfigDirtyRef,
       params.communitySettingsDirtyRef,
@@ -86,19 +87,14 @@ export function useWebCommunityNavigationActions(params: {
 
   const handleSelectActiveCommunity = useCallback(
     (community: WebCommunityRecord): boolean => {
-      const go = () => params.syncCommunitySelection({
+      if (!confirmCommunityChange(community.id)) return false;
+      params.syncCommunitySelection({
         communitySlug: (community.slug ?? "").trim() || null,
         communityId: community.id,
       });
-      if (hasUnsavedChangesFor(community.id)) {
-        void askInApp({ message: "Your last change hasn't saved yet. Leave anyway?", yes: "Leave", no: "Stay" })
-          .then((yes) => { if (yes) go(); });
-        return false;
-      }
-      go();
       return true;
     },
-    [hasUnsavedChangesFor, params.syncCommunitySelection],
+    [confirmCommunityChange, params.syncCommunitySelection],
   );
 
   const handleSelectCommunitySettingsPane = useCallback(

@@ -482,7 +482,8 @@ function useProfileHarness(props: any) {
     await tick();
     assert(hook.value.selected === "course" && hook.value.resourceRead.status === "error", "failed read cleared selection or hid error");
     assert(hook.value.moduleRead.status === "ready" && hook.value.modules.length === 1, "one failed read cleared the other");
-    await hook.value.retryResourceRead("resources");
+    // The retry's read stays open until it is answered below, so it isn't awaited here.
+    void hook.value.retryResourceRead("resources");
     await tick();
     assert(ensures === 2 && pending.length === 3 && pending[2].kind === "listCloudCommunityResourceRows", "Retry refetched healthy collection");
     pending[2].resolve([]);
