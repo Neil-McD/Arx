@@ -54,7 +54,7 @@ test("the brain map holds The Build Club's own courses and learned things", () =
 test("it opens on Home with the live app's menu and Home, and claims only what's true", () => {
   const html = renderToStaticMarkup(React.createElement(RealAppPreview)).replace(/&#x27;/g, "'").replace(/&quot;/g, '"');
   for (const label of [PREVIEW_COMMUNITY, "Search or ask", "Home", "Inbox", "Channels", "Pods", "Knowledge", "Events", "Members", "Analytics", "Invite people",
-    "Needs you", "2 people asked to join", "Your guide suggests", "The community today", "Who is at risk of leaving?"]) {
+    "Needs you", "2 people asked to join", "The community today", "Who is at risk of leaving?"]) {
     expect(html, label).toContain(label);
   }
   const words = `${html} ${GUIDE_REPLY} ${CHECK_IN_TEXT} ${Object.values(CHIP_ANSWERS).join(" ")}`;

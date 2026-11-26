@@ -1,11 +1,11 @@
 import { Fragment, useEffect } from "react";
 
+import { formatAiCredits } from "../../../../../shared/agentRoiSummary";
 import { POLYNET_FOUNDER_TIER_CATALOG } from "../../../../../shared/founderPlan";
 import "./ConversionLanding.css";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 import { FEE, INCLUDED, LANDING_PLANS, PlanCards, PublicFrame, QUESTIONS, trackStart } from "./ConversionLanding";
 
-const aiDollars = (micros: number) => `$${micros / 1_000_000}`;
 const GUIDE = POLYNET_FOUNDER_TIER_CATALOG.guide;
 const CHIEF = POLYNET_FOUNDER_TIER_CATALOG.chief_of_staff;
 
@@ -18,7 +18,7 @@ const ALL: [Cell, Cell, Cell] = [true, true, true];
 const GUIDE_UP: [Cell, Cell, Cell] = [false, true, true];
 const CHIEF_ONLY: [Cell, Cell, Cell] = [false, false, true];
 
-// Only what each plan does today. The prices and AI amounts come from the
+// Only what each plan does today. The prices and AI credit amounts come from the
 // same numbers checkout charges.
 export const COMPARE: Group[] = [
   {
@@ -27,7 +27,8 @@ export const COMPARE: Group[] = [
       { name: "Members", cells: ["Unlimited", "Unlimited", "Unlimited"] },
       { name: "Channels, threads and direct messages", cells: ALL },
       { name: "Courses and knowledge", cells: ALL },
-      { name: "Events", cells: ALL },
+      { name: "Members board", hint: "Stages, auto-ticking checkpoints, wins and optional Auto-move.", cells: ALL },
+      { name: "Events and recurring calls", cells: ALL },
       { name: "Pods for cohorts and small groups", cells: ALL },
       { name: "Weekly digest emails", cells: ALL },
       { name: "Connect your own Claude or ChatGPT", cells: ALL },
@@ -48,16 +49,26 @@ export const COMPARE: Group[] = [
       { name: "Replies when tagged in channels", cells: GUIDE_UP },
       { name: "Follow-ups in active threads", cells: GUIDE_UP },
       { name: "Community brain", hint: "What your community learns, kept and connected.", cells: GUIDE_UP },
-      { name: "Morning brief for you", cells: CHIEF_ONLY },
-      { name: "Check-ins for quiet members", cells: CHIEF_ONLY },
+      { name: "Daily morning brief for you", cells: CHIEF_ONLY },
+      { name: "Proactive welcomes & check-ins for quiet or stalled members", cells: CHIEF_ONLY },
       { name: "Reply drafts for unanswered questions", cells: CHIEF_ONLY },
+      { name: "AI follow-ups & highlights on the Members board", cells: CHIEF_ONLY },
+      { name: "Draft or automatic mode", hint: "You choose what waits for approval and what sends on its own.", cells: CHIEF_ONLY },
     ],
   },
   {
-    title: "Usage",
+    title: "AI credits & billing",
     rows: [
-      { name: "AI included each month", cells: [false, aiDollars(GUIDE.includedCostMicros), aiDollars(CHIEF.includedCostMicros)] },
-      { name: "At the monthly limit", cells: [false, "The AI pauses until next month", "Pauses, or add more under a cap you set"] },
+      {
+        name: "AI credits included each month",
+        cells: [
+          false,
+          formatAiCredits(GUIDE.includedCostMicros, { unit: false }),
+          formatAiCredits(CHIEF.includedCostMicros, { unit: false }),
+        ],
+      },
+      { name: "Extra AI credits", cells: [false, "Upgrade to Chief of Staff", "Optional $30 boosts (+20,000 credits)"] },
+      { name: "At the monthly limit", cells: [false, "Pauses until next month", "Pauses, or boost under a cap you set"] },
       { name: "Surprise bills", cells: ["Never", "Never", "Never"] },
       { name: "Billed", hint: "Each community has its own plan.", cells: ["Never", "Monthly", "Monthly"] },
     ],

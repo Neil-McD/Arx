@@ -113,3 +113,22 @@ export function formatMicrosUsd(micros: number): string {
   if (dollars > 0 && dollars < 0.01) return "<$0.01";
   return `$${dollars.toFixed(2)}`;
 }
+
+// User-facing AI credit scale: 1,000 credits = $1.00 of underlying model usage
+// (1 credit = 1,000 micros). Keeps all billing ledgers, reservations, and
+// Stripe webhooks unchanged while presenting clean, human-scale numbers
+// (Guide: 3,000/mo, Chief of Staff: 20,000/mo, Boost: +20,000).
+export const AI_CREDITS_MICROS_PER_CREDIT = 1_000;
+
+export function microsToAiCredits(micros: number): number {
+  const safe = Math.max(0, Number.isFinite(micros) ? micros : 0);
+  if (safe === 0) return 0;
+  return Math.max(1, Math.round(safe / AI_CREDITS_MICROS_PER_CREDIT));
+}
+
+export function formatAiCredits(micros: number, options?: { unit?: boolean }): string {
+  const credits = microsToAiCredits(micros);
+  const formatted = credits.toLocaleString("en-US");
+  if (options?.unit === false) return formatted;
+  return `${formatted} ${credits === 1 ? "credit" : "credits"}`;
+}

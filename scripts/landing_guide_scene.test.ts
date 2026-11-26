@@ -57,12 +57,13 @@ test("the brain graph: only the middle and each cluster are named, and each kind
 
 
 
-test("the Chief of Staff scene: the 8am brief and the guide's suggestions, and only true claims", async () => {
+test("the Chief of Staff scene: the 8am brief and the unified Needs you deck, and only true claims", async () => {
   const { ChiefScene, morningBrief } = await import("../apps/web/src/components/polynetLanding/ChiefScene");
   const html = renderToStaticMarkup(React.createElement(ChiefScene)).replace(/&#x27;/g, "'");
   expect(html).toContain("8:00 am");
   expect(html).toContain("Two things need you.");
-  expect(html).toContain("Your guide suggests");
+  expect(html).toContain("Needs you");
+  expect(html).toContain("6,400 / 20,000");
   // A reply is only drafted once a question has waited a day.
   expect(html).toContain("no answer for 26 hours");
   expect(morningBrief(1)).toContain("One thing needs you.");
@@ -81,7 +82,7 @@ test("the members board section is the app's own board, and only claims what the
   expect(boardPulse(board)).toBe("2 ready to move on · 4 need you · Jon: passed 100 members");
   const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
   expect(page).toContain("See who's getting<br/>real results.");
-  expect(page).toContain("press it to move them on.");
+  expect(page).toContain("press it to move them on, or turn on Auto-move.");
   expect(page).not.toContain("on its own");
   // The AI suggests moves and follows up; it never moves anyone or judges progress by itself.
   expect(page).not.toMatch(/moves (members|them|people) (on )?(by itself|automatically|on its own)|judges? (their )?progress/i);

@@ -1,7 +1,7 @@
 // Pure monthly AI allowance guardrails & founder alert helpers (client-safe + server-usable).
 // Keeps the 90% live-chat reserve, 80%/100% alert milestones, reset-date formatting,
 // and calm founder alert copy deterministic and testable.
-import { formatMicrosUsd } from "./agentRoiSummary";
+import { formatAiCredits } from "./agentRoiSummary";
 import type { FounderPlanTier } from "./founderPlan";
 
 // Reserve the final 10% of each community's monthly AI allowance ($2 of $20)
@@ -87,20 +87,20 @@ export function buildFounderAllowanceAlertCopy(input: {
   threadMarkdown: string;
 } {
   const name = String(input.communityName || "your community").trim() || "your community";
-  const usedLabel = formatMicrosUsd(input.settledMicros);
-  const allowanceLabel = formatMicrosUsd(input.allowanceMicros);
+  const usedLabel = formatAiCredits(input.settledMicros, { unit: false });
+  const allowanceLabel = formatAiCredits(input.allowanceMicros);
   const isGuideTier = input.planTier === "guide";
   const resetClause = input.resetDateLabel
-    ? `Your allowance resets automatically on ${input.resetDateLabel}.`
-    : "Your allowance resets automatically at the start of your next billing cycle.";
+    ? `Your credits reset automatically on ${input.resetDateLabel}.`
+    : "Your credits reset automatically at the start of your next billing cycle.";
   const winBackLine =
     !isGuideTier && input.contacted30d > 0 && input.reengaged30d > 0
       ? `In the last 30 days, ${input.reengaged30d} of ${input.contacted30d} members checked in by your guide came back to participate.`
       : null;
   const upgradeOrBoostClause = isGuideTier
-    ? "Upgrade to Chief of Staff ($100/month with $20 AI included) anytime in Guide settings to expand your allowance immediately and unlock Daily Briefs, proactive member check-ins, and auto-replies."
+    ? "Upgrade to Chief of Staff ($100/month with 20,000 AI credits included) anytime in Guide settings to expand your credits immediately and unlock Daily Briefs, proactive member check-ins, and auto-replies."
     : input.boostAvailable
-      ? "If you need extra room before reset, you can add an optional $30 boost (+$20 AI allowance) anytime in Guide settings."
+      ? "If you need extra room before reset, you can add an optional $30 boost (+20,000 AI credits) anytime in Guide settings."
       : null;
   const actionUrl = String(input.actionUrl ?? "").trim();
   const threadActionLine = actionUrl
@@ -112,15 +112,15 @@ export function buildFounderAllowanceAlertCopy(input: {
     : null;
 
   if (input.milestone === 100) {
-    const headline = `${name} reached 100% of this month's AI allowance`;
+    const headline = `${name} reached 100% of this month's AI credits`;
     const bodyLines = [
-      `Your community has used ${usedLabel} of its ${allowanceLabel} monthly AI allowance — a great sign of active member conversations.`,
+      `Your community has used ${usedLabel} of its ${allowanceLabel} this month — a great sign of active member conversations.`,
       ...(winBackLine ? [winBackLine] : []),
-      `${resetClause} Your community, channels, courses, events, and zero-AI weekly digests keep running normally in the meantime.`,
+      `${resetClause} Your community, channels, courses, events, and weekly digests keep running normally in the meantime.`,
       ...(upgradeOrBoostClause ? [upgradeOrBoostClause] : []),
     ];
     return {
-      subject: `${name} reached its monthly AI allowance`,
+      subject: `${name} reached its monthly AI credit limit`,
       headline,
       bodyText: bodyLines.join(" "),
       threadMarkdown: [
@@ -131,9 +131,9 @@ export function buildFounderAllowanceAlertCopy(input: {
     };
   }
 
-  const headline = `${name} is at 80% of this month's AI allowance`;
+  const headline = `${name} is at 80% of this month's AI credits`;
   const bodyLines = [
-    `Your community has used ${usedLabel} of its ${allowanceLabel} monthly AI allowance.`,
+    `Your community has used ${usedLabel} of its ${allowanceLabel} this month.`,
     ...(winBackLine ? [winBackLine] : []),
     isGuideTier
       ? resetClause
@@ -141,7 +141,7 @@ export function buildFounderAllowanceAlertCopy(input: {
     ...(upgradeOrBoostClause ? [upgradeOrBoostClause] : []),
   ];
   return {
-    subject: `${name} is at 80% of its monthly AI allowance`,
+    subject: `${name} is at 80% of its monthly AI credits`,
     headline,
     bodyText: bodyLines.join(" "),
     threadMarkdown: [

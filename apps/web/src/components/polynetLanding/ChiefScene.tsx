@@ -85,6 +85,7 @@ export function ChiefScene() {
               <Talk><Theirs><p>{morningBrief(waiting)}</p></Theirs></Talk>
             </div>
             <GuideSuggests
+              label="Needs you"
               drafts={reply === "waiting" ? [REPLY_DRAFT] : []}
               onPost={async () => { track("reply_posted"); setReply("sent"); setSaid("Posted in #general, as your reply to Priya."); return null; }}
               onSkip={() => { track("reply_skipped"); setReply("skipped"); setSaid("Skipped. Nothing was posted."); }}
@@ -93,8 +94,8 @@ export function ChiefScene() {
               onSkipCoach={() => { track("check_in_skipped"); setCheckIn("skipped"); setSaid("Skipped. Nothing was sent to Josh."); }}
               openRow={open} />
             {said ? <p className="csc-said" role="status">{said}</p> : null}
-            <div className="csc-allowance" aria-label="AI this month: $6.40 of $20">
-              <span>AI this month</span><i><b style={{ width: "32%" }} /></i><span>$6.40 of $20</span>
+            <div className="csc-allowance" aria-label="AI credits this month: 6,400 of 20,000">
+              <span>AI credits this month</span><i><b style={{ width: "32%" }} /></i><span>6,400 / 20,000</span>
             </div>
           </div>
         </KitApp>
