@@ -705,7 +705,18 @@ export function KitMembersBoard(props: {
                             getInitials={props.getInitials}
                           />
                           <span className="members-board-card-name">{card.name}</span>
-                          {offTrack ? (
+                          {ready && nextStage ? (
+                            <button
+                              type="button"
+                              className="members-board-move"
+                              title={`Move to ${nextStage.name}`}
+                              aria-label={`Move ${card.name} to ${nextStage.name}`}
+                              disabled={movingId === card.membership_id}
+                              onClick={(event) => { event.stopPropagation(); void moveCardTo(card.membership_id, nextStage.key); }}
+                            >
+                              <ArrowRight size={14} aria-hidden="true" />
+                            </button>
+                          ) : offTrack ? (
                             <i className="members-board-dot" title={JOURNEY_CARD_STATUS_LABELS[card.status]} aria-hidden="true" />
                           ) : null}
                         </div>
@@ -729,16 +740,6 @@ export function KitMembersBoard(props: {
                             ) : null}
                           </span>
                         </div>
-                        {ready && nextStage ? (
-                          <button
-                            type="button"
-                            className="members-board-move"
-                            disabled={movingId === card.membership_id}
-                            onClick={(event) => { event.stopPropagation(); void moveCardTo(card.membership_id, nextStage.key); }}
-                          >
-                            Move to {nextStage.name} →
-                          </button>
-                        ) : null}
                       </div>
                     );
                   })
