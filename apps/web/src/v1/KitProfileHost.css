@@ -1,0 +1,68 @@
+/* KitProfileHost.tsx: what hosts see on a profile. The kit's own colours
+   (--ink, --line, --s1 …, set on .app), never the app-wide names, which are
+   near-invisible under the live theme. Grey for everything; amber only for
+   who needs you; green only for ready to move on; violet only for the AI. */
+
+/* Under the name: one line of where they are and how they're doing. */
+.pfh-sum { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: -4px; }
+.pfh-sum p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0; color: var(--ink3); font-size: 12.5px; line-height: 1.45; }
+.pfh-sum p > span + span::before { content: "·"; margin: 0 7px; color: var(--ink4, var(--ink3)); }
+.pfh-sum-status { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); }
+.pfh-sum-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink3); }
+.pfh-sum-status.is-look { color: color-mix(in srgb, #d9a45b 70%, var(--ink)); }
+.pfh-sum-status.is-look i { background: #d9a45b; box-shadow: 0 0 0 3px rgba(217, 164, 91, .16); }
+.pfh-move {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid rgba(92, 191, 134, .35);
+  border-radius: 999px; background: rgba(92, 191, 134, .08); color: #5cbf86; font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer;
+}
+.pfh-move:hover { background: rgba(92, 191, 134, .16); }
+.pfh-move:disabled { opacity: .55; cursor: default; }
+
+/* The ⋯ by their name. */
+.pf-top-acts { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.pfh-menu { position: relative; }
+.pfh-menu-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--ink3); cursor: pointer; }
+.pfh-menu-btn:hover, .pfh-menu-btn[aria-expanded="true"] { background: var(--s2); color: var(--ink); }
+.pfh-menu-pop {
+  position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; display: flex; flex-direction: column; min-width: 220px; padding: 5px;
+  border: 1px solid var(--line2); border-radius: 10px; background: var(--panel2, #141516); box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+}
+.pfh-menu-pop button { padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: var(--ink2); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.pfh-menu-pop button:hover, .pfh-menu-pop button:focus-visible { outline: none; background: var(--s2); color: var(--ink); }
+.pfh-menu-pop button.is-danger { color: #ff8a7a; }
+.pfh-menu-pop i[role="separator"] { height: 1px; margin: 4px 6px; background: var(--line); }
+
+/* Below the profile, fenced off: to read. */
+.pfh { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; padding: 14px; border: 1px solid var(--line2); border-radius: 12px; background: var(--s1); }
+.pfh-h { display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 11.5px; font-weight: 500; letter-spacing: .02em; text-transform: uppercase; }
+.pfh-sec { display: flex; flex-direction: column; gap: 6px; }
+.pfh-sec[data-focus] { scroll-margin-top: 12px; }
+.pfh-line { display: grid; grid-template-columns: 84px 1fr; gap: 10px; margin: 0; color: var(--ink); font-size: 13px; line-height: 1.45; }
+.pfh-line > span { color: var(--ink3); }
+
+/* The AI's line: purple, like everything the AI did; a way in when it waits on you. */
+.pfh-did { display: flex; align-items: center; gap: 7px; margin: 0; color: color-mix(in srgb, #a78bfa 80%, var(--ink)); font-size: 13px; }
+.pfh-did svg { flex: none; color: #a78bfa; }
+.pfh-did span { flex: 1; min-width: 0; }
+.pfh-did em { color: var(--ink3); font-size: 11.5px; font-style: normal; white-space: nowrap; }
+.pfh-did.is-action {
+  width: 100%; padding: 8px 10px; border: 1px solid rgba(167, 139, 250, .3); border-radius: 8px;
+  background: rgba(167, 139, 250, .07); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.pfh-did.is-action:hover { background: rgba(167, 139, 250, .13); }
+.pfh-did.is-action b { display: inline-flex; align-items: center; gap: 4px; flex: none; color: #c4b5fd; font-weight: 500; }
+
+.pfh-note { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 8px; background: var(--s2); }
+.pfh-note p { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.pfh-note em { color: var(--ink3); font-size: 11.5px; font-style: normal; }
+.pfh-note button { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--ink3); font: inherit; font-size: 11.5px; cursor: pointer; }
+.pfh-note button:hover { color: var(--ink); }
+
+/* One small box, opened from the menu. */
+.pfh-write { display: flex; flex-direction: column; gap: 6px; }
+.pfh-write textarea {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--line2); border-radius: 8px; background: var(--s1);
+  color: var(--ink); font: inherit; font-size: 13px; line-height: 1.45; resize: vertical; outline: none;
+}
+.pfh-write textarea:focus { border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+.pfh-error { margin: 0; color: #ff8a7a; font-size: 12.5px; }

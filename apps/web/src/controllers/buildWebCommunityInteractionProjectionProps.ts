@@ -118,10 +118,6 @@ export function buildWebCommunityInteractionProjectionProps(params: {
   canViewMemberPlanDetails: boolean;
   isActiveCommunityOwner: boolean;
   communityInitials: (name: string) => string;
-  onSetCommunityMemberRole: (membershipId: string, role: "member" | "moderator" | "admin") => Promise<void>;
-  onRemoveCommunityMember: (membershipId: string) => Promise<void>;
-  onBanCommunityMember: (membershipId: string) => Promise<void>;
-  loadMemberBillingHistory: (membershipId: string) => Promise<any>;
 }) {
   const { channels, channelScope, interaction } = params;
   const isReady = channels.isChannelContextReady;
@@ -214,10 +210,6 @@ export function buildWebCommunityInteractionProjectionProps(params: {
     canViewMemberPlanDetails: params.canViewMemberPlanDetails,
     isActiveCommunityOwner: params.isActiveCommunityOwner,
     communityInitials: params.communityInitials,
-    onSetCommunityMemberRole: params.onSetCommunityMemberRole,
-    onRemoveCommunityMember: params.onRemoveCommunityMember,
-    onBanCommunityMember: params.onBanCommunityMember,
-    loadMemberBillingHistory: params.loadMemberBillingHistory,
   };
 }
 

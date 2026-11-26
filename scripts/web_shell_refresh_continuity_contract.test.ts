@@ -168,10 +168,6 @@ describe("web shell refresh continuity contract", () => {
         canViewMemberPlanDetails: false,
         isActiveCommunityOwner: false,
         communityInitials: () => "H",
-        onSetCommunityMemberRole: async () => {},
-        onRemoveCommunityMember: async () => {},
-        onBanCommunityMember: async () => {},
-        loadMemberBillingHistory: async () => null,
       });
     };
 

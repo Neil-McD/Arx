@@ -135,10 +135,6 @@ export type WebCommunityInteractionProjectionProps = {
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;
-  onSetCommunityMemberRole?: (membershipId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
-  onRemoveCommunityMember?: (membershipId: string) => Promise<void> | void;
-  onBanCommunityMember?: (membershipId: string) => Promise<void> | void;
-  loadMemberBillingHistory?: (membershipId: string) => Promise<CloudCommunityMemberBillingHistory | null>;
 };
 
 import {
@@ -1010,16 +1006,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 // What the people panel needs about the community and the viewer, whether it
 // sits beside a channel or is the Members page (WebCommunityMembersPage).
 export function communityRosterProps(props: WebCommunityInteractionProjectionProps) {
-  const memberSettings: ComponentProps<typeof ChannelRosterPanel>["memberSettings"] = {
-    activeCommunity: { id: props.communityId!, owner_id: props.communityOwnerId ?? null },
-    canManageMembers: Boolean(props.canManageCommunityMembers && props.onSetCommunityMemberRole && props.onRemoveCommunityMember && props.onBanCommunityMember),
-    canViewMemberPlanDetails: Boolean(props.canViewMemberPlanDetails), isActiveCommunityOwner: Boolean(props.isActiveCommunityOwner),
-    displayName: props.displayName, getInitials: props.getInitials, communityInitials: props.communityInitials ?? props.getInitials,
-    handleSetCommunityMemberRole: (id, role) => props.onSetCommunityMemberRole?.(id, role),
-    handleRemoveCommunityMember: id => props.onRemoveCommunityMember?.(id),
-    handleBanCommunityMember: id => props.onBanCommunityMember?.(id),
-    loadMemberBillingHistory: id => props.loadMemberBillingHistory?.(id) ?? Promise.resolve(null),
-  };
+
   return {
     joinReview: {
       canReviewJoinRequests: props.canReviewCommunityJoinRequests,
@@ -1038,7 +1025,8 @@ export function communityRosterProps(props: WebCommunityInteractionProjectionPro
     isLoadingPresence: props.isLoadingCommunityPresence,
     currentUserId: props.currentUserId,
     onMessageUser: props.onMessageUser,
-    memberSettings,
+    // Hosts get the Members page (table, board, and the one profile with its ⋯ menu).
+    canManageMembers: Boolean(props.canManageCommunityMembers),
     onOpenProfile: props.onOpenProfile,
     getAvatarColor: props.getAvatarColor,
     getInitials: props.getInitials,
