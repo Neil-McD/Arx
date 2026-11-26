@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 const { cardReason, guideDidShort, stageRuleLine } = await import("../apps/web/src/v1/KitMembersBoard");
 
 test("the guide's last action reads as a few words on the card", () => {
-  expect(guideDidShort("Guide drafted a check-in (waiting on Home)")).toBe("Drafted a check-in · on Home");
+  expect(guideDidShort("Guide drafted a check-in (waiting on Home)")).toBe("Drafted a check-in");
   expect(guideDidShort("Guide sent newcomer welcome · replied")).toBe("Sent newcomer welcome · replied");
   expect(guideDidShort("Guide checked in (course check-in)")).toBe("Checked in (course check-in)");
   expect(guideDidShort(null)).toBeNull();

@@ -55,12 +55,12 @@ function toSaveList(stages: readonly JourneyStageDefinition[]): StageSaveInput[]
 const NEEDS_LOOK: ReadonlySet<JourneyCardStatus> = new Set(["needs_you", "stuck", "quiet"]);
 
 // The guide's note on a card (formatCoachOutcomeSummary, or a move's note),
-// shorter: "Guide drafted a check-in (waiting on Home)" → "Drafted a check-in
-// · on Home"; "Guide sent newcomer welcome · replied" → "Sent newcomer
-// welcome · replied".
+// shorter: "Guide drafted a check-in (waiting on Home)" → "Drafted a
+// check-in" (the full note is the hover text); "Guide sent newcomer welcome
+// · replied" → "Sent newcomer welcome · replied".
 export function guideDidShort(outcome: string | null | undefined): string | null {
   if (!outcome) return null;
-  const short = outcome.replace(/^Guide\s+/, "").replace(/\s*\(waiting on Home\)\s*$/, " · on Home").trim();
+  const short = outcome.replace(/^Guide\s+/, "").replace(/\s*\(waiting on Home\)\s*$/, "").trim();
   return short ? short.charAt(0).toUpperCase() + short.slice(1) : null;
 }
 

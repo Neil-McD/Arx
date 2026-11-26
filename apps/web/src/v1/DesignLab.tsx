@@ -1,7 +1,7 @@
 // Design lab (staging only, design v1): pages built from the kit with the
 // mock's own sample content, so they can be compared with the mock pixel for
 // pixel before real pages move onto the kit. Reached at /design-lab.
-import { useState as useStateLab } from "react";
+import { useEffect as useEffectLab, useState as useStateLab } from "react";
 import {
   Btn,
   cx,
@@ -520,6 +520,9 @@ function sampleJourneyBoard(now: number): CloudMemberJourneyBoard {
 }
 
 function BoardLab() {
+  // The live app's own styles (App.tsx loads them; the lab otherwise doesn't),
+  // so the board is judged under the theme people really see it in.
+  useEffectLab(() => { void import("../index.css"); }, []);
   const [now] = useStateLab(() => Date.now());
   const [board, setBoard] = useStateLab(() => sampleJourneyBoard(now));
   const [search, setSearch] = useStateLab("");
