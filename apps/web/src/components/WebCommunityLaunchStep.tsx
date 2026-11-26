@@ -55,18 +55,49 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   const [listed, setListed] = useState(false);
   const [monthlyCents, setMonthlyCents] = useState<number | null>(null);
   const [opening, setOpening] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [aiCopied, setAiCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<"invite" | "ai" | "appSecret" | "webhookSecret" | "appPrompt" | null>(null);
+  const copiedTimerRef = useRef<number | null>(null);
   const [connectedApp, setConnectedApp] = useState<LaunchConnectedAppResult | null>(null);
   const [connectingApp, setConnectingApp] = useState(false);
   const [connectAppError, setConnectAppError] = useState<string | null>(null);
-  const [appSecretCopied, setAppSecretCopied] = useState(false);
-  const [webhookSecretCopied, setWebhookSecretCopied] = useState(false);
-  const [appPromptCopied, setAppPromptCopied] = useState(false);
   const ensureSessionRef = useRef(props.ensureSession);
   ensureSessionRef.current = props.ensureSession;
   const communityId = props.community.id;
   const slug = props.community.slug;
+  const convexUrl = String((import.meta as any).env?.VITE_CONVEX_URL ?? "");
+  const apiOrigin = convexUrl ? convexUrl.replace(".convex.cloud", ".convex.site") : "";
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) {
+        window.clearTimeout(copiedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const copyValue = async (
+    key: "invite" | "ai" | "appSecret" | "webhookSecret" | "appPrompt",
+    text: string,
+  ) => {
+    try {
+      const ok = await tryCopyTextToClipboard(text);
+      if (copiedTimerRef.current !== null) {
+        window.clearTimeout(copiedTimerRef.current);
+        copiedTimerRef.current = null;
+      }
+      if (ok) {
+        setCopiedKey(key);
+        copiedTimerRef.current = window.setTimeout(() => {
+          setCopiedKey((current) => (current === key ? null : current));
+          copiedTimerRef.current = null;
+        }, 2200);
+      } else {
+        setCopiedKey(null);
+      }
+    } catch {
+      setCopiedKey(null);
+    }
+  };
 
   // Started once per community, even if the effect runs again (a remount in
   // development): the run that started is the one that finishes.
@@ -143,19 +174,13 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   }, [communityId, slug]);
 
   const copy = () => {
-    void navigator.clipboard?.writeText(`https://${communityPageAddress(slug)}`).then(() => setCopied(true), () => setCopied(false));
+    void copyValue("invite", `https://${communityPageAddress(slug)}`);
   };
   const copyAiSetup = async () => {
-    try {
-      const setup = buildPolynetMcpSetupForOrigin(window.location.origin, {
-        community: { name: props.community.name, slug },
-      });
-      const ok = await tryCopyTextToClipboard(setup.setupBundle);
-      setAiCopied(ok);
-      if (ok) window.setTimeout(() => setAiCopied(false), 2200);
-    } catch {
-      setAiCopied(false);
-    }
+    const setup = buildPolynetMcpSetupForOrigin(window.location.origin, {
+      community: { name: props.community.name, slug },
+    });
+    await copyValue("ai", setup.setupBundle);
   };
   const connectApp = async (input: { name: string; appUrl: string }) => {
     if (connectingApp) return;
@@ -193,20 +218,14 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   };
   const copyAppSecret = async () => {
     if (!connectedApp) return;
-    const ok = await tryCopyTextToClipboard(connectedApp.secret);
-    setAppSecretCopied(ok);
-    if (ok) window.setTimeout(() => setAppSecretCopied(false), 2200);
+    await copyValue("appSecret", connectedApp.secret);
   };
   const copyWebhookSecret = async () => {
     if (!connectedApp?.webhookSigningSecret) return;
-    const ok = await tryCopyTextToClipboard(connectedApp.webhookSigningSecret);
-    setWebhookSecretCopied(ok);
-    if (ok) window.setTimeout(() => setWebhookSecretCopied(false), 2200);
+    await copyValue("webhookSecret", connectedApp.webhookSigningSecret);
   };
   const copyAppPrompt = async () => {
-    if (!connectedApp) return;
-    const convex = String((import.meta as any).env?.VITE_CONVEX_URL ?? "");
-    const apiOrigin = convex ? convex.replace(".convex.cloud", ".convex.site") : "";
+    if (!connectedApp || !apiOrigin || saving) return;
     const prompt = buildConnectedAppSetupPrompt({
       communityName: props.community.name,
       appName: connectedApp.name,
@@ -216,11 +235,12 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
       guide: connectYourAppGuide,
       communityUrl: `${window.location.origin}/c/${encodeURIComponent(slug)}`,
       hasAppLink: Boolean(connectedApp.appUrl),
-      tiers: [],
+      tiers:
+        monthlyCents && monthlyCents > 0
+          ? [{ key: "member", name: `Member ($${Math.round(monthlyCents / 100)}/mo)`, grants: [] }]
+          : [],
     });
-    const ok = await tryCopyTextToClipboard(prompt);
-    setAppPromptCopied(ok);
-    if (ok) window.setTimeout(() => setAppPromptCopied(false), 2200);
+    await copyValue("appPrompt", prompt);
   };
   const open = async () => {
     if (opening) return;
@@ -263,20 +283,20 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
         note={note}
         error={error}
         opening={opening}
-        copied={copied}
+        copied={copiedKey === "invite"}
         onCopy={copy}
-        aiCopied={aiCopied}
+        aiCopied={copiedKey === "ai"}
         onCopyAiSetup={() => void copyAiSetup()}
         connectedApp={connectedApp}
         connectingApp={connectingApp}
         connectAppError={connectAppError}
-        appSecretCopied={appSecretCopied}
-        webhookSecretCopied={webhookSecretCopied}
-        appPromptCopied={appPromptCopied}
+        appSecretCopied={copiedKey === "appSecret"}
+        webhookSecretCopied={copiedKey === "webhookSecret"}
+        appPromptCopied={copiedKey === "appPrompt"}
         onConnectApp={connectApp}
         onCopyAppSecret={() => void copyAppSecret()}
         onCopyWebhookSecret={() => void copyWebhookSecret()}
-        onCopyAppPrompt={() => void copyAppPrompt()}
+        onCopyAppPrompt={apiOrigin && !saving ? () => void copyAppPrompt() : undefined}
         onOpen={() => void open()}
       />
     </WebBlockingSetupModal>

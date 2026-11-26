@@ -2852,17 +2852,32 @@
 :root[data-design="v1"] a.nav-item-app {
   text-decoration: none;
   box-sizing: border-box;
+  min-width: 0;
 }
 :root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer a.nav-item-app {
-  margin: 4px 0 6px;
+  margin: 4px 0 0;
   border: 1px solid var(--surface-raised-edge);
   background: var(--surface-raised);
   color: var(--text-ink-primary);
   font-weight: 500;
 }
+:root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer a.nav-item-app + .community-nav-invite {
+  margin-top: 6px;
+}
 :root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer a.nav-item-app:hover {
   border-color: var(--border-strong);
-  background: var(--hover-overlay);
+  background: var(--bg-card-hover, var(--hover-overlay));
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav-v1-primary ~ .community-nav-footer a.nav-item-app {
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav-v1-primary ~ .community-nav-footer a.nav-item-app + .community-nav-invite {
+  margin-top: 0;
+}
+:root[data-design="v1"][data-theme="light"] .blocking-setup-modal {
+  background: var(--bg-modal, #ffffff);
 }
 
 /* AI harness logo strip (shared by Step 3 Launch and Settings -> Your AI). */
@@ -2874,7 +2889,7 @@
   margin-top: 8px;
 }
 :root[data-design="v1"] .ai-harness-strip.is-compact {
-  margin-top: 6px;
+  margin-top: 8px;
   gap: 5px;
 }
 :root[data-design="v1"] .ai-harness-chip {
@@ -2884,12 +2899,15 @@
   height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid var(--surface-raised-edge);
-  background: var(--surface-raised);
+  border: 1px solid var(--border-strong, var(--surface-raised-edge));
+  background: var(--hover-overlay);
   font-size: 11.5px;
   font-weight: 500;
-  color: var(--text-ink-secondary);
+  color: var(--text-ink-primary);
   white-space: nowrap;
+}
+:root[data-design="v1"] .settings-v1-row:has(.ai-harness-strip) .settings-v1-row-control {
+  flex: 0 0 auto;
 }
 :root[data-design="v1"] .ai-harness-icon {
   display: inline-flex;

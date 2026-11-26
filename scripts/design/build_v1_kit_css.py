@@ -579,8 +579,12 @@ css += """
 .app .evday.past{opacity:.55}
 .app .evnext{display:grid;grid-template-columns:84px minmax(0,1fr);gap:0 22px;margin-top:10px;padding:22px 24px;border-radius:12px;border:1px solid var(--line2);background:var(--panel2,var(--s1))}
 .app .evnext.on{border-color:rgba(var(--w),.28)}
-.app .evnext-cancelled{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:8px;border:1px solid rgba(240,104,104,.28);background:rgba(240,104,104,.07);font:inherit;font-size:13px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),border-color .14s var(--ease)}
-.app .evnext-cancelled:hover{background:rgba(240,104,104,.12);border-color:rgba(240,104,104,.4);color:var(--ink)}
+.app .evnext-cancelled{grid-column:1/-1;display:flex;align-items:flex-start;flex-wrap:nowrap;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:8px;border:1px solid var(--bad-line,rgba(240,104,104,.28));background:rgba(240,104,104,.07);font:inherit;font-size:13px;line-height:1.4;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),border-color .14s var(--ease)}
+.app .evnext-cancelled>span:last-child{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+.app .evnext-cancelled:hover{background:rgba(240,104,104,.12);border-color:var(--bad-line,rgba(240,104,104,.4));color:var(--ink)}
+.app .nx-cancel{display:flex;align-items:center;gap:7px;width:100%;margin-bottom:8px;padding:6px 8px;border-radius:7px;border:1px solid var(--bad-line,rgba(240,104,104,.28));background:rgba(240,104,104,.07);font:inherit;font-size:12px;line-height:1.35;color:var(--ink2);text-align:left;cursor:pointer;transition:background .14s var(--ease),color .14s var(--ease)}
+.app .nx-cancel>span:last-child{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .nx-cancel:hover{background:rgba(240,104,104,.12);color:var(--ink)}
 .app .evnext h2{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0 0;font-size:22px;font-weight:600;letter-spacing:-.012em;color:var(--ink)}
 .app .evsoon{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--aurora-ink)}
 .app .evsoon i{width:6px;height:6px;border-radius:50%;background:var(--aurora-ink);box-shadow:0 0 0 4px rgba(var(--au),.18)}
@@ -592,7 +596,7 @@ css += """
 .app .evtag{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;border:1px solid var(--line2);font-size:11.5px;font-weight:500;letter-spacing:0;color:var(--ink2);white-space:nowrap}
 .app .evtag.pod{border-color:rgba(var(--au),.4);color:var(--aurora-ink)}
 .app .evtag.pub{border-color:rgba(95,211,141,.38);color:#7fdca4}
-.app .evtag.bad{border-color:rgba(240,104,104,.4);color:#f38b8b}
+.app .evtag.bad{border-color:var(--bad-line,rgba(240,104,104,.4));color:var(--bad,#f38b8b)}
 .app .evrow.evcancelled .evrow-t b{color:var(--ink2)}
 .app .evnote-input{width:100%;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);font-size:13px}
 .app .evnote-input::placeholder{color:var(--ink3)}
@@ -1182,7 +1186,7 @@ css += """
 /* Every step is as tall as the tallest, so the window holds still between them. */
 .app .startc-form{min-height:432px}
 /* One bar under every step: back on the left, the dots in the middle, forward on the right. */
-.app .startc-foot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-top:auto;padding-top:18px;border-top:1px solid var(--line)}
+.app .startc-foot{position:sticky;bottom:0;z-index:2;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-top:auto;padding:18px 0 4px;border-top:1px solid var(--line);background:var(--bg-modal,var(--s0,#0d0e11))}
 .app .startc-foot-go{display:flex;justify-content:flex-end}
 .app .startc-foot .btn{height:38px;padding:0 16px;gap:7px;border-radius:9px;font-size:14px;font-weight:500}
 .app .startc-foot .btn.go{padding:0 18px;box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 6px 18px -8px rgba(0,0,0,.6)}

@@ -1,7 +1,8 @@
 // Your app (one door, slice 2a): connect the builder's own app to this
 // community. The app asks Polynet what someone has here, server to server
 // with its secret, and hears when that changes. Secrets are shown once.
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { announceCommunityAppLinksChanged, COMMUNITY_PLANS_CHANGED_EVENT } from "../controllers/communityAppLinks";
 import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
 import {
@@ -74,15 +75,34 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
     } finally { setBusy(false); }
   };
 
+  const copyTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
   if (!apps) return null;
   const origin = apiOrigin();
   const communityUrl = props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}` : null;
   const activeTiers = tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants }));
   const copyText = (key: string, text: string, fallbackError = "Couldn't copy. Try again.") => {
-    void navigator.clipboard?.writeText(text).then(
-      () => { setCopied(key); window.setTimeout(() => setCopied(null), 2000); },
-      () => setError(fallbackError),
-    );
+    void tryCopyTextToClipboard(text).then((ok) => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+      if (!ok) {
+        setError(fallbackError);
+        return;
+      }
+      setCopied(key);
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopied((current) => (current === key ? null : current));
+        copyTimerRef.current = null;
+      }, 2000);
+    });
   };
   const copyPrompt = (app: CloudConnectedApp) => {
     const prompt = buildConnectedAppSetupPrompt({
@@ -107,9 +127,9 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
     });
     copyText(`unified:${app.app_id}`, prompt);
   };
-  const copyLandingPagePrompt = () => {
+  const copyLandingPagePrompt = (targetApp?: CloudConnectedApp | null) => {
     if (!communityUrl || !props.communitySlug) return;
-    const primaryApp = apps[0] ?? null;
+    const primaryApp = targetApp ?? apps.find((item) => Boolean(item.app_url)) ?? apps[0] ?? null;
     const prompt = buildCustomLandingPagePrompt({
       communityName: props.communityName ?? "your community",
       communitySlug: props.communitySlug,
@@ -118,9 +138,10 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       tiers: activeTiers,
       appName: primaryApp?.name ?? null,
       appUrl: primaryApp?.app_url ?? null,
-      appId: primaryApp?.app_id ?? null,
+      appId: primaryApp?.app_url ? primaryApp.app_id : null,
     });
-    copyText("landing-page", prompt, "Couldn't copy the landing page prompt. Try again.");
+    const key = targetApp ? `landing-page:${targetApp.app_id}` : "landing-page";
+    copyText(key, prompt, "Couldn't copy the landing page prompt. Try again.");
   };
   const addressRow = (app: CloudConnectedApp, field: "appUrl" | "webhookUrl") => {
     const isApp = field === "appUrl";
@@ -294,7 +315,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       {apps.length && origin ? (
         <SettingsGroup label="Set up with your AI">
           {apps.map((app) => (
-            <div key={app.app_id}>
+            <Fragment key={app.app_id}>
               {communityUrl ? (
                 <SettingsRow
                   label={apps.length > 1 ? `Unified gate prompt for ${app.name}` : "New app (Sign in with Polynet)"}
@@ -311,35 +332,51 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
               >
                 <SettingsButton onClick={() => copyPrompt(app)}>{copied === app.app_id ? "Copied" : "Copy prompt"}</SettingsButton>
               </SettingsRow>
-            </div>
+            </Fragment>
           ))}
           <SettingsRow label="API address"><span className="settings-v1-value is-mono">{origin}</span></SettingsRow>
           {communityUrl ? <SettingsRow label="Link to your community" help="Put it in your app; buyers return here or bounce straight back to your app after checkout."><span className="settings-v1-value is-mono">{communityUrl}</span></SettingsRow> : null}
-          {communityUrl && activeTiers.length > 0 ? (
-            <SettingsRow label="Direct plan checkout links" help="Pre-select a plan and return buyers to your app after checkout." stacked>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-                {activeTiers.map((tier) => {
-                  const returnAppId = apps.find((item) => Boolean(item.app_url))?.app_id ?? null;
-                  const link = buildCommunityPlanCheckoutUrl({
-                    communityUrl,
-                    tierKey: tier.key,
-                    appId: returnAppId,
-                  });
-                  const copyKey = `plan:${tier.key}`;
-                  return (
-                    <div key={tier.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                      <span className="settings-v1-value is-mono" style={{ overflowWrap: "anywhere" }}>
-                        {tier.name}: {link}
-                      </span>
-                      <SettingsButton onClick={() => copyText(copyKey, link)}>
-                        {copied === copyKey ? "Copied" : "Copy link"}
-                      </SettingsButton>
-                    </div>
-                  );
-                })}
-              </div>
-            </SettingsRow>
-          ) : null}
+          {communityUrl && activeTiers.length > 0 ? (() => {
+            const linkedApps = apps.filter((item) => Boolean(item.app_url));
+            const linkTargets: Array<CloudConnectedApp | null> = linkedApps.length > 0 ? linkedApps : [null];
+            return linkTargets.map((targetApp) => (
+              <SettingsRow
+                key={targetApp ? `plan-links:${targetApp.app_id}` : "plan-links:community"}
+                label={
+                  targetApp && linkTargets.length > 1
+                    ? `Direct plan checkout links (${targetApp.name})`
+                    : "Direct plan checkout links"
+                }
+                help={
+                  targetApp
+                    ? `Pre-select a plan and return buyers to ${targetApp.name} after checkout.`
+                    : "Pre-select a plan for buyers on your community checkout page."
+                }
+                stacked
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+                  {activeTiers.map((tier) => {
+                    const link = buildCommunityPlanCheckoutUrl({
+                      communityUrl,
+                      tierKey: tier.key,
+                      appId: targetApp?.app_id ?? null,
+                    });
+                    const copyKey = `plan:${targetApp?.app_id ?? "none"}:${tier.key}`;
+                    return (
+                      <div key={tier.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span className="settings-v1-value is-mono" style={{ overflowWrap: "anywhere" }}>
+                          {tier.name}: {link}
+                        </span>
+                        <SettingsButton onClick={() => copyText(copyKey, link)}>
+                          {copied === copyKey ? "Copied" : "Copy link"}
+                        </SettingsButton>
+                      </div>
+                    );
+                  })}
+                </div>
+              </SettingsRow>
+            ));
+          })() : null}
           <SettingsRow label="The guide" help="How connected apps work, step by step.">
             <a className={settingsButtonClass()} href="/docs/guides/connect-your-app" target="_blank" rel="noreferrer">Read the guide</a>
           </SettingsRow>
@@ -347,14 +384,32 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       ) : null}
       {communityUrl ? (
         <SettingsGroup label="Custom landing page">
-          <SettingsRow
-            label="Landing page prompt"
-            help="Paste into your AI to build a custom site hosted anywhere (Vercel, Cloudflare). Every button sends visitors straight to your Polynet join and checkout page."
-          >
-            <SettingsButton onClick={copyLandingPagePrompt}>
-              {copied === "landing-page" ? "Copied" : "Copy landing page prompt"}
-            </SettingsButton>
-          </SettingsRow>
+          {(() => {
+            const linkedApps = apps.filter((item) => Boolean(item.app_url));
+            if (linkedApps.length > 1) {
+              return linkedApps.map((app) => (
+                <SettingsRow
+                  key={`landing:${app.app_id}`}
+                  label={`Landing page prompt (${app.name})`}
+                  help={`Paste into your AI to build a custom site hosted anywhere. Every button sends visitors straight to checkout and back to ${app.name}.`}
+                >
+                  <SettingsButton onClick={() => copyLandingPagePrompt(app)}>
+                    {copied === `landing-page:${app.app_id}` ? "Copied" : "Copy landing page prompt"}
+                  </SettingsButton>
+                </SettingsRow>
+              ));
+            }
+            return (
+              <SettingsRow
+                label="Landing page prompt"
+                help="Paste into your AI to build a custom site hosted anywhere (Vercel, Cloudflare). Every button sends visitors straight to your Polynet join and checkout page."
+              >
+                <SettingsButton onClick={() => copyLandingPagePrompt()}>
+                  {copied === "landing-page" ? "Copied" : "Copy landing page prompt"}
+                </SettingsButton>
+              </SettingsRow>
+            );
+          })()}
         </SettingsGroup>
       ) : null}
     </>

@@ -19,7 +19,7 @@ import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetail
 import { eventAddressKey, eventIdFromAddressKey } from "../../../../shared/webAppRouteState";
 import { registerMobilePageBack } from "../components/CommunityPageHeader";
 import {
-  earlierCancelledForEvent,
+  earlierCancelledOccurrencesForEvent,
   eventDateBlock,
   eventDayWord,
   eventRepeatWord,
@@ -337,7 +337,22 @@ export function KitEventsList(props: {
   const last = props.past[0] ?? null;
   const showPast = pastOpen || (upcoming.length === 0 && cancelledList.length === 0);
   const featuredBlock = featured ? eventDateBlock(featured.starts_at, false) : null;
-  const earlierCancelled = featured ? earlierCancelledForEvent(featured, cancelledList) : null;
+  const earlierCancelled = featured ? earlierCancelledOccurrencesForEvent(featured, cancelledList) : [];
+  const earlierCancelledPrimary = earlierCancelled[0] ?? null;
+  const earlierCancelledText = (() => {
+    if (earlierCancelled.length === 0) return "";
+    const days = earlierCancelled.map((item) => eventDayWord(item.starts_at, props.now));
+    const lead =
+      days.length === 1
+        ? `${days[0]} is cancelled`
+        : days.length === 2
+          ? `${days[0]} and ${days[1]} are cancelled`
+          : `${days[0]}, ${days[1]} (+${days.length - 2} more) are cancelled`;
+    const note = earlierCancelled.find((item) => item.cancellation_note?.trim())?.cancellation_note?.trim() ?? "";
+    if (!note) return `${lead}.`;
+    const punctuatedNote = /[.!?]$/.test(note) ? note : `${note}.`;
+    return `${lead} — ${punctuatedNote}`;
+  })();
 
   return (
     <>
@@ -370,17 +385,14 @@ export function KitEventsList(props: {
             <>
               <span className={cx("lab")} style={{ display: "block", marginTop: 28 }}>Next</span>
               <div className={cx("evnext", pickedId === featured.id && "on", props.editingId === featured.parent_event_id && "evdim")} id={`community-event-${featured.id}`}>
-                {earlierCancelled ? (
+                {earlierCancelledPrimary ? (
                   <button
                     type="button"
                     className={cx("evnext-cancelled")}
-                    onClick={() => pick(earlierCancelled)}
+                    onClick={() => pick(earlierCancelledPrimary)}
                   >
                     <span className={cx("evtag bad")}>Cancelled</span>
-                    <span>
-                      {eventDayWord(earlierCancelled.starts_at, props.now)} is cancelled
-                      {earlierCancelled.cancellation_note ? ` — ${earlierCancelled.cancellation_note}` : "."}
-                    </span>
+                    <span>{earlierCancelledText}</span>
                   </button>
                 ) : null}
                 <span className={cx("evday")}><b>{featuredBlock.number}</b><span>{featuredBlock.word}</span></span>
