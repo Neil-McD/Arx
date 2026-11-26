@@ -151,17 +151,21 @@ function opener(target: OwnerNoticed["target"] | MemberNextStep["target"], actio
   };
 }
 
-// Any problem the guide has already prepared a concrete draft for shows once
-// as that draft, not also as a duplicate generic legacy reminder row.
+// Any problem the guide has already prepared concrete drafts for shows once
+// as those drafts, not also as a duplicate generic legacy reminder row.
+// Aggregate newcomer/course-stall reminders stay visible unless the waiting
+// drafts demonstrably cover the affected members and course.
 export function noticedWithoutDrafted(
   noticed: OwnerNoticed[],
   drafts: Array<Pick<ReplyDraftView, "author" | "channel">>,
-  coachDrafts: Array<Pick<MemberCoachDraftView, "reason">> = [],
+  coachDrafts: Array<Pick<MemberCoachDraftView, "reason" | "member_name" | "signal_summary">> = [],
 ): OwnerNoticed[] {
-  const hasNewcomerDraft = coachDrafts.some(
-    (draft) => draft.reason === "quiet_newcomer" || draft.reason === "member_onboarding",
+  const quietNewcomerDrafts = coachDrafts.filter((draft) => draft.reason === "quiet_newcomer");
+  const quietNewcomerNames = new Set(
+    quietNewcomerDrafts.map((draft) => draft.member_name.trim().toLowerCase()).filter(Boolean),
   );
-  const hasStalledLearnerDraft = coachDrafts.some((draft) => draft.reason === "course_stall");
+  const courseStallDrafts = coachDrafts.filter((draft) => draft.reason === "course_stall");
+
   return noticed.filter((entry) => {
     if (
       entry.key === "questions_waiting" &&
@@ -175,8 +179,35 @@ export function noticedWithoutDrafted(
     ) {
       return false;
     }
-    if (entry.key === "quiet_newcomers" && hasNewcomerDraft) return false;
-    if (entry.key === "course_stall" && hasStalledLearnerDraft) return false;
+    if (entry.key === "quiet_newcomers") {
+      const moreMatch = entry.title.match(/^(.+), (.+) and (\d+) more joined and haven't said hello$/);
+      if (moreMatch) {
+        const expected = 2 + Number(moreMatch[3]);
+        const namedCovered =
+          quietNewcomerNames.has(moreMatch[1].trim().toLowerCase()) &&
+          quietNewcomerNames.has(moreMatch[2].trim().toLowerCase());
+        if (namedCovered && quietNewcomerDrafts.length >= expected) return false;
+      } else {
+        const pairMatch = entry.title.match(/^(.+) and (.+) joined and haven't said hello$/);
+        if (pairMatch) {
+          const namedCovered =
+            quietNewcomerNames.has(pairMatch[1].trim().toLowerCase()) &&
+            quietNewcomerNames.has(pairMatch[2].trim().toLowerCase());
+          if (namedCovered && quietNewcomerDrafts.length >= 2) return false;
+        }
+      }
+    }
+    if (entry.key === "course_stall") {
+      const stallMatch = entry.title.match(/^(\d+) members stopped after lesson \d+ of (.+)$/);
+      if (stallMatch) {
+        const expected = Number(stallMatch[1]);
+        const courseName = stallMatch[2].trim();
+        const coveredForCourse = courseStallDrafts.filter((draft) =>
+          draft.signal_summary.startsWith(`Started ${courseName} (`),
+        ).length;
+        if (coveredForCourse >= expected) return false;
+      }
+    }
     return true;
   });
 }

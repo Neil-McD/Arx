@@ -291,17 +291,35 @@ test("a question or member signal the guide drafted for shows once, not also as 
   // Another person's question, or the same person in another channel, is still its own row.
   expect(noticedWithoutDrafted(noticed, [{ author: "Sara", channel: "general" }, { author: "Rafael", channel: "wins" }])).toHaveLength(3);
   expect(noticedWithoutDrafted(noticed, [])).toHaveLength(3);
-  // Proactive check-in/welcome drafts deduplicate quiet_newcomers and course_stall too.
+  // Proactive check-in drafts deduplicate quiet_newcomers and course_stall only when
+  // they actually cover the affected newcomers / course.
   expect(
     noticedWithoutDrafted(
       noticed,
       [{ author: "Rafael", channel: "general" }],
-      [{ reason: "quiet_newcomer" }, { reason: "course_stall" }],
+      [
+        { reason: "quiet_newcomer", member_name: "Dario", signal_summary: "Joined 4 days ago" },
+        { reason: "quiet_newcomer", member_name: "Lena", signal_summary: "Joined 4 days ago" },
+        { reason: "quiet_newcomer", member_name: "Priya", signal_summary: "Joined 4 days ago" },
+        { reason: "course_stall", member_name: "Sam", signal_summary: "Started Start Here (2/5) · paused before Lesson 3 for 8 days" },
+        { reason: "course_stall", member_name: "Alex", signal_summary: "Started Start Here (2/5) · paused before Lesson 3 for 8 days" },
+        { reason: "course_stall", member_name: "Tanya", signal_summary: "Started Start Here (2/5) · paused before Lesson 3 for 8 days" },
+        { reason: "course_stall", member_name: "Dev", signal_summary: "Started Start Here (2/5) · paused before Lesson 3 for 8 days" },
+      ],
     ),
   ).toEqual([]);
+  // Day-0 onboarding drafts, partial coverage, or drafts for a different course preserve the aggregate reminder.
   expect(
-    noticedWithoutDrafted(noticed, [], [{ reason: "member_onboarding" }]).map((row) => row.key),
-  ).toEqual(["questions_waiting", "course_stall"]);
+    noticedWithoutDrafted(
+      noticed,
+      [],
+      [
+        { reason: "member_onboarding", member_name: "Newbie", signal_summary: "Joined today" },
+        { reason: "quiet_newcomer", member_name: "Lena", signal_summary: "Joined 4 days ago" },
+        { reason: "course_stall", member_name: "Sam", signal_summary: "Started Another Course (1/4) · paused before Lesson 2 for 8 days" },
+      ],
+    ).map((row) => row.key),
+  ).toEqual(["questions_waiting", "quiet_newcomers", "course_stall"]);
 });
 
 test("unified host Needs you in guide style prioritizes tags and join requests ahead of guide drafts in one deck", async () => {
