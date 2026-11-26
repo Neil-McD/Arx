@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { SIGNED_OUT_MARKER } from "../components/SignedOutNote";
 
 import type { AuthSession } from "../auth";
 import {
@@ -240,8 +241,10 @@ export function useWebAccountGraphLifecycle() {
     [onSignedOut],
   );
 
+  // Signed out: the home page, with a short "You're signed out." note
+  // (SignedOutNote in main.tsx reads the marker and removes it).
   const onAfterSignOut = useCallback(() => {
-    if (window.location.pathname !== "/") window.location.assign("/");
+    window.location.assign(`/?${SIGNED_OUT_MARKER}`);
   }, []);
 
   return {

@@ -317,3 +317,63 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+/* WaitScreen.tsx: every in-between moment (opening, signing in, something
+   failed). The page's colour, the mark, one line; one button if it failed. */
+.wait-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: var(--bg-app, #08090a);
+  color: var(--text-muted, #9a9fa8);
+  font-family: var(--font-sans, "Geist Variable", ui-sans-serif, system-ui, sans-serif);
+  text-align: center;
+}
+.wait-screen.is-overlay { background: color-mix(in srgb, var(--bg-app, #08090a) 72%, transparent); }
+.wait-screen.is-inline { position: relative; inset: auto; z-index: auto; min-height: 50vh; background: transparent; }
+.wait-screen.is-delayed { animation: wait-in .25s ease .45s both; }
+@keyframes wait-in { from { opacity: 0; } }
+.wait-mark { color: var(--text-primary, #f7f8f8); opacity: .9; animation: wait-breathe 1.8s ease-in-out infinite; }
+.wait-screen.is-failed .wait-mark { animation: none; opacity: .5; }
+.wait-line { max-width: 320px; margin: 0; font-size: 14px; line-height: 1.5; }
+.wait-screen.is-failed .wait-line { color: var(--text-primary, #f7f8f8); }
+.wait-action {
+  margin-top: 2px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, .14));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary, #f7f8f8);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wait-action:hover { background: color-mix(in srgb, var(--text-primary, #f7f8f8) 7%, transparent); }
+.wait-action:focus-visible { outline: 2px solid var(--focus-ring, #8b7cf6); outline-offset: 2px; }
+@keyframes wait-breathe { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .wait-mark { animation: none; } }
+
+/* SignedOutNote.tsx: a short note at the top after signing out. */
+.signed-out-note {
+  position: fixed;
+  z-index: 120;
+  top: 16px;
+  left: 50%;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, .12));
+  border-radius: 999px;
+  background: var(--bg-card, #1c1d20);
+  color: var(--text-primary, #f7f8f8);
+  font-family: var(--font-sans, "Geist Variable", ui-sans-serif, system-ui, sans-serif);
+  font-size: 13.5px;
+  transform: translateX(-50%);
+  animation: signed-out-in .25s ease both;
+}
+@keyframes signed-out-in { from { opacity: 0; transform: translate(-50%, -6px); } }

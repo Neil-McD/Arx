@@ -312,7 +312,7 @@ for (const protectedProjection of [
 }
 assert.match(
   routeAccessHold,
-  /props\.errorMessage \?\? "Polynet could not finish verifying your session\."[\s\S]*Try again/,
+  /<WaitScreen overlay line=\{props\.errorMessage \?\? "We couldn't reach Polynet\. Check your connection and try again\."\}[\s\S]*label: "Try again"/,
   "a held route must expose visible, recoverable failure UI only after a real error",
 );
 assert.match(

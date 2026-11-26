@@ -4403,3 +4403,10 @@
 :root[data-design="v1"] .community-dm-kit-profile-back:hover { color: var(--text-ink-primary, #eef0f4); }
 :root[data-design="v1"] .community-dm-kit-profile-back svg { width: 14px; height: 14px; }
 
+
+/* Deleting a channel failed (the yes was given in the app's own card). */
+:root[data-design="v1"] .community-channel-header-error {
+  margin: 6px 24px 0;
+  color: var(--danger-text);
+  font-size: 13px;
+}

@@ -20,6 +20,8 @@ import {
   installAppUpdateWakeupListeners,
 } from "./lib/appUpdateRecovery";
 import { RecoveryCard } from "./components/SurfaceErrorBoundary";
+import { WaitScreen } from "./components/WaitScreen";
+import { SignedOutNote, takeSignedOutMarker } from "./components/SignedOutNote";
 import { isLikelyModuleLoadFailure, resilientImport } from "./lib/resilientLazy";
 
 // Design system v1's second voice (the agent) is loaded only when the build
@@ -29,6 +31,8 @@ if (document.documentElement.dataset.design === "v1") {
 }
 
 captureDistributionAttributionFromLocation();
+// Read before the address decides which page to show.
+const justSignedOut = takeSignedOutMarker();
 
 type ErrorBoundaryState = {
   error: Error | null;
@@ -114,30 +118,20 @@ class ErrorBoundary extends React.Component<
     if (!this.state.error) return this.props.children;
 
     if (this.state.isAutoReloading) {
-      return (
-        <div
-          aria-busy="true"
-          style={{
-            minHeight: "100vh",
-            background: "var(--bg-app, #08090a)",
-          }}
-        />
-      );
+      return <WaitScreen delayed />;
     }
 
     const message = this.state.error?.message ?? "Unknown error";
     const stack = this.state.error?.stack ?? "";
-    const title = this.state.isRecoveringModuleLoad ? "Polynet just updated" : "Refresh Polynet";
-    const copy = this.state.isRecoveringModuleLoad
-      ? "Refresh to load the latest version."
-      : "Something interrupted Polynet. Refresh to pick up where you left off.";
+    const line = this.state.isRecoveringModuleLoad
+      ? "Polynet just updated. Refresh to get the latest."
+      : "Something went wrong. Refresh to carry on where you were.";
 
     if (import.meta.env.PROD || this.state.isRecoveringModuleLoad) {
       return (
         <RecoveryCard
           fullScreen
-          title={title}
-          copy={copy}
+          line={line}
           buttonLabel="Refresh"
           onAction={() => window.location.reload()}
         />
@@ -256,7 +250,7 @@ const rootView = isDesignLab
       ? <React.Suspense fallback={null}><WebConnectedAppAuthorizePage /></React.Suspense>
       : publicEntryRoute
         ? <React.Suspense fallback={null}><WebPublicVisitorShell initialRoute={publicEntryRoute} /></React.Suspense>
-        : <React.Suspense fallback={null}><App /></React.Suspense>;
+        : <React.Suspense fallback={<WaitScreen delayed />}><App /></React.Suspense>;
 
 document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);
 
@@ -265,6 +259,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ErrorBoundary>
       <CommunityVisualIdentityRegistryProvider>
         {rootView}
+        <SignedOutNote show={justSignedOut} />
       </CommunityVisualIdentityRegistryProvider>
     </ErrorBoundary>
   </React.StrictMode>

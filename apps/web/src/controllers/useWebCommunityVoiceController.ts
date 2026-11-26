@@ -72,7 +72,7 @@ export function useWebCommunityVoiceController(
     ) => {
       if (!params.isProfileSetupResolved) {
         params.showAppToastMessage(
-          "We are still verifying your account. Try again in a moment.",
+          "Still signing you in. Try again in a moment.",
         );
         return;
       }

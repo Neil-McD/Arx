@@ -221,46 +221,6 @@
   transform: translateX(-50%);
 }
 
-.web-route-access-hold-failure {
-  position: fixed;
-  z-index: 100;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  width: min(360px, calc(100vw - 40px));
-  padding: 20px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  background: var(--bg-card-solid, var(--bg-card));
-  color: var(--text-muted);
-  text-align: center;
-  box-shadow: var(--web-popover-shadow);
-  transform: translate(-50%, -50%);
-}
-
-.web-route-access-hold-failure p {
-  margin: 0;
-}
-
-.web-route-access-hold-failure button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.web-route-access-hold-failure button:focus-visible {
-  outline: 2px solid var(--focus-ring, var(--accent));
-  outline-offset: 4px;
-  border-radius: 2px;
-}
-
 /* Community drawer context controls use the same glass material as top chrome. */
 .community-interaction-drawer-back {
   padding: 2px;

@@ -371,7 +371,7 @@ export function useWebCommunityChatController(
       : [...attachmentsRef.current];
     if (!rawText && attachmentsToSend.length === 0) return;
     if (!current.isProfileSetupResolved) {
-      setError("We are still verifying your account. Try again in a moment.");
+      setError("Still signing you in. Try again in a moment.");
       return;
     }
     if (!current.isProfileSetupComplete) {
