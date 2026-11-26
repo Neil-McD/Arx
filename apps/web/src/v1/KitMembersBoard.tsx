@@ -3,11 +3,13 @@ import {
   ArrowLeft,
   ArrowRight,
   Award,
-  CheckCircle2,
+  ListChecks,
   MoreHorizontal,
+  PenLine,
   Plus,
   Search,
   Sparkles,
+  Target,
   Trash2,
   X,
 } from "lucide-react";
@@ -27,8 +29,8 @@ import {
   type JourneyStageCheckpoint,
   type JourneyStageDefinition,
 } from "../../../../shared/communityMemberJourney";
-import type { CloudMemberJourneyBoard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
-import { cx } from "./kit";
+import type { CloudMemberJourneyBoard, CloudMemberJourneyCard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import { cx, usePhoneLayout } from "./kit";
 import { Face } from "./KitMembersTable";
 import "./KitMembersBoard.css";
 
@@ -48,6 +50,41 @@ function toSaveList(stages: readonly JourneyStageDefinition[]): StageSaveInput[]
   }));
 }
 
+// Only these statuses get a mark on a card: everyone else is fine (Neil,
+// Nov 25: the board shows exceptions, not everyone's state).
+const NEEDS_LOOK: ReadonlySet<JourneyCardStatus> = new Set(["needs_you", "stuck", "quiet"]);
+
+// The guide's note on a card (formatCoachOutcomeSummary, or a move's note),
+// shorter: "Guide drafted a check-in (waiting on Home)" → "Drafted a check-in
+// · on Home"; "Guide sent newcomer welcome · replied" → "Sent newcomer
+// welcome · replied".
+export function guideDidShort(outcome: string | null | undefined): string | null {
+  if (!outcome) return null;
+  const short = outcome.replace(/^Guide\s+/, "").replace(/\s*\(waiting on Home\)\s*$/, " · on Home").trim();
+  return short ? short.charAt(0).toUpperCase() + short.slice(1) : null;
+}
+
+// Why a card is marked, from what the board really knows (the status rule in
+// shared/communityMemberJourney.ts deriveMemberJourneyStatus): a payment
+// problem, a status the host set, days quiet, or a check-in not answered.
+export function cardReason(card: Pick<CloudMemberJourneyCard, "status" | "status_is_manual" | "money_kind" | "last_active_at" | "joined_at">, nowMs: number): string | null {
+  if (card.money_kind === "on_hold") return "Payment on hold";
+  if (card.money_kind === "cancelling") return "Cancelling";
+  if (card.status_is_manual) return `Marked ${JOURNEY_CARD_STATUS_LABELS[card.status].toLowerCase()} by you`;
+  const at = Date.parse(card.last_active_at ?? card.joined_at ?? "");
+  const days = Number.isFinite(at) ? Math.floor((nowMs - at) / 86_400_000) : null;
+  if (card.status === "quiet") return days !== null ? `Quiet for ${days} days` : "Quiet for a month";
+  if (card.status === "stuck") return days !== null && days >= 10 ? `Quiet for ${days} days` : "Hasn't answered a check-in";
+  return null;
+}
+
+// What moves someone on from a stage, in a line.
+export function stageRuleLine(stage: Pick<JourneyStageDefinition, "checkpoints">, isLast: boolean): string {
+  const labels = (stage.checkpoints ?? []).map((cp) => cp.label.charAt(0).toLowerCase() + cp.label.slice(1));
+  if (labels.length) return `To move on: ${labels.join(", ")}`;
+  return isLast ? "The last stage" : "No checkpoints yet";
+}
+
 export function KitMembersBoard(props: {
   board: CloudMemberJourneyBoard | null;
   loading: boolean;
@@ -63,7 +100,7 @@ export function KitMembersBoard(props: {
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
 }) {
-  const [statusFilter, setStatusFilter] = useState<JourneyCardStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<JourneyCardStatus | "all" | "ready">("all");
   const [localStages, setLocalStages] = useState<JourneyStageDefinition[] | null>(null);
   const [editingField, setEditingField] = useState<{ stageKey: string; field: "name" | "goal" } | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -75,6 +112,9 @@ export function KitMembersBoard(props: {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropStageKey, setDropStageKey] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+  const [phoneStageKey, setPhoneStageKey] = useState<string | null>(null);
+  const phone = usePhoneLayout();
 
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const stagesRef = useRef<JourneyStageDefinition[]>([]);
@@ -92,6 +132,7 @@ export function KitMembersBoard(props: {
       if (!popoverRef.current?.contains(event.target as Node)) {
         setOpenMenuStageKey(null);
         setOpenCpStageKey(null);
+        setConfirmDeleteKey(null);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -294,13 +335,28 @@ export function KitMembersBoard(props: {
     return counts;
   }, [searchedCards]);
 
+  const lastStageKey = stages[stages.length - 1]?.key ?? null;
+  const isReady = (card: (typeof allCards)[number]) =>
+    card.checkpoints_total > 0 && card.checkpoints_done >= card.checkpoints_total && card.stage_key !== lastStageKey;
+  const readyCount = searchedCards.filter(isReady).length;
   const visibleCards = useMemo(
     () =>
       statusFilter === "all"
         ? searchedCards
-        : searchedCards.filter((card) => card.status === statusFilter),
-    [searchedCards, statusFilter],
+        : statusFilter === "ready"
+          ? searchedCards.filter(isReady)
+          : searchedCards.filter((card) => card.status === statusFilter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedCards, statusFilter, lastStageKey],
   );
+  const moveCardTo = async (membershipId: string, stageKey: string) => {
+    setMovingId(membershipId);
+    try {
+      await props.onMoveCard(membershipId, stageKey);
+    } finally {
+      setMovingId(null);
+    }
+  };
 
   const activatedPercent = useMemo(() => {
     if (allCards.length === 0 || stages.length < 2) return 0;
@@ -339,50 +395,61 @@ export function KitMembersBoard(props: {
     return <p className={cx("sub")} style={{ marginTop: 18 }}>Loading member board…</p>;
   }
 
+  // The phone's tab, or the first stage when it's unset or its stage was deleted.
+  const phoneKey = stages.some((stage) => stage.key === phoneStageKey) ? phoneStageKey : stages[0]?.key ?? null;
+  const shownStages = phone ? stages.filter((stage) => stage.key === phoneKey) : stages;
+
   return (
-    <div className="members-board-shell">
+    <div className={phone ? "members-board-shell is-phone" : "members-board-shell"}>
       <div className="members-board-toolbar">
-        <div className="members-board-toolbar-left">
-          <div className="members-board-search">
-            <Search size={13} strokeWidth={1.8} aria-hidden="true" />
-            <input
-              type="search"
-              value={props.search}
-              onChange={(event) => props.onSearch(event.target.value)}
-              placeholder="Search members…"
-              aria-label="Search members on board"
-            />
-          </div>
-          <div className="members-board-filters" role="group" aria-label="Filter cards by status">
-            <button
-              type="button"
-              className={cx("chip", statusFilter === "all" && "sel")}
-              aria-pressed={statusFilter === "all"}
-              onClick={() => setStatusFilter("all")}
-            >
-              All · {searchedCards.length}
+        <div className="members-board-search">
+          <Search size={13} strokeWidth={1.8} aria-hidden="true" />
+          <input
+            type="search"
+            value={props.search}
+            onChange={(event) => props.onSearch(event.target.value)}
+            placeholder="Search members…"
+            aria-label="Search members on board"
+          />
+        </div>
+        <div className="members-board-filters" role="group" aria-label="Filter cards">
+          <button type="button" className={statusFilter === "all" ? "members-board-filter is-on" : "members-board-filter"}
+            aria-pressed={statusFilter === "all"} onClick={() => setStatusFilter("all")}>
+            Everyone <em>{searchedCards.length}</em>
+          </button>
+          {readyCount ? (
+            <button type="button" className={statusFilter === "ready" ? "members-board-filter is-ready is-on" : "members-board-filter is-ready"}
+              aria-pressed={statusFilter === "ready"} onClick={() => setStatusFilter(statusFilter === "ready" ? "all" : "ready")}>
+              <i className="members-board-dot" />Ready to move <em>{readyCount}</em>
             </button>
-            {JOURNEY_CARD_STATUSES.map((status) => (
-              <button
-                key={status}
-                type="button"
-                className={cx("chip", statusFilter === status && "sel")}
-                aria-pressed={statusFilter === status}
-                onClick={() => setStatusFilter(status)}
-              >
-                {JOURNEY_CARD_STATUS_LABELS[status]}
-                {statusCounts[status] ? ` · ${statusCounts[status]}` : ""}
-              </button>
-            ))}
-          </div>
+          ) : null}
+          {[...JOURNEY_CARD_STATUSES.filter((status) => NEEDS_LOOK.has(status)), ...JOURNEY_CARD_STATUSES.filter((status) => !NEEDS_LOOK.has(status))]
+            .filter((status) => statusCounts[status] > 0).map((status) => (
+            <button key={status} type="button"
+              className={`members-board-filter is-${status}${statusFilter === status ? " is-on" : ""}`}
+              aria-pressed={statusFilter === status} onClick={() => setStatusFilter(statusFilter === status ? "all" : status)}>
+              {NEEDS_LOOK.has(status) ? <i className="members-board-dot" /> : null}{JOURNEY_CARD_STATUS_LABELS[status]} <em>{statusCounts[status]}</em>
+            </button>
+          ))}
         </div>
-        <div className="members-board-toolbar-right">
-          <span className="members-board-pulse" aria-label="Board summary">
-            <strong>{activatedPercent}%</strong> activated
-            {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
-          </span>
-        </div>
+        <span className="members-board-pulse" aria-label="Board summary">
+          <strong>{activatedPercent}%</strong> activated
+          {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
+        </span>
       </div>
+
+      {phone ? (
+        <div className="members-board-tabs" role="tablist" aria-label="Stages">
+          {stages.map((stage) => {
+            const on = stage.key === phoneKey;
+            return (
+              <button key={stage.key} type="button" role="tab" aria-selected={on} className={on ? "is-on" : ""} onClick={() => setPhoneStageKey(stage.key)}>
+                {stage.name} <em>{visibleCards.filter((card) => card.stage_key === stage.key).length}</em>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {stageError ? (
         <p className={cx("bad")} role="alert" style={{ margin: "6px 0 0", fontSize: 12.5 }}>
@@ -391,7 +458,9 @@ export function KitMembersBoard(props: {
       ) : null}
 
       <div className="members-board-columns" role="region" aria-label="Member journey board">
-        {stages.map((stage, stageIndex) => {
+        {shownStages.map((stage) => {
+          const stageIndex = stages.findIndex((entry) => entry.key === stage.key);
+          const nextStage = stages[stageIndex + 1] ?? null;
           const stageCards = visibleCards
             .filter((card) => card.stage_key === stage.key)
             .sort((a, b) => {
@@ -406,6 +475,8 @@ export function KitMembersBoard(props: {
           const isEditingGoal = editingField?.stageKey === stage.key && editingField.field === "goal";
           const menuOpen = openMenuStageKey === stage.key;
           const cpOpen = openCpStageKey === stage.key;
+          const confirming = confirmDeleteKey === stage.key;
+          const moveTo = stages.find((entry) => entry.key !== stage.key)?.name ?? "the first stage";
 
           return (
             <div
@@ -424,7 +495,7 @@ export function KitMembersBoard(props: {
                 void handleDropOnStage(stage.key);
               }}
             >
-              <div className="members-board-col-head">
+              <div className="members-board-col-head" title={stage.goal || undefined}>
                 <div className="members-board-col-title">
                   {isEditingName ? (
                     <input
@@ -457,53 +528,92 @@ export function KitMembersBoard(props: {
                       {stage.name}
                     </button>
                   )}
-
-                  <div className="members-board-col-head-right">
-                    <span className="members-board-col-count">{stageCards.length}</span>
-                    <div className="members-board-col-menu-wrap" ref={menuOpen ? popoverRef : undefined}>
-                      <button
-                        type="button"
-                        className="members-board-col-menu-btn"
-                        aria-label={`Stage options for ${stage.name}`}
-                        aria-haspopup="menu"
-                        aria-expanded={menuOpen}
-                        onClick={() => {
-                          setOpenCpStageKey(null);
-                          setOpenMenuStageKey(menuOpen ? null : stage.key);
-                        }}
-                      >
-                        <MoreHorizontal size={14} aria-hidden="true" />
-                      </button>
-                      {menuOpen ? (
-                        <div className="members-board-popover" role="menu">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={stageIndex === 0 || savingStage}
-                            onClick={() => void moveStage(stageIndex, -1)}
-                          >
-                            <ArrowLeft size={12} aria-hidden="true" />Move left
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={stageIndex === stages.length - 1 || savingStage}
-                            onClick={() => void moveStage(stageIndex, 1)}
-                          >
-                            <ArrowRight size={12} aria-hidden="true" />Move right
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="is-danger"
-                            disabled={stages.length <= MIN_JOURNEY_STAGES || savingStage}
-                            onClick={() => void deleteStage(stage.key)}
-                          >
-                            <Trash2 size={12} aria-hidden="true" />Delete stage
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                  <span className="members-board-col-count">{stageCards.length}</span>
+                  <div className="members-board-col-menu-wrap" ref={menuOpen || cpOpen ? popoverRef : undefined}>
+                    <button
+                      type="button"
+                      className="members-board-col-menu-btn"
+                      aria-label={`Stage options for ${stage.name}`}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      onClick={() => {
+                        setOpenCpStageKey(null);
+                        setConfirmDeleteKey(null);
+                        setOpenMenuStageKey(menuOpen ? null : stage.key);
+                      }}
+                    >
+                      <MoreHorizontal size={14} aria-hidden="true" />
+                    </button>
+                    {menuOpen ? (
+                      <div className="members-board-popover" role="menu">
+                        {confirming ? (
+                          <div className="members-board-confirm">
+                            <p>Delete {stage.name}? {stageCards.length ? `Its ${stageCards.length} ${stageCards.length === 1 ? "member moves" : "members move"} to ${moveTo}.` : "No one is in it."}</p>
+                            <div>
+                              <button type="button" className="is-danger" disabled={savingStage}
+                                onClick={() => { setConfirmDeleteKey(null); void deleteStage(stage.key); }}>Delete stage</button>
+                              <button type="button" onClick={() => setConfirmDeleteKey(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <button type="button" role="menuitem" disabled={savingStage} onClick={() => startInlineEdit(stage, "goal")}>
+                              <Target size={12} aria-hidden="true" />{stage.goal ? "Edit the goal" : "Add a goal"}
+                            </button>
+                            <button type="button" role="menuitem" disabled={savingStage}
+                              onClick={() => { setOpenMenuStageKey(null); setCustomCpDraft(""); setOpenCpStageKey(stage.key); }}>
+                              <ListChecks size={12} aria-hidden="true" />Checkpoints
+                            </button>
+                            <button type="button" role="menuitem" disabled={stageIndex === 0 || savingStage} onClick={() => void moveStage(stageIndex, -1)}>
+                              <ArrowLeft size={12} aria-hidden="true" />Move left
+                            </button>
+                            <button type="button" role="menuitem" disabled={stageIndex === stages.length - 1 || savingStage} onClick={() => void moveStage(stageIndex, 1)}>
+                              <ArrowRight size={12} aria-hidden="true" />Move right
+                            </button>
+                            <button type="button" role="menuitem" className="is-danger"
+                              disabled={stages.length <= MIN_JOURNEY_STAGES || savingStage} onClick={() => setConfirmDeleteKey(stage.key)}>
+                              <Trash2 size={12} aria-hidden="true" />Delete stage
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
+                    {cpOpen ? (
+                      <div className="members-board-popover is-cp" role="menu">
+                        <span className="members-board-popover-label">Ticks itself</span>
+                        {BUILTIN_JOURNEY_CHECKPOINTS.map((builtin) => {
+                          const active = (stage.checkpoints ?? []).some((cp) => cp.key === builtin.key);
+                          return (
+                            <button key={builtin.key} type="button" role="menuitemcheckbox" aria-checked={active}
+                              disabled={savingStage || (!active && (stage.checkpoints ?? []).length >= MAX_STAGE_CHECKPOINTS)}
+                              onClick={() => void toggleStageBuiltinCheckpoint(stage.key, builtin)}>
+                              <span className={active ? "members-board-check is-on" : "members-board-check"} aria-hidden="true">{active ? "✓" : ""}</span>
+                              {builtin.label}
+                            </button>
+                          );
+                        })}
+                        {(stage.checkpoints ?? []).some((cp) => cp.kind === "custom") ? (
+                          <span className="members-board-popover-label">You tick these</span>
+                        ) : null}
+                        {(stage.checkpoints ?? []).filter((cp) => cp.kind === "custom").map((cp) => (
+                          <span key={cp.key} className="members-board-popover-row">
+                            {cp.label}
+                            <button type="button" aria-label={`Remove checkpoint ${cp.label}`} disabled={savingStage}
+                              onClick={() => void removeStageCheckpoint(stage.key, cp.key)}>
+                              <X size={11} aria-hidden="true" />
+                            </button>
+                          </span>
+                        ))}
+                        {(stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS ? (
+                          <form className="members-board-popover-custom"
+                            onSubmit={(event) => { event.preventDefault(); void addStageCustomCheckpoint(stageIndex, stage.key); }}>
+                            <input value={customCpDraft} maxLength={MAX_CHECKPOINT_LABEL_CHARS} placeholder="Your own milestone…"
+                              aria-label={`Custom milestone for ${stage.name}`} onChange={(event) => setCustomCpDraft(event.target.value)} />
+                            <button type="submit" disabled={savingStage || !customCpDraft.trim()}>Add</button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -512,7 +622,7 @@ export function KitMembersBoard(props: {
                     className="members-board-inline-input is-goal"
                     value={editValue}
                     maxLength={MAX_STAGE_GOAL_CHARS}
-                    placeholder="Add a goal for this stage…"
+                    placeholder="What this stage is for…"
                     autoFocus
                     disabled={savingStage}
                     aria-label={`${stage.name} goal`}
@@ -530,105 +640,40 @@ export function KitMembersBoard(props: {
                     }}
                   />
                 ) : (
-                  <button
-                    type="button"
-                    className={`members-board-inline-goal${stage.goal ? "" : " is-empty"}`}
-                    title="Click to edit stage goal"
-                    onClick={() => startInlineEdit(stage, "goal")}
-                  >
-                    {stage.goal || "Add a goal…"}
+                  <button type="button" className="members-board-col-rule" title="What moves someone on"
+                    onClick={() => { setOpenMenuStageKey(null); setCustomCpDraft(""); setOpenCpStageKey(cpOpen ? null : stage.key); }}>
+                    {stageRuleLine(stage, stageIndex === stages.length - 1)}
                   </button>
                 )}
-
-                <div className="members-board-col-cps">
-                  {(stage.checkpoints ?? []).map((cp) => (
-                    <span key={cp.key} className="members-board-col-cp-pill">
-                      <span>{cp.label}</span>
-                      <button
-                        type="button"
-                        aria-label={`Remove checkpoint ${cp.label}`}
-                        disabled={savingStage}
-                        onClick={() => void removeStageCheckpoint(stage.key, cp.key)}
-                      >
-                        <X size={10} aria-hidden="true" />
-                      </button>
-                    </span>
-                  ))}
-                  {(stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS ? (
-                    <div className="members-board-col-menu-wrap" ref={cpOpen ? popoverRef : undefined}>
-                      <button
-                        type="button"
-                        className="members-board-col-cp-add"
-                        aria-haspopup="menu"
-                        aria-expanded={cpOpen}
-                        onClick={() => {
-                          setOpenMenuStageKey(null);
-                          setCustomCpDraft("");
-                          setOpenCpStageKey(cpOpen ? null : stage.key);
-                        }}
-                      >
-                        <Plus size={10} aria-hidden="true" />Checkpoint
-                      </button>
-                      {cpOpen ? (
-                        <div className="members-board-popover is-cp" role="menu">
-                          <span className="members-board-popover-label">Automatic proof</span>
-                          {BUILTIN_JOURNEY_CHECKPOINTS.map((builtin) => {
-                            const active = (stage.checkpoints ?? []).some((cp) => cp.key === builtin.key);
-                            return (
-                              <button
-                                key={builtin.key}
-                                type="button"
-                                role="menuitemcheckbox"
-                                aria-checked={active}
-                                disabled={savingStage}
-                                onClick={() => void toggleStageBuiltinCheckpoint(stage.key, builtin)}
-                              >
-                                <span>{active ? "✓ " : ""}{builtin.label}</span>
-                              </button>
-                            );
-                          })}
-                          <form
-                            className="members-board-popover-custom"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              void addStageCustomCheckpoint(stageIndex, stage.key);
-                            }}
-                          >
-                            <input
-                              value={customCpDraft}
-                              maxLength={MAX_CHECKPOINT_LABEL_CHARS}
-                              placeholder="Custom milestone…"
-                              aria-label={`Custom milestone for ${stage.name}`}
-                              onChange={(event) => setCustomCpDraft(event.target.value)}
-                            />
-                            <button type="submit" disabled={savingStage || !customCpDraft.trim()}>
-                              Add
-                            </button>
-                          </form>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
               </div>
 
               <div className="members-board-col-list">
                 {stageCards.length === 0 ? (
                   <div className="members-board-col-empty">
-                    {draggingId ? "Drop here to move" : "No members in this stage"}
+                    {draggingId ? "Drop here to move" : "No one here yet"}
                   </div>
                 ) : (
                   stageCards.map((card) => {
                     const selected = props.openKey === card.membership_id;
                     const dragging = draggingId === card.membership_id || movingId === card.membership_id;
-                    const allCheckpointsDone =
-                      card.checkpoints_total > 0 && card.checkpoints_done >= card.checkpoints_total;
+                    const ready = isReady(card);
+                    const offTrack = NEEDS_LOOK.has(card.status);
+                    const did = guideDidShort(card.agent_outcome);
+                    const lastSeen = card.last_active_at ? `Last seen ${props.timeFor(card.last_active_at, props.now).toLowerCase()}` : null;
+                    // Off track: why. Otherwise their latest win, or what they're working on.
+                    const line = offTrack
+                      ? cardReason(card, props.now) ?? lastSeen
+                      : card.latest_outcome
+                        ? <><Award size={12} aria-hidden="true" />{card.latest_outcome.text}</>
+                        : card.working_on ?? card.activity_summary ?? lastSeen;
                     return (
-                      <button
+                      <div
                         key={card.membership_id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         draggable
-                        className={`members-board-card${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}`}
+                        aria-label={`${card.name}${offTrack ? `, ${JOURNEY_CARD_STATUS_LABELS[card.status]}` : ""}${ready ? ", ready to move on" : ""}`}
+                        className={["members-board-card", `is-${card.status}`, ready ? "is-ready" : "", selected ? "is-selected" : "", dragging ? "is-dragging" : ""].filter(Boolean).join(" ")}
                         onDragStart={(event) => {
                           setDraggingId(card.membership_id);
                           event.dataTransfer.effectAllowed = "move";
@@ -639,6 +684,13 @@ export function KitMembersBoard(props: {
                           setDropStageKey(null);
                         }}
                         onClick={() => props.onOpenCard(card.membership_id)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            props.onOpenCard(card.membership_id);
+                          }
+                        }}
                       >
                         <div className="members-board-card-top">
                           <Face
@@ -652,58 +704,40 @@ export function KitMembersBoard(props: {
                             getAvatarColor={props.getAvatarColor}
                             getInitials={props.getInitials}
                           />
-                          <div className="members-board-card-who">
-                            <span className="members-board-card-name">{card.name}</span>
-                            <span className="members-board-card-meta">
-                              {card.plan_label}
-                              {card.activity_summary ? ` · ${card.activity_summary}` : ""}
-                              {!card.activity_summary && card.last_active_at
-                                ? ` · ${props.timeFor(card.last_active_at, props.now)}`
-                                : ""}
+                          <span className="members-board-card-name">{card.name}</span>
+                          {offTrack ? (
+                            <i className="members-board-dot" title={JOURNEY_CARD_STATUS_LABELS[card.status]} aria-hidden="true" />
+                          ) : null}
+                        </div>
+                        {line ? <p className="members-board-card-line">{line}</p> : null}
+                        <div className="members-board-card-foot">
+                          {card.checkpoints_total > 0 ? (
+                            <span className="members-board-card-bar" title={`${card.checkpoints_done} of ${card.checkpoints_total} checkpoints`}>
+                              {Array.from({ length: card.checkpoints_total }, (_, index) => (
+                                <i key={index} className={index < card.checkpoints_done ? "is-done" : ""} />
+                              ))}
                             </span>
-                          </div>
-                          <span className={`members-board-status is-${card.status}`}>
-                            {JOURNEY_CARD_STATUS_LABELS[card.status]}
+                          ) : null}
+                          <span className="members-board-card-marks">
+                            {card.founder_instruction ? (
+                              <span title={`Your note to the guide: ${card.founder_instruction}`}><PenLine size={12} aria-label="Your note to the guide" /></span>
+                            ) : null}
+                            {did ? (
+                              <span className="is-ai" title={[card.agent_outcome, card.agent_outcome_at ? props.timeFor(card.agent_outcome_at, props.now) : null].filter(Boolean).join(" · ")}><Sparkles size={12} aria-hidden="true" />{did}</span>
+                            ) : null}
                           </span>
                         </div>
-
-                        {card.checkpoints_total > 0 ? (
-                          <div className={`members-board-card-progress${allCheckpointsDone ? " is-ready" : ""}`}>
-                            <CheckCircle2 size={11} aria-hidden="true" />
-                            <span>
-                              {card.checkpoints_done}/{card.checkpoints_total}{" "}
-                              {allCheckpointsDone ? "ready to advance" : card.checkpoints_total === 1 ? "checkpoint" : "checkpoints"}
-                            </span>
-                          </div>
+                        {ready && nextStage ? (
+                          <button
+                            type="button"
+                            className="members-board-move"
+                            disabled={movingId === card.membership_id}
+                            onClick={(event) => { event.stopPropagation(); void moveCardTo(card.membership_id, nextStage.key); }}
+                          >
+                            Move to {nextStage.name} →
+                          </button>
                         ) : null}
-
-                        {card.latest_outcome ? (
-                          <div className="members-board-card-win">
-                            <Award size={11} aria-hidden="true" />
-                            <span>{card.latest_outcome.text}</span>
-                          </div>
-                        ) : null}
-
-                        {card.working_on ? (
-                          <p className="members-board-card-note">{card.working_on}</p>
-                        ) : null}
-
-                        {card.founder_instruction ? (
-                          <p className="members-board-card-instruction" title="Instruction for your Guide">
-                            <Sparkles size={11} aria-hidden="true" style={{ marginRight: 4, verticalAlign: -1 }} />
-                            {card.founder_instruction}
-                          </p>
-                        ) : null}
-
-                        {card.agent_outcome ? (
-                          <div className="members-board-card-outcome">
-                            <span>{card.agent_outcome}</span>
-                            {card.agent_outcome_at ? (
-                              <em>{props.timeFor(card.agent_outcome_at, props.now)}</em>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </button>
+                      </div>
                     );
                   })
                 )}
@@ -712,7 +746,7 @@ export function KitMembersBoard(props: {
           );
         })}
 
-        {stages.length < MAX_JOURNEY_STAGES ? (
+        {!phone && stages.length < MAX_JOURNEY_STAGES ? (
           <button
             type="button"
             className="members-board-add-stage-col"
