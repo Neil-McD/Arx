@@ -11,6 +11,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { wakePausedCommunityHeartbeatIfNeeded } from "./communityHeartbeatWake";
+import { maybeAutoAdvanceMemberOnActivity } from "./communityMemberJourney";
 import { outReasonFor } from "../shared/communityMemberRecords";
 import {
   communityResourceIsLiveModulePage,
@@ -75,6 +76,11 @@ async function syncCourseProgressForUserLesson(
         lastCompletedAt: args.completedAt,
         updatedAt: args.completedAt,
       });
+      await maybeAutoAdvanceMemberOnActivity(ctx, {
+        communityId: args.communityId,
+        userId: args.userId,
+        nowMs: args.completedAt,
+      }).catch(() => {});
       return;
     }
     const already = existing.doneResourceIds.some((id: any) => String(id) === String(args.resourceId));
@@ -87,6 +93,13 @@ async function syncCourseProgressForUserLesson(
       lastCompletedAt: nextLastAt,
       updatedAt: args.completedAt,
     });
+    if (!already) {
+      await maybeAutoAdvanceMemberOnActivity(ctx, {
+        communityId: args.communityId,
+        userId: args.userId,
+        nowMs: args.completedAt,
+      }).catch(() => {});
+    }
     return;
   }
 

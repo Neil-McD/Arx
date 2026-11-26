@@ -372,12 +372,15 @@ export function KitMembersPage(props: {
                     });
                     setBoardVersion((version) => version + 1);
                   }}
-                  onSaveStages={async (stages) => {
+                  onSaveStages={async (stages, options) => {
                     if (!scope) return null;
                     const saved = await saveCloudCommunityJourneyStages({
                       session: scope.session,
                       communityId: scope.communityId,
                       stages,
+                      ...(options?.autoAdvanceEnabled !== undefined
+                        ? { autoAdvanceEnabled: options.autoAdvanceEnabled }
+                        : {}),
                     });
                     setBoard((prev) =>
                       prev
