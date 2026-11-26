@@ -63,6 +63,7 @@ export type CommunityLandingPage = {
   events: Array<{ title: string; starts_at: string; place: string | null; repeats: string | null }>;
   guide: Record<string, never> | null;
   app: { name: string; url: string; host: string } | null;
+  return_app?: { app_id: string; name: string; url: string } | null;
 };
 
 async function clientFor(session: unknown | null) {
@@ -71,10 +72,16 @@ async function clientFor(session: unknown | null) {
   return { client, authSubject: authSubject ?? undefined };
 }
 
-export async function fetchCommunityLanding(session: unknown | null, communitySlug: string): Promise<CommunityLandingPage | null> {
+export async function fetchCommunityLanding(
+  session: unknown | null,
+  communitySlug: string,
+  options?: { appId?: string | null },
+): Promise<CommunityLandingPage | null> {
   const { client, authSubject } = await clientFor(session);
   const page = (await client.query("communityLanding:getCommunityLandingPage" as any, {
-    communitySlug, ...(authSubject ? { authSubject } : {}),
+    communitySlug,
+    ...(authSubject ? { authSubject } : {}),
+    ...(options?.appId ? { appId: options.appId } : {}),
   })) as CommunityLandingPage | { ok: false };
   return page && page.ok ? page : null;
 }
@@ -91,7 +98,7 @@ export async function cancelCommunityJoinRequestFromLanding(session: unknown, co
 
 export async function startCommunityLandingCheckout(
   session: unknown | null,
-  params: { communitySlug: string; billingPeriod: "monthly" | "annual"; plan: string | null },
+  params: { communitySlug: string; billingPeriod: "monthly" | "annual"; plan: string | null; appId?: string | null },
 ): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> {
   // Signed out (cash first): through the app's own server function, which
   // limits each visitor's checkouts (api/community-checkout.js).
@@ -99,7 +106,12 @@ export async function startCommunityLandingCheckout(
     const response = await fetch("/api/community-checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ communitySlug: params.communitySlug, billingPeriod: params.billingPeriod, plan: params.plan }),
+      body: JSON.stringify({
+        communitySlug: params.communitySlug,
+        billingPeriod: params.billingPeriod,
+        plan: params.plan,
+        ...(params.appId ? { appId: params.appId } : {}),
+      }),
     });
     const payload = (await response.json().catch(() => null)) as
       | { ok: true; checkout_url: string; session_id: string; buyer_secret: string }
@@ -113,6 +125,7 @@ export async function startCommunityLandingCheckout(
     communitySlug: params.communitySlug,
     billingPeriod: params.billingPeriod,
     ...(params.plan ? { plan: params.plan } : {}),
+    ...(params.appId ? { appId: params.appId } : {}),
     ...(authSubject ? { authSubject } : {}),
   })) as { checkout_url: string; session_id: string; buyer_secret: string | null };
 }

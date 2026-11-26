@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { announceCommunityAppLinksChanged, COMMUNITY_PLANS_CHANGED_EVENT } from "../controllers/communityAppLinks";
 import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
 import {
+  buildCommunityPlanCheckoutUrl,
   buildConnectedAppSetupPrompt,
   buildCustomLandingPagePrompt,
+  buildUnifiedGateAppPrompt,
 } from "../../../../shared/connectedAppSetupPrompt";
 import { fetchCloudCommunityTiers, type CloudCommunityTier } from "../../../../shared/cloudCommunityTiersGateway";
 import {
@@ -30,8 +32,8 @@ function apiOrigin(): string {
 export function CommunityConnectedAppsSection(props: { communityId: string; communityName?: string; communitySlug?: string; communityOneLiner?: string | null; session: unknown; ensureSession: (session: any) => Promise<any | null> }) {
   const [apps, setApps] = useState<CloudConnectedApp[] | null>(null);
   const [adding, setAdding] = useState<{ name: string; appUrl: string; webhookUrl: string } | null>(null);
-  // One address at a time: where members open the app, or where webhooks go.
-  const [editing, setEditing] = useState<{ appId: string; field: "appUrl" | "webhookUrl"; url: string } | null>(null);
+  // One address at a time: where members open the app, where webhooks go, or adding a Sign in with Polynet callback.
+  const [editing, setEditing] = useState<{ appId: string; field: "appUrl" | "webhookUrl" | "addRedirect"; url: string } | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,6 +66,8 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
     catch (failure) {
       const code = String((failure as Error)?.message ?? "");
       setError(code.includes("webhook_url_invalid") ? "Use your app's public https address for webhooks."
+        : code.includes("redirect_url_invalid") ? "Use a public https callback URL (or http://localhost for local dev) with no # fragment."
+        : code.includes("redirect_urls_full") ? "Each app can register up to five sign-in callback URLs."
         : code.includes("connected_app_url_invalid") ? "Use your app's public https address."
         : code.includes("apps_full") ? "A community can connect up to three apps."
           : code.includes("name_required") ? "Give your app a name." : "Couldn't save. Try again.");
@@ -73,13 +77,35 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
   if (!apps) return null;
   const origin = apiOrigin();
   const communityUrl = props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}` : null;
+  const activeTiers = tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants }));
+  const copyText = (key: string, text: string, fallbackError = "Couldn't copy. Try again.") => {
+    void navigator.clipboard?.writeText(text).then(
+      () => { setCopied(key); window.setTimeout(() => setCopied(null), 2000); },
+      () => setError(fallbackError),
+    );
+  };
   const copyPrompt = (app: CloudConnectedApp) => {
     const prompt = buildConnectedAppSetupPrompt({
       communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
       hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide, communityUrl, hasAppLink: Boolean(app.app_url),
-      tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
+      tiers: activeTiers,
     });
-    void navigator.clipboard?.writeText(prompt).then(() => { setCopied(app.app_id); window.setTimeout(() => setCopied(null), 2000); }, () => setError("Couldn't copy. Open the guide instead."));
+    copyText(app.app_id, prompt, "Couldn't copy. Open the guide instead.");
+  };
+  const copyUnifiedGatePrompt = (app: CloudConnectedApp) => {
+    if (!communityUrl) return;
+    const prompt = buildUnifiedGateAppPrompt({
+      communityName: props.communityName ?? "your community",
+      appName: app.name,
+      appId: app.app_id,
+      appOrigin: window.location.origin,
+      apiOrigin: origin,
+      communityUrl,
+      redirectUrls: app.redirect_urls ?? [],
+      hasWebhook: Boolean(app.webhook_url),
+      tiers: activeTiers,
+    });
+    copyText(`unified:${app.app_id}`, prompt);
   };
   const copyLandingPagePrompt = () => {
     if (!communityUrl || !props.communitySlug) return;
@@ -89,14 +115,12 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       communitySlug: props.communitySlug,
       communityUrl,
       oneLiner: props.communityOneLiner ?? null,
-      tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
+      tiers: activeTiers,
       appName: primaryApp?.name ?? null,
       appUrl: primaryApp?.app_url ?? null,
+      appId: primaryApp?.app_id ?? null,
     });
-    void navigator.clipboard?.writeText(prompt).then(
-      () => { setCopied("landing-page"); window.setTimeout(() => setCopied(null), 2000); },
-      () => setError("Couldn't copy the landing page prompt. Try again."),
-    );
+    copyText("landing-page", prompt, "Couldn't copy the landing page prompt. Try again.");
   };
   const addressRow = (app: CloudConnectedApp, field: "appUrl" | "webhookUrl") => {
     const isApp = field === "appUrl";
@@ -144,6 +168,77 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
           </SettingsRow>
           {addressRow(app, "appUrl")}
           {addressRow(app, "webhookUrl")}
+          <SettingsRow
+            label="Sign-in callbacks"
+            help={
+              editing?.appId === app.app_id && editing.field === "addRedirect"
+                ? undefined
+                : (app.redirect_urls?.length ?? 0) > 0
+                  ? `${app.redirect_urls.length} registered for Sign in with Polynet.`
+                  : "Needed only if your app uses Sign in with Polynet."
+            }
+            stacked={(app.redirect_urls?.length ?? 0) > 0 || (editing?.appId === app.app_id && editing.field === "addRedirect")}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+              {(app.redirect_urls ?? []).map((url) => (
+                <div key={url} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span className="settings-v1-value is-mono" style={{ overflowWrap: "anywhere" }}>{url}</span>
+                  <SettingsButton
+                    variant="quiet"
+                    disabled={busy}
+                    onClick={() => void run(async () => {
+                      await withSession((session) => updateCloudConnectedApp({
+                        session,
+                        communityId: props.communityId,
+                        appId: app.app_id,
+                        redirectUrls: (app.redirect_urls ?? []).filter((item) => item !== url),
+                      }));
+                    })}
+                  >
+                    Remove
+                  </SettingsButton>
+                </div>
+              ))}
+              {editing?.appId === app.app_id && editing.field === "addRedirect" ? (
+                <span className="settings-v1-inline-edit">
+                  <input
+                    className="settings-v1-input"
+                    value={editing.url}
+                    autoFocus
+                    inputMode="url"
+                    aria-label="Sign-in callback address"
+                    placeholder="https://your-app.com/api/auth/polynet/callback"
+                    onChange={(event) => setEditing({ ...editing, url: event.target.value })}
+                  />
+                  <SettingsButton variant="quiet" onClick={() => setEditing(null)}>Cancel</SettingsButton>
+                  <SettingsButton
+                    variant="primary"
+                    disabled={busy || !editing.url.trim()}
+                    onClick={() => void run(async () => {
+                      await withSession((session) => updateCloudConnectedApp({
+                        session,
+                        communityId: props.communityId,
+                        appId: app.app_id,
+                        redirectUrls: [...(app.redirect_urls ?? []), editing.url.trim()],
+                      }));
+                      setEditing(null);
+                    })}
+                  >
+                    Save
+                  </SettingsButton>
+                </span>
+              ) : (app.redirect_urls?.length ?? 0) < 5 ? (
+                <div>
+                  <SettingsButton
+                    disabled={busy}
+                    onClick={() => { setError(null); setEditing({ appId: app.app_id, field: "addRedirect", url: "" }); }}
+                  >
+                    Add callback URL
+                  </SettingsButton>
+                </div>
+              ) : null}
+            </div>
+          </SettingsRow>
           <SettingsRow label="Secret" help="Makes a new one. The old one stops working.">
             <SettingsButton disabled={busy} onClick={() => void run(async () => {
               const result = await withSession((session) => rotateCloudConnectedAppSecret({ session, communityId: props.communityId, appId: app.app_id }));
@@ -199,13 +294,52 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       {apps.length && origin ? (
         <SettingsGroup label="Set up with your AI">
           {apps.map((app) => (
-            <SettingsRow key={app.app_id} label={apps.length > 1 ? `Setup prompt for ${app.name}` : "Setup prompt"}
-              help="Paste it into Claude Code, Cursor or Codex in your app's code. It has the guide and this community's values, never your secret.">
-              <SettingsButton onClick={() => copyPrompt(app)}>{copied === app.app_id ? "Copied" : "Copy prompt"}</SettingsButton>
-            </SettingsRow>
+            <div key={app.app_id}>
+              {communityUrl ? (
+                <SettingsRow
+                  label={apps.length > 1 ? `Unified gate prompt for ${app.name}` : "New app (Sign in with Polynet)"}
+                  help="Building a new app with no separate login or Stripe? Paste this into your AI to wire up Sign in with Polynet, live grant checks, and direct checkout links."
+                >
+                  <SettingsButton variant="primary" onClick={() => copyUnifiedGatePrompt(app)}>
+                    {copied === `unified:${app.app_id}` ? "Copied" : "Copy unified gate prompt"}
+                  </SettingsButton>
+                </SettingsRow>
+              ) : null}
+              <SettingsRow
+                label={apps.length > 1 ? `Existing app prompt for ${app.name}` : "Existing app (keep your own login & billing)"}
+                help="Already have login and Stripe? Paste this into Claude Code, Cursor or Codex to sync sales and read Polynet grants."
+              >
+                <SettingsButton onClick={() => copyPrompt(app)}>{copied === app.app_id ? "Copied" : "Copy prompt"}</SettingsButton>
+              </SettingsRow>
+            </div>
           ))}
           <SettingsRow label="API address"><span className="settings-v1-value is-mono">{origin}</span></SettingsRow>
-          {communityUrl ? <SettingsRow label="Link to your community" help="Put it in your app; the prompt suggests where."><span className="settings-v1-value is-mono">{communityUrl}</span></SettingsRow> : null}
+          {communityUrl ? <SettingsRow label="Link to your community" help="Put it in your app; buyers return here or bounce straight back to your app after checkout."><span className="settings-v1-value is-mono">{communityUrl}</span></SettingsRow> : null}
+          {communityUrl && activeTiers.length > 0 ? (
+            <SettingsRow label="Direct plan checkout links" help="Pre-select a plan and return buyers to your app after checkout." stacked>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+                {activeTiers.map((tier) => {
+                  const returnAppId = apps.find((item) => Boolean(item.app_url))?.app_id ?? null;
+                  const link = buildCommunityPlanCheckoutUrl({
+                    communityUrl,
+                    tierKey: tier.key,
+                    appId: returnAppId,
+                  });
+                  const copyKey = `plan:${tier.key}`;
+                  return (
+                    <div key={tier.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span className="settings-v1-value is-mono" style={{ overflowWrap: "anywhere" }}>
+                        {tier.name}: {link}
+                      </span>
+                      <SettingsButton onClick={() => copyText(copyKey, link)}>
+                        {copied === copyKey ? "Copied" : "Copy link"}
+                      </SettingsButton>
+                    </div>
+                  );
+                })}
+              </div>
+            </SettingsRow>
+          ) : null}
           <SettingsRow label="The guide" help="How connected apps work, step by step.">
             <a className={settingsButtonClass()} href="/docs/guides/connect-your-app" target="_blank" rel="noreferrer">Read the guide</a>
           </SettingsRow>

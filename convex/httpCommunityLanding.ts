@@ -5,6 +5,7 @@
 // checkouts and can't use up a community's allowance for everyone else
 // (communityCheckoutBuyer.guestCheckoutAllowed). The buyer's secret goes back
 // to that browser, which keeps it until it signs in and claims the payment.
+import { internal } from "./_generated/api";
 import { startCommunityJoinCheckoutCore } from "./communityCommerce";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
@@ -38,15 +39,20 @@ export function registerCommunityLandingRoutes(args: { http: any; httpAction: an
       const slug = typeof body?.communitySlug === "string" ? body.communitySlug.trim().toLowerCase() : "";
       const period = body?.billingPeriod;
       const plan = typeof body?.plan === "string" && body.plan ? body.plan : null;
+      const requestedAppId = typeof body?.appId === "string" && /^app_[a-f0-9]{20}$/.test(body.appId.trim()) ? body.appId.trim() : null;
       const visitorHash = typeof body?.visitorHash === "string" ? body.visitorHash : "";
       if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug) || (period !== "monthly" && period !== "annual")) return reply(400, { ok: false, code: "invalid_request" });
       if (plan !== null && (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(plan) || period !== "monthly")) return reply(400, { ok: false, code: "invalid_request" });
       if (!/^[a-f0-9]{64}$/.test(visitorHash)) return reply(400, { ok: false, code: "invalid_request" });
+      const verifiedApp = requestedAppId
+        ? await ctx.runQuery(internal.communityLanding.resolveReturnAppForLandingInternal, { communitySlug: slug, appId: requestedAppId })
+        : null;
+      const appQuery = verifiedApp ? `&app=${encodeURIComponent(verifiedApp.app_id)}` : "";
       const page = `${readCanonicalPublicAppOrigin()}/c/${encodeURIComponent(slug)}`;
       try {
         const started = await startCommunityJoinCheckoutCore(ctx, {
           communitySlug: slug, billingPeriod: period, guest: true, visitorHash,
-          successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}`, cancelUrl: `${page}?checkout=canceled`,
+          successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${appQuery}`, cancelUrl: `${page}?checkout=canceled${appQuery}`,
           ...(plan ? { tierKey: plan } : {}),
         });
         if (!started.buyer_secret) return reply(500, { ok: false, code: "join_unavailable" });

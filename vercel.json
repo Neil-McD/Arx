@@ -21,6 +21,15 @@
       },
       "continue": true
     },
+    {
+      "src": "/(?:m/)?oauth/authorize/?",
+      "headers": {
+        "Content-Security-Policy": "frame-ancestors 'none'",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer"
+      },
+      "continue": true
+    },
     { "src": "/runtime/mcp", "dest": "/api/mcp/runtime" },
     { "src": "/\\.well-known/oauth-protected-resource", "dest": "/api/mcp/oauth-protected-resource" },
     { "src": "/\\.well-known/oauth-authorization-server", "dest": "/api/mcp/oauth-authorization-server" },

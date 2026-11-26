@@ -210,9 +210,9 @@ The builder's app keeps its own login and billing and does most of the selling.
   plans from "Your plan" in their community settings; Stripe's notice moves the
   plan, and its pods and grants follow. Members who bought in the app change it
   there.
-- **Next:** slice 3 (buy and change tiers through Polynet
-  from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
-  Polynet waits for a builder with no login of its own.
+- **Sign in with Polynet & direct plan checkout links (built, Nov 25):**
+  Connected apps can register up to 5 exact OAuth 2.1 callback URLs (`connectedApps.redirectUrls`). Apps send users to `/oauth/authorize` with mandatory PKCE `S256` and exchange one-time hashed codes (`connectedAppAuthCodes`, 5-minute TTL, single-use atomic redemption) at `POST /apps/v1/oauth/token` with `Authorization: Bearer psk_...`, receiving pairwise per-app `user.id`, verified `email`, profile, and live `access` (`{ allowed, tier, grants }`). Direct plan checkout links (`/c/<slug>?plan=<key>&app=<app_id>`) pre-select the requested plan and bounce buyers straight back to the server-verified registered `appUrl` after checkout. Settings → Your app includes one-click copy-paste prompts for both Unified Gate (new apps) and Existing Apps, plus direct plan links.
+- **Next:** slice 4 (Distribution Engineer live, both ways).
 
 ## Open questions
 
