@@ -29,7 +29,7 @@ import {
   type JourneyStageCheckpoint,
   type JourneyStageDefinition,
 } from "../../../../shared/communityMemberJourney";
-import type { CloudMemberJourneyBoard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import type { CloudMemberJourneyBoard, CloudMemberJourneyCard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import { cx, usePhoneLayout } from "./kit";
 import { Face } from "./KitMembersTable";
 import "./KitMembersBoard.css";
@@ -54,11 +54,28 @@ function toSaveList(stages: readonly JourneyStageDefinition[]): StageSaveInput[]
 // Nov 25: the board shows exceptions, not everyone's state).
 const NEEDS_LOOK: ReadonlySet<JourneyCardStatus> = new Set(["needs_you", "stuck", "quiet"]);
 
-// "Guide drafted a check-in (waiting on Home)" → "Drafted a check-in".
+// The guide's note on a card (formatCoachOutcomeSummary, or a move's note),
+// shorter: "Guide drafted a check-in (waiting on Home)" → "Drafted a check-in
+// · on Home"; "Guide sent newcomer welcome · replied" → "Sent newcomer
+// welcome · replied".
 export function guideDidShort(outcome: string | null | undefined): string | null {
   if (!outcome) return null;
-  const short = outcome.replace(/^Guide\s+/, "").split(/\s[(·]/)[0]!.trim();
+  const short = outcome.replace(/^Guide\s+/, "").replace(/\s*\(waiting on Home\)\s*$/, " · on Home").trim();
   return short ? short.charAt(0).toUpperCase() + short.slice(1) : null;
+}
+
+// Why a card is marked, from what the board really knows (the status rule in
+// shared/communityMemberJourney.ts deriveMemberJourneyStatus): a payment
+// problem, a status the host set, days quiet, or a check-in not answered.
+export function cardReason(card: Pick<CloudMemberJourneyCard, "status" | "status_is_manual" | "money_kind" | "last_active_at" | "joined_at">, nowMs: number): string | null {
+  if (card.money_kind === "on_hold") return "Payment on hold";
+  if (card.money_kind === "cancelling") return "Cancelling";
+  if (card.status_is_manual) return `Marked ${JOURNEY_CARD_STATUS_LABELS[card.status].toLowerCase()} by you`;
+  const at = Date.parse(card.last_active_at ?? card.joined_at ?? "");
+  const days = Number.isFinite(at) ? Math.floor((nowMs - at) / 86_400_000) : null;
+  if (card.status === "quiet") return days !== null ? `Quiet for ${days} days` : "Quiet for a month";
+  if (card.status === "stuck") return days !== null && days >= 10 ? `Quiet for ${days} days` : "Hasn't answered a check-in";
+  return null;
 }
 
 // What moves someone on from a stage, in a line.
@@ -406,11 +423,12 @@ export function KitMembersBoard(props: {
               <i className="members-board-dot" />Ready to move <em>{readyCount}</em>
             </button>
           ) : null}
-          {JOURNEY_CARD_STATUSES.filter((status) => NEEDS_LOOK.has(status) && statusCounts[status] > 0).map((status) => (
+          {[...JOURNEY_CARD_STATUSES.filter((status) => NEEDS_LOOK.has(status)), ...JOURNEY_CARD_STATUSES.filter((status) => !NEEDS_LOOK.has(status))]
+            .filter((status) => statusCounts[status] > 0).map((status) => (
             <button key={status} type="button"
               className={`members-board-filter is-${status}${statusFilter === status ? " is-on" : ""}`}
               aria-pressed={statusFilter === status} onClick={() => setStatusFilter(statusFilter === status ? "all" : status)}>
-              <i className="members-board-dot" />{JOURNEY_CARD_STATUS_LABELS[status]} <em>{statusCounts[status]}</em>
+              {NEEDS_LOOK.has(status) ? <i className="members-board-dot" /> : null}{JOURNEY_CARD_STATUS_LABELS[status]} <em>{statusCounts[status]}</em>
             </button>
           ))}
         </div>
@@ -642,9 +660,9 @@ export function KitMembersBoard(props: {
                     const offTrack = NEEDS_LOOK.has(card.status);
                     const did = guideDidShort(card.agent_outcome);
                     const lastSeen = card.last_active_at ? `Last seen ${props.timeFor(card.last_active_at, props.now).toLowerCase()}` : null;
-                    // Off track: the reason first. Otherwise their latest win, or what they're working on.
+                    // Off track: why. Otherwise their latest win, or what they're working on.
                     const line = offTrack
-                      ? card.activity_summary ?? lastSeen
+                      ? cardReason(card, props.now) ?? lastSeen
                       : card.latest_outcome
                         ? <><Award size={12} aria-hidden="true" />{card.latest_outcome.text}</>
                         : card.working_on ?? card.activity_summary ?? lastSeen;
@@ -705,7 +723,7 @@ export function KitMembersBoard(props: {
                               <span title={`Your note to the guide: ${card.founder_instruction}`}><PenLine size={12} aria-label="Your note to the guide" /></span>
                             ) : null}
                             {did ? (
-                              <span className="is-ai" title={card.agent_outcome ?? undefined}><Sparkles size={12} aria-hidden="true" />{did}</span>
+                              <span className="is-ai" title={[card.agent_outcome, card.agent_outcome_at ? props.timeFor(card.agent_outcome_at, props.now) : null].filter(Boolean).join(" · ")}><Sparkles size={12} aria-hidden="true" />{did}</span>
                             ) : null}
                           </span>
                         </div>
