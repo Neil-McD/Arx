@@ -554,6 +554,7 @@ body {
   cursor: pointer;
   font-size: 13px;
   width: 100%;
+  min-width: 0;
   transition: background 0.15s, color 0.15s;
   display: flex;
   align-items: center;
@@ -956,6 +957,7 @@ body {
   margin-top: auto;
   padding-top: 12px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 

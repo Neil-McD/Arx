@@ -4,7 +4,7 @@
 //   3. Launch: the invite link, and into the community.
 // Beside every step is the card Discover will show, filling in as you go.
 // The community is created on step 2's Next; step 3 is shown for it after.
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { communityPageAddress, isValidCommunitySlug } from "../../../../shared/communitySlug";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
@@ -279,10 +279,17 @@ export function KitStartLaunch(props: {
   onOpen: () => void;
 }) {
   const link = `https://${communityPageAddress(props.card.slug)}`;
-  const [showAppConnect, setShowAppConnect] = useState(false);
+  const [showAppConnect, setShowAppConnect] = useState(Boolean(props.connectedApp));
   const [appName, setAppName] = useState("");
   const [appUrl, setAppUrl] = useState("");
-  const appExpanded = showAppConnect || Boolean(props.connectedApp);
+  const hadConnectedAppRef = useRef(Boolean(props.connectedApp));
+  useEffect(() => {
+    if (props.connectedApp && !hadConnectedAppRef.current) {
+      setShowAppConnect(true);
+    }
+    hadConnectedAppRef.current = Boolean(props.connectedApp);
+  }, [props.connectedApp]);
+  const appExpanded = showAppConnect;
   return (
     <StartStepFrame step={3} card={props.card}
       forward={<Btn go disabled={props.saving || props.opening} onClick={props.onOpen}>{props.opening ? "Opening…" : <>Open community <Icon name="arrow" /></>}</Btn>}

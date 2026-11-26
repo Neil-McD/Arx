@@ -899,10 +899,10 @@ export const CommunityNav = memo(function CommunityNav({
                 <span className="nav-item-label">Analytics</span>
               </button>
             ) : null}
-            {(appLinks ?? []).map((app) => {
+            {(appLinks ?? []).map((app, index) => {
               const launchLabel = /^launch\b/i.test(app.name) ? app.name : `Launch ${app.name}`;
               return (
-                <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
+                <a className="nav-item nav-item-app" key={`${app.url}:${app.name}:${index}`} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
                   <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
                   <span className="nav-item-label">{launchLabel}</span>
                 </a>
@@ -926,10 +926,10 @@ export const CommunityNav = memo(function CommunityNav({
         ) : null
       ) : canCopyJoinLink || (appLinks?.length ?? 0) > 0 ? (
         <div className="community-nav-footer">
-          {(appLinks ?? []).map((app) => {
+          {(appLinks ?? []).map((app, index) => {
             const launchLabel = /^launch\b/i.test(app.name) ? app.name : `Launch ${app.name}`;
             return (
-              <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
+              <a className="nav-item nav-item-app" key={`${app.url}:${app.name}:${index}`} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
                 <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
                 <span className="nav-item-label">{launchLabel}</span>
               </a>
