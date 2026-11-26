@@ -228,6 +228,24 @@ async function readRecentCoachHistoryForMember(
     }));
 }
 
+const ONBOARDING_RESERVATION_TTL_MS = 5 * 60_000;
+
+function activeOnboardingReservations(
+  settingsRow: { onboardingInFlightReservations?: Array<{ token: string; expiresAt: number }> } | null | undefined,
+  nowMs: number,
+): Array<{ token: string; expiresAt: number }> {
+  const raw = settingsRow?.onboardingInFlightReservations;
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  return raw.filter(
+    (entry) =>
+      entry &&
+      typeof entry.token === "string" &&
+      entry.token.length > 0 &&
+      typeof entry.expiresAt === "number" &&
+      entry.expiresAt > nowMs,
+  );
+}
+
 async function countCommunityCoachTouchesToday(
   ctx: any,
   communityId: Id<"communities">,
@@ -543,8 +561,15 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
   handler: async (ctx, args) => {
     const community: any = await ctx.db.get(args.communityId);
     if (!community || !communityIsActive(community)) return { candidate: null, nextScanCursorCreatedAt: null as number | null };
-    const touchedToday = await countCommunityCoachTouchesToday(ctx, args.communityId, args.nowMs);
-    if (touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) {
+    const [touchedToday, settingsRow] = await Promise.all([
+      countCommunityCoachTouchesToday(ctx, args.communityId, args.nowMs),
+      ctx.db
+        .query("communityMemberCoachSettings")
+        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .first(),
+    ]);
+    const activeReservations = activeOnboardingReservations(settingsRow, args.nowMs);
+    if (touchedToday + activeReservations.length >= MEMBER_COACH_DAILY_COMMUNITY_CAP) {
       return { candidate: null, nextScanCursorCreatedAt: args.scanCursorCreatedAt ?? null };
     }
 
@@ -830,42 +855,54 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
       }
 
       // Signal 2 (priority 2): Quiet newcomer (joined 2..14 days ago, no channel posts/replies yet).
+      // Skip if this member already received (or has waiting) a Day-0 onboarding welcome
+      // for the same activation so newcomers are never double-welcomed or pushed to cold on Day 2.
       if (
         lastChannelAt === null &&
         memberAgeMs >= QUIET_NEWCOMER_MIN_AGE_MS &&
         memberAgeMs <= QUIET_NEWCOMER_MAX_AGE_MS
       ) {
         const actSeq = Math.max(0, Math.floor(Number(membership.activationSequence ?? 0)));
-        const dedupeKey = `quiet_newcomer:act:${actSeq}`;
-        const gate = evaluateMemberCoachGate({
-          nowMs: args.nowMs,
-          isOwner: false,
-          memberMuted: false,
-          reason: "quiet_newcomer",
-          dedupeKey,
-          lastUserThreadMessageAt: lastUserAgentAt,
-          recentHistory,
-          autoReasonEnabled: autoSet.has("quiet_newcomer"),
-          communityTimeZone: tz,
-          memberTemperature: heartbeatTemp.temperature,
-          consecutiveUnanswered,
-        });
-        if (gate.allowed) {
-          const joinedDays = daysBetween(joinedAt, args.nowMs);
-          const firstCourse = courseProgress[0] ?? null;
-          const courseHint = firstCourse?.next_lesson
-            ? ` Available starter course: "${firstCourse.title}" (first lesson: "${firstCourse.next_lesson.title}").`
-            : "";
-          candidates.push({
-            priority: 2,
-            memberUserId: membership.userId,
+        const onboardingKeyExact = `member_onboarding:act:${actSeq}`;
+        const onboardingKeyNormalized = `member_onboarding:act:${actSeq || 1}`;
+        const alreadyWelcomedOnDay0 = recentHistory.some(
+          (row) =>
+            row.reason === "member_onboarding" &&
+            (row.status === "sent" || row.status === "waiting") &&
+            (row.dedupeKey === onboardingKeyExact || row.dedupeKey === onboardingKeyNormalized),
+        );
+        if (!alreadyWelcomedOnDay0) {
+          const dedupeKey = `quiet_newcomer:act:${actSeq}`;
+          const gate = evaluateMemberCoachGate({
+            nowMs: args.nowMs,
+            isOwner: false,
+            memberMuted: false,
             reason: "quiet_newcomer",
             dedupeKey,
-            signalSummary: `Joined ${joinedDays} ${joinedDays === 1 ? "day" : "days"} ago · hasn't posted yet`,
-            signalDetail: `Joined ${joinedDays} days ago and has not posted or replied in any channel yet.${courseHint}`,
-            mode: gate.mode,
+            lastUserThreadMessageAt: lastUserAgentAt,
+            recentHistory,
+            autoReasonEnabled: autoSet.has("quiet_newcomer"),
+            communityTimeZone: tz,
+            memberTemperature: heartbeatTemp.temperature,
+            consecutiveUnanswered,
           });
-          continue;
+          if (gate.allowed) {
+            const joinedDays = daysBetween(joinedAt, args.nowMs);
+            const firstCourse = courseProgress[0] ?? null;
+            const courseHint = firstCourse?.next_lesson
+              ? ` Available starter course: "${firstCourse.title}" (first lesson: "${firstCourse.next_lesson.title}").`
+              : "";
+            candidates.push({
+              priority: 2,
+              memberUserId: membership.userId,
+              reason: "quiet_newcomer",
+              dedupeKey,
+              signalSummary: `Joined ${joinedDays} ${joinedDays === 1 ? "day" : "days"} ago · hasn't posted yet`,
+              signalDetail: `Joined ${joinedDays} days ago and has not posted or replied in any channel yet.${courseHint}`,
+              mode: gate.mode,
+            });
+            continue;
+          }
         }
       }
 
@@ -983,6 +1020,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
     skipReason: v.optional(v.string()),
     requestedMode: v.union(v.literal("draft"), v.literal("auto")),
     usedPrivateContext: v.optional(v.boolean()),
+    isLiveJoin: v.optional(v.boolean()),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
@@ -1048,6 +1086,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
       communityTimeZone: tz,
       memberTemperature: heartbeatTemp.temperature,
       consecutiveUnanswered,
+      ...(args.isLiveJoin !== undefined ? { isLiveJoin: args.isLiveJoin } : {}),
     });
     if (!gate.allowed) return { ok: false as const, code: gate.blockReason };
 
@@ -1442,14 +1481,16 @@ export const processDueMemberCoachScansInternal = internalAction({
 
 // ---------- Automated Day-0 Member Onboarding (Chief of Staff Plan Only) ----------
 
-// Atomically validates eligibility AND reserves a daily outreach slot on
+// Atomically validates eligibility AND holds a short-lived in-flight slot on
 // communityMemberCoachSettings so concurrent join bursts cannot exceed
-// MEMBER_COACH_DAILY_COMMUNITY_CAP before inference runs.
+// MEMBER_COACH_DAILY_COMMUNITY_CAP before inference runs, while failed/skipped
+// runs release their slot immediately instead of burning the daily cap.
 export const claimNewMemberOnboardingCandidateInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     memberUserId: v.id("users"),
     activationSequence: v.number(),
+    isLiveJoin: v.optional(v.boolean()),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
@@ -1473,14 +1514,9 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
       checkMemberEligibleForCoach(ctx, community, args.memberUserId),
     ]);
     if (settingsRow && !settingsRow.enabled) return null;
-    if (allowanceState && shouldPauseBackgroundAiForAllowance(allowanceState)) return null;
-    const dayKey = new Date(args.nowMs).toISOString().slice(0, 10);
-    const reservedCount =
-      settingsRow?.onboardingReservedDayKey === dayKey
-        ? Math.max(0, Math.floor(Number(settingsRow.onboardingReservedCount ?? 0)))
-        : 0;
-    const effectiveTouches = Math.max(touchedToday, reservedCount);
-    if (effectiveTouches >= MEMBER_COACH_DAILY_COMMUNITY_CAP) return null;
+    if (allowanceState?.backgroundAiPaused) return null;
+    const activeReservations = activeOnboardingReservations(settingsRow, args.nowMs);
+    if (touchedToday + activeReservations.length >= MEMBER_COACH_DAILY_COMMUNITY_CAP) return null;
     if (!eligibility.ok || String(eligibility.membership?.role ?? "member") !== "member") return null;
 
     const actSeq = Math.max(0, Math.floor(Number(args.activationSequence)));
@@ -1488,38 +1524,66 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
     if (currentSeq > 0 && actSeq > 0 && currentSeq !== actSeq) return null;
 
     const dedupeKey = `member_onboarding:act:${actSeq || currentSeq || 1}`;
-    const [lastUserAgentAt, recentHistory, tz, person, journeyGuidance, courseProgress, eventCandidates, connectedApps] =
-      await Promise.all([
-        readLastUserAgentMessageAt(ctx, args.communityId, args.memberUserId),
-        readRecentCoachHistoryForMember(ctx, args.communityId, args.memberUserId),
-        communityTimeZone(ctx, args.communityId),
-        readPersonFacts(ctx, {
-          communityId: args.communityId,
-          subjectUserId: args.memberUserId,
-          lens: "self",
-        }),
-        readMemberJourneyGuidanceForCoach(ctx, {
-          communityId: args.communityId,
-          memberUserId: args.memberUserId,
-          nowMs: args.nowMs,
-        }),
-        readMemberCourseProgress(ctx, args.communityId, args.memberUserId),
-        listCommunityEventExpansionCandidates({
-          ctx,
-          communityId: args.communityId,
-          startMs: args.nowMs,
-          endMs: args.nowMs + QUIET_MEMBER_EVENT_HORIZON_MS,
-          includeCancelled: false,
-        }),
-        ctx.db
-          .query("connectedApps")
-          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .collect(),
-      ]);
+    const [
+      lastChannelAt,
+      lastUserAgentAt,
+      recentHistory,
+      tz,
+      person,
+      journeyGuidance,
+      courseProgress,
+      eventCandidates,
+      connectedApps,
+    ] = await Promise.all([
+      readLatestMemberChannelActivityAt(ctx, args.communityId, args.memberUserId),
+      readLastUserAgentMessageAt(ctx, args.communityId, args.memberUserId),
+      readRecentCoachHistoryForMember(ctx, args.communityId, args.memberUserId),
+      communityTimeZone(ctx, args.communityId),
+      readPersonFacts(ctx, {
+        communityId: args.communityId,
+        subjectUserId: args.memberUserId,
+        lens: "self",
+      }),
+      readMemberJourneyGuidanceForCoach(ctx, {
+        communityId: args.communityId,
+        memberUserId: args.memberUserId,
+        nowMs: args.nowMs,
+      }),
+      readMemberCourseProgress(ctx, args.communityId, args.memberUserId),
+      listCommunityEventExpansionCandidates({
+        ctx,
+        communityId: args.communityId,
+        startMs: args.nowMs,
+        endMs: args.nowMs + QUIET_MEMBER_EVENT_HORIZON_MS,
+        includeCancelled: false,
+      }),
+      ctx.db
+        .query("connectedApps")
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect(),
+    ]);
     if (!person) return null;
     if (instructionRequestsPause(journeyGuidance?.founderInstruction)) return null;
 
+    const joinedAt = Number(eligibility.membership?.activatedAt ?? eligibility.membership?.createdAt ?? args.nowMs);
+    const lastLessonMs = courseProgress.reduce((best, course) => {
+      const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
+      return Number.isFinite(ms) && ms > best ? ms : best;
+    }, 0);
+    const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0);
+    const consecutiveUnanswered = countConsecutiveUnansweredCoachTouches(
+      recentHistory,
+      lastRealActivityMs > 0 ? lastRealActivityMs : null,
+    );
+    const heartbeatTemp = classifyMemberHeartbeatTemperature({
+      nowMs: args.nowMs,
+      lastActivityAtMs: lastRealActivityMs > 0 ? lastRealActivityMs : null,
+      joinedAtMs: joinedAt,
+      consecutiveUnanswered,
+    });
+
     const autoReasons = normalizeMemberCoachReasons(settingsRow?.autoReasons ?? []);
+    const isLiveJoin = args.isLiveJoin !== false;
     const gate = evaluateMemberCoachGate({
       nowMs: args.nowMs,
       isOwner: false,
@@ -1530,15 +1594,21 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
       recentHistory,
       autoReasonEnabled: autoReasons.includes("member_onboarding"),
       communityTimeZone: tz,
+      memberTemperature: heartbeatTemp.temperature,
+      consecutiveUnanswered,
+      isLiveJoin,
     });
     if (!gate.allowed) return null;
 
-    // Atomically reserve 1 daily slot on the single per-community settings doc.
-    const nextReservedCount = effectiveTouches + 1;
+    // Atomically hold 1 expiring in-flight slot on the single per-community settings doc.
+    const reservationToken = `${String(args.memberUserId)}:${dedupeKey}:${args.nowMs}:${Math.random().toString(36).slice(2, 8)}`;
+    const nextReservations = [
+      ...activeReservations,
+      { token: reservationToken, expiresAt: args.nowMs + ONBOARDING_RESERVATION_TTL_MS },
+    ];
     if (settingsRow) {
       await ctx.db.patch(settingsRow._id, {
-        onboardingReservedDayKey: dayKey,
-        onboardingReservedCount: nextReservedCount,
+        onboardingInFlightReservations: nextReservations,
         updatedAt: args.nowMs,
       });
     } else {
@@ -1546,8 +1616,7 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
         communityId: args.communityId,
         enabled: true,
         autoReasons: [],
-        onboardingReservedDayKey: dayKey,
-        onboardingReservedCount: nextReservedCount,
+        onboardingInFlightReservations: nextReservations,
         nextScanAt: args.nowMs,
         builderNextScanAt: args.nowMs,
         createdAt: args.nowMs,
@@ -1599,6 +1668,8 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
       memberBio: person.bio,
       memberSharedFacts: person.shared.slice(0, 6).map((fact) => `${fact.label}: ${fact.body}`),
       dedupeKey,
+      reservationToken,
+      isLiveJoin,
       signalSummary: "Just joined · Day-0 onboarding welcome",
       signalDetail: detailParts.join(" "),
       journeyStageName: journeyGuidance?.stageName ?? null,
@@ -1609,11 +1680,34 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
   },
 });
 
+export const releaseNewMemberOnboardingReservationInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    reservationToken: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const settingsRow = await ctx.db
+      .query("communityMemberCoachSettings")
+      .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+      .first();
+    if (!settingsRow) return;
+    const remaining = activeOnboardingReservations(settingsRow, args.nowMs).filter(
+      (entry) => entry.token !== args.reservationToken,
+    );
+    await ctx.db.patch(settingsRow._id, {
+      onboardingInFlightReservations: remaining,
+      updatedAt: args.nowMs,
+    });
+  },
+});
+
 export const runNewMemberOnboardingInternal = internalAction({
   args: {
     communityId: v.id("communities"),
     memberUserId: v.id("users"),
     activationSequence: v.number(),
+    isLiveJoin: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<{ outcome: string }> => {
     const nowMs = Date.now();
@@ -1623,111 +1717,123 @@ export const runNewMemberOnboardingInternal = internalAction({
         communityId: args.communityId,
         memberUserId: args.memberUserId,
         activationSequence: args.activationSequence,
+        ...(args.isLiveJoin !== undefined ? { isLiveJoin: args.isLiveJoin } : {}),
         nowMs,
       },
     );
     if (!candidate) return { outcome: "skipped" };
 
-    const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
-    if (!funding.ok || !founderPlanTierHasProactiveAgent(funding.planTier)) {
-      return { outcome: "unfunded" };
-    }
-
-    let run;
     try {
-      run = await startFundedInferenceRun({
-        ctx,
-        communityId: args.communityId,
-        actorUserId: candidate.ownerUserId,
-        surface: "community_autonomous_cognition",
-        receiptKey: `member_onboarding:${String(args.communityId)}:${String(args.memberUserId)}:${candidate.dedupeKey}`,
-        sourceRunId: `member-onboarding:${String(args.communityId)}:${nowMs}`,
-        admission: funding,
-        requireProactiveTier: true,
-      });
-    } catch {
-      return { outcome: "budget_blocked" };
-    }
+      const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
+      if (!funding.ok || !founderPlanTierHasProactiveAgent(funding.planTier)) {
+        return { outcome: "unfunded" };
+      }
 
-    const handbook = await ctx
-      .runQuery(internalRefs.communityHandbook.readApprovedCommunityHandbookInternal, {
-        communityId: args.communityId,
-      })
-      .catch(() => null);
-    const handbookExcerpt = handbook
-      ? renderCommunityHandbook(handbook).slice(0, HANDBOOK_EXCERPT_CHARS)
-      : "";
+      let run;
+      try {
+        run = await startFundedInferenceRun({
+          ctx,
+          communityId: args.communityId,
+          actorUserId: candidate.ownerUserId,
+          surface: "community_autonomous_cognition",
+          receiptKey: `member_onboarding:${String(args.communityId)}:${String(args.memberUserId)}:${candidate.dedupeKey}`,
+          sourceRunId: `member-onboarding:${String(args.communityId)}:${nowMs}`,
+          admission: funding,
+          requireProactiveTier: true,
+        });
+      } catch {
+        return { outcome: "budget_blocked" };
+      }
 
-    const system = [
-      MEMBER_COACH_INSTRUCTIONS,
-      "For a brand-new member's Day-0 onboarding welcome, warmly welcome them to the community, name one clear first step from their Stage 1 goal, starter course, upcoming event, or connected app, and invite them to reply with what they want to achieve first. Keep it concise, personal, and concrete.",
-      `Community: ${candidate.communityName}${candidate.communityOneLiner ? ` — ${candidate.communityOneLiner}` : ""}`,
-      ...(handbookExcerpt ? [`Community handbook (excerpt):\n${handbookExcerpt}`] : []),
-    ].join("\n\n");
+      const handbook = await ctx
+        .runQuery(internalRefs.communityHandbook.readApprovedCommunityHandbookInternal, {
+          communityId: args.communityId,
+        })
+        .catch(() => null);
+      const handbookExcerpt = handbook
+        ? renderCommunityHandbook(handbook).slice(0, HANDBOOK_EXCERPT_CHARS)
+        : "";
 
-    const user = [
-      `Member: ${candidate.memberName}`,
-      ...(candidate.memberBio ? [`Bio: ${candidate.memberBio}`] : []),
-      ...(candidate.memberSharedFacts.length
-        ? [`Shared profile facts:\n- ${candidate.memberSharedFacts.join("\n- ")}`]
-        : []),
-      ...(candidate.journeyStageName
-        ? [
-            `Member journey stage: ${candidate.journeyStageName}${candidate.journeyStageGoal ? ` — Goal: ${candidate.journeyStageGoal}` : ""}`,
-          ]
-        : []),
-      ...(candidate.founderCardInstruction
-        ? [
-            `Founder instruction on this member's card (follow naturally without mentioning any card or note):\n${candidate.founderCardInstruction}`,
-          ]
-        : []),
-      `Signal (member_onboarding): ${candidate.signalDetail}`,
-      "Write their Day-0 onboarding welcome now, or skip only if a founder instruction explicitly asks to pause outreach.",
-    ].join("\n\n");
+      const system = [
+        MEMBER_COACH_INSTRUCTIONS,
+        "For a brand-new member's Day-0 onboarding welcome, warmly welcome them to the community, name one clear first step from their Stage 1 goal, starter course, upcoming event, or connected app, and invite them to reply with what they want to achieve first. Keep it concise, personal, and concrete.",
+        `Community: ${candidate.communityName}${candidate.communityOneLiner ? ` — ${candidate.communityOneLiner}` : ""}`,
+        ...(handbookExcerpt ? [`Community handbook (excerpt):\n${handbookExcerpt}`] : []),
+      ].join("\n\n");
 
-    let decision: ReturnType<typeof parseMemberCoachJudgeResponse> = {
-      action: "skip",
-      reason: "provider_failed",
-    };
-    try {
-      const response = await run.request({
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        maxTokens: JUDGE_MAX_OUTPUT_TOKENS,
-        tools: [],
-      });
-      if (!response.ok || response.type !== "assistant") {
-        await run.fail(response.ok ? "invalid_model_output" : response.code);
+      const user = [
+        `Member: ${candidate.memberName}`,
+        ...(candidate.memberBio ? [`Bio: ${candidate.memberBio}`] : []),
+        ...(candidate.memberSharedFacts.length
+          ? [`Shared profile facts:\n- ${candidate.memberSharedFacts.join("\n- ")}`]
+          : []),
+        ...(candidate.journeyStageName
+          ? [
+              `Member journey stage: ${candidate.journeyStageName}${candidate.journeyStageGoal ? ` — Goal: ${candidate.journeyStageGoal}` : ""}`,
+            ]
+          : []),
+        ...(candidate.founderCardInstruction
+          ? [
+              `Founder instruction on this member's card (follow naturally without mentioning any card or note):\n${candidate.founderCardInstruction}`,
+            ]
+          : []),
+        `Signal (member_onboarding): ${candidate.signalDetail}`,
+        "Write their Day-0 onboarding welcome now, or skip only if a founder instruction explicitly asks to pause outreach.",
+      ].join("\n\n");
+
+      let decision: ReturnType<typeof parseMemberCoachJudgeResponse> = {
+        action: "skip",
+        reason: "provider_failed",
+      };
+      try {
+        const response = await run.request({
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          maxTokens: JUDGE_MAX_OUTPUT_TOKENS,
+          tools: [],
+        });
+        if (!response.ok || response.type !== "assistant") {
+          await run.fail(response.ok ? "invalid_model_output" : response.code);
+          return { outcome: "provider_failed" };
+        }
+        const settled = await run.settle("provider_completed");
+        if (!settled) return { outcome: "settle_failed" };
+        decision = parseMemberCoachJudgeResponse(response.assistantText);
+      } catch (error) {
+        await run
+          .fail(error instanceof Error ? error.message.slice(0, 120) : "member_onboarding_provider_failed")
+          .catch(() => {});
         return { outcome: "provider_failed" };
       }
-      const settled = await run.settle("provider_completed");
-      if (!settled) return { outcome: "settle_failed" };
-      decision = parseMemberCoachJudgeResponse(response.assistantText);
-    } catch (error) {
-      await run
-        .fail(error instanceof Error ? error.message.slice(0, 120) : "member_onboarding_provider_failed")
-        .catch(() => {});
-      return { outcome: "provider_failed" };
-    }
 
-    const recorded = await ctx.runMutation(
-      internalRefs.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal,
-      {
-        communityId: args.communityId,
-        memberUserId: args.memberUserId,
-        reason: "member_onboarding",
-        dedupeKey: candidate.dedupeKey,
-        signalSummary: candidate.signalSummary,
-        decision: decision.action,
-        ...(decision.action === "send" ? { text: decision.text } : { skipReason: decision.reason }),
-        requestedMode: candidate.mode,
-        usedPrivateContext: false,
-        nowMs: Date.now(),
-      },
-    );
-    return { outcome: recorded?.ok ? recorded.outcome : recorded?.code ?? "failed" };
+      const recorded = await ctx.runMutation(
+        internalRefs.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal,
+        {
+          communityId: args.communityId,
+          memberUserId: args.memberUserId,
+          reason: "member_onboarding",
+          dedupeKey: candidate.dedupeKey,
+          signalSummary: candidate.signalSummary,
+          decision: decision.action,
+          ...(decision.action === "send" ? { text: decision.text } : { skipReason: decision.reason }),
+          requestedMode: candidate.mode,
+          usedPrivateContext: false,
+          isLiveJoin: candidate.isLiveJoin,
+          nowMs: Date.now(),
+        },
+      );
+      return { outcome: recorded?.ok ? recorded.outcome : recorded?.code ?? "failed" };
+    } finally {
+      await ctx
+        .runMutation(internalRefs.communityMemberCoach.releaseNewMemberOnboardingReservationInternal, {
+          communityId: args.communityId,
+          reservationToken: candidate.reservationToken,
+          nowMs: Date.now(),
+        })
+        .catch(() => {});
+    }
   },
 });
 

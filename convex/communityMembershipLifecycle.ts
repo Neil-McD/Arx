@@ -162,6 +162,10 @@ export async function activateCommunityMembershipCore(args: {
         communityHasProactiveAgentTier(args.ctx, args.communityId, args.nowMs),
       ]);
       if (agentOn && hasProactive) {
+        const isLiveJoin =
+          args.activationReason === "public_join" ||
+          args.activationReason === "billing_entitlement" ||
+          args.activationReason === "connected_app_rejoin";
         await args.ctx.scheduler.runAfter(
           15_000,
           (internal as any).communityMemberCoach.runNewMemberOnboardingInternal,
@@ -169,6 +173,7 @@ export async function activateCommunityMembershipCore(args: {
             communityId: args.communityId,
             memberUserId: args.userId,
             activationSequence,
+            isLiveJoin,
           },
         );
       }

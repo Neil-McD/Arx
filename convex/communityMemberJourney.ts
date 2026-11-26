@@ -250,6 +250,42 @@ async function readLastMemberGuideReplyAt(
   return latestUserReplyAt;
 }
 
+const COACH_UNANSWERED_STUCK_GRACE_MS = 48 * 60 * 60 * 1000;
+const ONBOARDING_UNANSWERED_STUCK_GRACE_MS = 72 * 60 * 60 * 1000;
+
+function isUnansweredCoachTouchStale(args: {
+  status: string;
+  reason?: string;
+  sentAt: number;
+  replied: boolean;
+  nowMs: number;
+}): boolean {
+  if (args.status !== "sent" || args.replied || args.sentAt <= 0) return false;
+  const graceMs =
+    args.reason === "member_onboarding"
+      ? ONBOARDING_UNANSWERED_STUCK_GRACE_MS
+      : COACH_UNANSWERED_STUCK_GRACE_MS;
+  return args.nowMs - args.sentAt >= graceMs;
+}
+
+function unconfiguredCompletedAppMilestoneLabels(args: {
+  stages: readonly JourneyStageDefinition[];
+  completedMilestones?: ReadonlyArray<{ key: string; label?: string; source?: string }> | null;
+}): string[] {
+  const configuredKeys = new Set(args.stages.flatMap((stage) => stage.checkpoints.map((cp) => cp.key)));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const row of args.completedMilestones ?? []) {
+    if (!row || row.source !== "app" || !row.key || configuredKeys.has(String(row.key))) continue;
+    const label = String(row.label ?? row.key).replace(/\s+/g, " ").trim();
+    const norm = label.toLowerCase();
+    if (!label || seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(label.slice(0, MAX_CHECKPOINT_LABEL_CHARS));
+  }
+  return out.slice(0, 6);
+}
+
 // Used by convex/communityMemberCoach.ts when preparing a proactive check-in
 // candidate so the Chief of Staff honours the member's stage goal and any
 // founder instruction left on their Journey card.
@@ -308,6 +344,13 @@ export async function readMemberJourneyGuidanceForCoach(
     if (remaining.length > 0) {
       stageGoal = `${stageGoal ? `${stageGoal} ` : ""}Next stage checkpoints: ${remaining.join(", ")}.`;
     }
+  }
+  const extraAppMilestones = unconfiguredCompletedAppMilestoneLabels({
+    stages: config.stages,
+    completedMilestones: card?.completedMilestones,
+  });
+  if (extraAppMilestones.length > 0) {
+    stageGoal = `${stageGoal ? `${stageGoal} ` : ""}Completed product milestones: ${extraAppMilestones.join(", ")}.`;
   }
   return {
     stageName: stage?.name ?? "New",
@@ -517,7 +560,15 @@ async function computeCommunityMemberJourneyBoard(
           typeof lastGuideReplyAt === "number" &&
           sentAt > 0 &&
           lastGuideReplyAt >= sentAt;
-        if (check.status === "sent" && !replied) {
+        if (
+          isUnansweredCoachTouchStale({
+            status: check.status,
+            reason: check.reason,
+            sentAt,
+            replied,
+            nowMs,
+          })
+        ) {
           unansweredCoachCount += 1;
         }
         if (!latestCoachSummary || at > latestCoachSummary.at) {
@@ -987,10 +1038,14 @@ export async function readMemberOwnJourneySummary(
       at: iso(item.at) ?? new Date(args.nowMs).toISOString(),
     }))
     .filter((item) => Boolean(item.text));
+  const extraAppMilestones = unconfiguredCompletedAppMilestoneLabels({
+    stages: config.stages,
+    completedMilestones: storedCard?.completedMilestones,
+  });
   return {
     stage_name: stage.name,
     stage_goal: stage.goal,
-    checkpoints_done: evaluated.filter((cp) => cp.done).map((cp) => cp.label),
+    checkpoints_done: [...evaluated.filter((cp) => cp.done).map((cp) => cp.label), ...extraAppMilestones],
     checkpoints_remaining: evaluated.filter((cp) => !cp.done).map((cp) => cp.label),
     recent_wins: recentWins,
   };
@@ -1078,7 +1133,17 @@ export async function readMemberJourneySummaryForBuilder(
       typeof lastGuideReplyAt === "number" &&
       at > 0 &&
       lastGuideReplyAt >= at;
-    if (check.status === "sent" && !replied) unansweredCoachCount += 1;
+    if (
+      isUnansweredCoachTouchStale({
+        status: check.status,
+        reason: check.reason,
+        sentAt: at,
+        replied,
+        nowMs: args.nowMs,
+      })
+    ) {
+      unansweredCoachCount += 1;
+    }
     if (!latestCoachSummary || at > latestCoachSummary.at) {
       latestCoachSummary = {
         summary: formatCoachOutcomeSummary({
@@ -1262,6 +1327,51 @@ export const describeJourneyStageRemovalInternal = internalQuery({
   },
 });
 
+async function resolveAutoAdvanceStageMove(
+  ctx: any,
+  args: {
+    communityId: any;
+    targetUserId: any;
+    stages: readonly JourneyStageDefinition[];
+    currentStageKey: string;
+    dismissedAdvanceForStageKey?: string | null;
+    completedMilestones?: ReadonlyArray<{ key: string; completedAt: number }> | null;
+  },
+): Promise<{ nextStageKey: string; outcomeNote: string } | null> {
+  const stageIndex = args.stages.findIndex((stage) => stage.key === args.currentStageKey);
+  if (stageIndex < 0 || stageIndex >= args.stages.length - 1) return null;
+  if (args.dismissedAdvanceForStageKey === args.currentStageKey) return null;
+  const currentStage = args.stages[stageIndex]!;
+  if (currentStage.checkpoints.length === 0) return null;
+  const [participation, goalRows] = await Promise.all([
+    readMemberParticipationSignals(ctx, args.communityId, args.targetUserId),
+    ctx.db
+      .query("memberFacts")
+      .withIndex("by_user_community", (q: any) =>
+        q.eq("userId", args.targetUserId).eq("communityId", args.communityId),
+      )
+      .filter((q: any) => q.eq(q.field("kind"), "goal"))
+      .take(10),
+  ]);
+  const hasSharedGoal = goalRows.some((fact: any) => fact.kind === "goal" && factVisibleToHost(fact));
+  const evaluated = evaluateStageCheckpoints({
+    checkpoints: currentStage.checkpoints,
+    postsCount: participation.postsCount,
+    lessonsDoneCount: participation.lessonsDoneCount,
+    hasSharedGoal,
+    completedMilestones: args.completedMilestones,
+  });
+  if (evaluated.length === 0 || !evaluated.every((cp) => cp.done)) return null;
+  const nextStage = args.stages[stageIndex + 1]!;
+  return {
+    nextStageKey: nextStage.key,
+    outcomeNote: `Auto-moved to ${nextStage.name} after finishing ${currentStage.name} checkpoints`.slice(
+      0,
+      MAX_AGENT_OUTCOME_CHARS,
+    ),
+  };
+}
+
 async function applyCardPatchForMember(
   ctx: any,
   args: {
@@ -1269,6 +1379,7 @@ async function applyCardPatchForMember(
     communityId: any;
     community: any;
     stages: JourneyStageDefinition[];
+    autoAdvanceEnabled?: boolean;
     targetUserId: any;
     nowMs: number;
     source: JourneyMilestoneSource;
@@ -1379,22 +1490,61 @@ async function applyCardPatchForMember(
   if (args.addOutcomeText !== undefined) {
     const text = normalizeOutcomeText(args.addOutcomeText);
     if (!text) throw new Error("journey_outcome_text_required");
-    const id =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `out_${args.nowMs}_${Math.random().toString(36).slice(2, 8)}`;
-    nextOutcomes = [
-      { id, text, at: args.nowMs, source: args.source },
-      ...(nextOutcomes ?? []),
-    ].slice(0, MAX_CARD_OUTCOMES);
-    addedOutcome = { id, text, at: new Date(args.nowMs).toISOString(), source: args.source };
+    const existingDuplicate =
+      args.source === "app"
+        ? (nextOutcomes ?? []).find(
+            (item: any) =>
+              item?.source === "app" &&
+              String(item?.text ?? "").trim().toLowerCase() === text.toLowerCase(),
+          )
+        : null;
+    if (existingDuplicate) {
+      addedOutcome = {
+        id: String(existingDuplicate.id),
+        text: String(existingDuplicate.text),
+        at: iso(existingDuplicate.at) ?? new Date(args.nowMs).toISOString(),
+        source: "app",
+      };
+    } else {
+      const id =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `out_${args.nowMs}_${Math.random().toString(36).slice(2, 8)}`;
+      nextOutcomes = [
+        { id, text, at: args.nowMs, source: args.source },
+        ...(nextOutcomes ?? []),
+      ].slice(0, MAX_CARD_OUTCOMES);
+      addedOutcome = { id, text, at: new Date(args.nowMs).toISOString(), source: args.source };
+    }
+  }
+
+  let finalStageKey = nextStageKey;
+  let finalDismissedAdvanceForStageKey = nextDismissedAdvanceForStageKey;
+  let autoAdvanceOutcomeNote: string | undefined;
+  if (args.autoAdvanceEnabled && args.stageKey === undefined && args.toggleMilestone?.completed) {
+    const autoMove = await resolveAutoAdvanceStageMove(ctx, {
+      communityId: args.communityId,
+      targetUserId: args.targetUserId,
+      stages: args.stages,
+      currentStageKey: finalStageKey,
+      dismissedAdvanceForStageKey: finalDismissedAdvanceForStageKey,
+      completedMilestones: nextCompletedMilestones,
+    });
+    if (autoMove) {
+      finalStageKey = autoMove.nextStageKey;
+      finalDismissedAdvanceForStageKey = undefined;
+      autoAdvanceOutcomeNote = autoMove.outcomeNote;
+    }
   }
 
   if (existing) {
     await ctx.db.patch(existing._id, {
-      stageKey: nextStageKey,
+      stageKey: finalStageKey,
       statusOverride: nextStatusOverride,
-      dismissedAdvanceForStageKey: nextDismissedAdvanceForStageKey,
+      dismissedAdvanceForStageKey: finalDismissedAdvanceForStageKey,
+      ...(autoAdvanceOutcomeNote
+        ? { agentOutcomeNote: autoAdvanceOutcomeNote, agentOutcomeAt: args.nowMs }
+        : {}),
       ...(hasInstructionUpdate
         ? {
             founderInstruction: nextInstruction ?? undefined,
@@ -1412,9 +1562,12 @@ async function applyCardPatchForMember(
     await ctx.db.insert("communityMemberJourneyCards", {
       communityId: args.communityId,
       userId: args.targetUserId,
-      stageKey: nextStageKey,
-      ...(nextDismissedAdvanceForStageKey
-        ? { dismissedAdvanceForStageKey: nextDismissedAdvanceForStageKey }
+      stageKey: finalStageKey,
+      ...(finalDismissedAdvanceForStageKey
+        ? { dismissedAdvanceForStageKey: finalDismissedAdvanceForStageKey }
+        : {}),
+      ...(autoAdvanceOutcomeNote
+        ? { agentOutcomeNote: autoAdvanceOutcomeNote, agentOutcomeAt: args.nowMs }
         : {}),
       ...(nextStatusOverride ? { statusOverride: nextStatusOverride } : {}),
       ...(nextInstruction
@@ -1428,10 +1581,10 @@ async function applyCardPatchForMember(
     });
   }
 
-  const stageObj = args.stages.find((entry) => entry.key === nextStageKey) ?? null;
+  const stageObj = args.stages.find((entry) => entry.key === finalStageKey) ?? null;
   return {
-    stage_key: nextStageKey,
-    stage_name: stageObj?.name ?? nextStageKey,
+    stage_key: finalStageKey,
+    stage_name: stageObj?.name ?? finalStageKey,
     status_override: nextStatusOverride ?? null,
     founder_instruction: nextInstruction,
     ...(milestoneKeyApplied ? { milestone_key: milestoneKeyApplied, done: Boolean(args.toggleMilestone?.completed) } : {}),
@@ -1468,12 +1621,13 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
       return { recorded: false as const };
     }
 
-    const { stages } = await readStagesForCommunity(ctx, args.communityId);
+    const { stages, autoAdvanceEnabled } = await readStagesForCommunity(ctx, args.communityId);
     const rawMilestone = typeof args.milestone === "string" ? args.milestone.trim() : "";
     const rawOutcome = typeof args.outcome === "string" ? normalizeOutcomeText(args.outcome) : null;
     if (!rawMilestone && !rawOutcome) return { recorded: false as const };
 
     let toggleMilestone: { key: string; label?: string; completed: boolean } | undefined;
+    let implicitOutcomeText: string | null = null;
     if (rawMilestone) {
       const lower = rawMilestone.toLowerCase();
       const configured = stages
@@ -1484,19 +1638,28 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
         typeof args.label === "string" && args.label.trim()
           ? args.label.trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS)
           : configured?.label ?? rawMilestone.slice(0, MAX_CHECKPOINT_LABEL_CHARS);
-      toggleMilestone = { key, label, completed: args.done !== false };
+      const completed = args.done !== false;
+      toggleMilestone = { key, label, completed };
+      // If a connected app reports a custom milestone key not yet configured
+      // on a stage (e.g. "first_win"), also surface it as an idempotent app win
+      // when no explicit outcome was sent so it never disappears silently.
+      if (!configured && completed && !rawOutcome) {
+        implicitOutcomeText = normalizeOutcomeText(label);
+      }
     }
 
+    const effectiveOutcome = rawOutcome ?? implicitOutcomeText;
     const updated = await applyCardPatchForMember(ctx, {
       actorUserId: community.ownerId,
       communityId: args.communityId,
       community,
       stages,
+      autoAdvanceEnabled,
       targetUserId: userId,
       nowMs: Date.now(),
       source: "app",
       ...(toggleMilestone ? { toggleMilestone } : {}),
-      ...(rawOutcome ? { addOutcomeText: rawOutcome } : {}),
+      ...(effectiveOutcome ? { addOutcomeText: effectiveOutcome } : {}),
     });
 
     return {
@@ -1615,6 +1778,7 @@ export const applyJourneyOperationForTrustedManagerInternal = internalMutation({
           communityId: args.communityId,
           community,
           stages,
+          autoAdvanceEnabled,
           targetUserId,
           nowMs,
           source: args.source,
@@ -2043,7 +2207,7 @@ export const updateMemberJourneyCard = mutation({
       throw new Error("community_member_not_found");
     }
 
-    const { stages } = await readStagesForCommunity(ctx, args.communityId);
+    const { stages, autoAdvanceEnabled } = await readStagesForCommunity(ctx, args.communityId);
     const validKeys = new Set(stages.map((stage) => stage.key));
     if (args.stageKey !== undefined && !validKeys.has(args.stageKey)) {
       throw new Error("journey_stage_not_found");
@@ -2136,11 +2300,33 @@ export const updateMemberJourneyCard = mutation({
       }
     }
 
+    let finalStageKey = nextStageKey;
+    let finalDismissedAdvanceForStageKey = nextDismissedAdvanceForStageKey;
+    let autoAdvanceOutcomeNote: string | undefined;
+    if (autoAdvanceEnabled && args.stageKey === undefined && args.toggleMilestone?.completed) {
+      const autoMove = await resolveAutoAdvanceStageMove(ctx, {
+        communityId: args.communityId,
+        targetUserId: membership.userId,
+        stages,
+        currentStageKey: finalStageKey,
+        dismissedAdvanceForStageKey: finalDismissedAdvanceForStageKey,
+        completedMilestones: nextCompletedMilestones,
+      });
+      if (autoMove) {
+        finalStageKey = autoMove.nextStageKey;
+        finalDismissedAdvanceForStageKey = undefined;
+        autoAdvanceOutcomeNote = autoMove.outcomeNote;
+      }
+    }
+
     if (existing) {
       await ctx.db.patch(existing._id, {
-        stageKey: nextStageKey,
+        stageKey: finalStageKey,
         statusOverride: nextStatusOverride,
-        dismissedAdvanceForStageKey: nextDismissedAdvanceForStageKey,
+        dismissedAdvanceForStageKey: finalDismissedAdvanceForStageKey,
+        ...(autoAdvanceOutcomeNote
+          ? { agentOutcomeNote: autoAdvanceOutcomeNote, agentOutcomeAt: nowMs }
+          : {}),
         ...(hasInstructionUpdate
           ? {
               founderInstruction: nextInstruction ?? undefined,
@@ -2158,9 +2344,12 @@ export const updateMemberJourneyCard = mutation({
       await ctx.db.insert("communityMemberJourneyCards", {
         communityId: args.communityId,
         userId: membership.userId,
-        stageKey: nextStageKey,
-        ...(nextDismissedAdvanceForStageKey
-          ? { dismissedAdvanceForStageKey: nextDismissedAdvanceForStageKey }
+        stageKey: finalStageKey,
+        ...(finalDismissedAdvanceForStageKey
+          ? { dismissedAdvanceForStageKey: finalDismissedAdvanceForStageKey }
+          : {}),
+        ...(autoAdvanceOutcomeNote
+          ? { agentOutcomeNote: autoAdvanceOutcomeNote, agentOutcomeAt: nowMs }
           : {}),
         ...(nextStatusOverride ? { statusOverride: nextStatusOverride } : {}),
         ...(nextInstruction
@@ -2175,7 +2364,7 @@ export const updateMemberJourneyCard = mutation({
     }
 
     return {
-      stage_key: nextStageKey,
+      stage_key: finalStageKey,
       status_override: nextStatusOverride ?? null,
       founder_instruction: nextInstruction,
     };

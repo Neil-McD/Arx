@@ -400,7 +400,7 @@ export function CommunityMemberCoachSettingsSection(props: {
               error ? (
                 <span className="settings-v1-error" role="alert">{error}</span>
               ) : (
-                `Your guide spots quiet newcomers, stalled learners, and quiet members before an event, and puts private check-in drafts in "Your guide suggests" on Home. At most 2 messages per member per week, 48 hours apart, never during quiet hours or active chats.${statusNote}`
+                `Your guide welcomes new members and spots quiet newcomers, stalled learners, and quiet members before an event, putting private drafts in "Your guide suggests" on Home. At most 2 messages per member per week, 48 hours apart, never during quiet hours or active chats.${statusNote}`
               )
             }
           >
@@ -423,7 +423,9 @@ export function CommunityMemberCoachSettingsSection(props: {
                     ? "Sends directly to their private thread during daytime hours."
                     : "Off — enable to let your guide follow up privately on goals members share."
                   : isAuto
-                    ? "Sends automatically during daytime hours."
+                    ? reason === "member_onboarding"
+                      ? "Sends right away when someone joins live, or during daytime hours for approved joins."
+                      : "Sends automatically during daytime hours."
                     : "Waits for your approval on Home first.";
                 return (
                   <SettingsRow
