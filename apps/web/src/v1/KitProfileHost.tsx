@@ -114,6 +114,7 @@ export function HostSummary(props: { host: ProfileHost; now: number; state: Prof
   return (
     <div className="pfh-sum" aria-label="For hosts">
       <p>
+        {record.out ? <span className="pfh-sum-status"><i aria-hidden="true" />{record.out.text}</span> : null}
         {status ? <span className={needsLook ? "pfh-sum-status is-look" : "pfh-sum-status"}><i aria-hidden="true" />{status}</span> : null}
         {[stage?.name, plan, last].filter(Boolean).map((part) => <span key={part}>{part}</span>)}
       </p>
@@ -167,6 +168,13 @@ export function HostMenu(props: { host: ProfileHost; state: ProfileHostState; se
               ) : (
                 <button type="button" role="menuitem" onClick={pick(() => state.run(host.onUpdateJourney?.({ statusOverride: "needs_you" }), "That didn't save. Try again."))}>Mark as needs you</button>
               )}
+              {/* A host's own checkpoints don't tick themselves: they're ticked here. */}
+              {card.checkpoints.filter((cp) => !cp.auto).map((cp) => (
+                <button key={`cp-${cp.key}`} type="button" role="menuitem"
+                  onClick={pick(() => state.run(host.onUpdateJourney?.({ toggleMilestone: { key: cp.key, label: cp.label, completed: !cp.done } }), "That checkpoint didn't save. Try again."))}>
+                  {cp.done ? `Untick “${cp.label}”` : `Tick “${cp.label}”`}
+                </button>
+              ))}
               <i role="separator" />
               <button type="button" role="menuitem" onClick={pick(() => state.setWriting("win"))}>Log a win</button>
               <button type="button" role="menuitem" onClick={pick(() => state.setWriting("guide"))}>{card.founder_instruction ? "Change your note to the guide" : `Tell the guide about ${first}`}</button>

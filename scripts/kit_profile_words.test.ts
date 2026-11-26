@@ -73,3 +73,17 @@ test("a host sees the same profile, a summary line, the ⋯ menu, and the guide'
   expect(html).not.toContain("<select");
   expect(html).not.toContain("<textarea");
 });
+
+test("a past member still opens for a host: their record becomes the profile, with how they left", async () => {
+  const { profileFromRecord } = await import("../apps/web/src/v1/KitProfile");
+  const { host } = josh();
+  const record = { ...host.record, out: { reason: "left", text: "Left on Nov 2" }, facts: [{ kind: "goal", label: "Working on", body: "Pricing", source: "guide", at: null }] };
+  const profile = profileFromRecord(record as any);
+  expect(profile.can_message).toBe(false);
+  expect(profile.viewer_can_manage).toBe(true);
+  expect(profile.facts).toEqual([{ kind: "goal", label: "Working on", body: "Pricing" }]);
+  const html = renderToStaticMarkup(React.createElement(KitProfile, { profile, host: { ...host, record, card: null }, now: NOW, ...avatars })).replace(/&#x27;/g, "'");
+  expect(html).toContain("Left on Nov 2");
+  expect(html).toContain("Keen on pricing.");
+  expect(html).not.toContain("Message");
+});

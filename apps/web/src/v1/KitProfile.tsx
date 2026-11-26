@@ -149,6 +149,17 @@ export function KitProfile(props: Avatars & {
   );
 }
 
+// A past member's profile, from the host's record of them: who they were,
+// what they said, nothing to message or share.
+export function profileFromRecord(record: CloudMemberRecord): CloudMemberProfile {
+  return {
+    membership_id: record.membership_id, user_id: record.user_id, name: record.name, avatar_url: record.avatar_url,
+    handle: record.handle, bio: null, links: {}, avatar_focus_x: record.avatar_focus_x, avatar_focus_y: record.avatar_focus_y, avatar_zoom: record.avatar_zoom,
+    role: record.role, here_now: false, you: false, facts: record.facts.map(({ kind, label, body }) => ({ kind, label, body })),
+    in_common: [], hosts: [], shared: [], can_message: false, message_community_id: null, viewer_can_manage: true,
+  };
+}
+
 // The profile of one person in the community on the page, loaded and kept
 // current. Nothing shows while it loads; `fallback` shows when the person has
 // no profile here (someone who has left). For someone who manages members it
@@ -193,7 +204,15 @@ export function KitProfileFor(props: Avatars & {
     setRecord(null);
     if (!session || !communityId) return;
     let live = true;
+    // Someone who has left (or was removed or blocked) has no profile here, but
+    // a host still sees their record: their notes and history stay reachable.
+    const pastMember = async (): Promise<CloudMemberProfile | null> => {
+      if (!membershipId) return null;
+      const past = await getCloudCommunityMemberRecord({ session, communityId, membershipId }).catch(() => null);
+      return past ? profileFromRecord(past) : null;
+    };
     void getCloudCommunityMemberProfile({ session, communityId, membershipId, targetUserId })
+      .then(async (next) => next ?? await pastMember())
       .then((next) => { if (live) { setProfile(next); onLoaded?.(next); } })
       .catch(() => { if (live) { setProfile(null); onLoaded?.(null); } });
     return () => { live = false; };
