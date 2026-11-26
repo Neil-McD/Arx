@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 import type { CloudFounderBillingOverview } from "../../../../shared/cloudFounderBillingGateway";
-import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
+import { SIGN_OUT_FAILED } from "./WebAccountMenu";
 
 type SessionLike = {
   user: {
@@ -29,13 +29,11 @@ export type WebAccountSettingsSectionProps = {
 export function WebAccountSettingsSection(
   props: WebAccountSettingsSectionProps,
 ) {
-  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
   useEffect(() => {
     if (props.session) return;
-    setIsSignOutConfirmOpen(false);
     setIsSubmittingSignOut(false);
   }, [props.session]);
 
@@ -45,9 +43,8 @@ export function WebAccountSettingsSection(
     setIsSubmittingSignOut(true);
     try {
       await props.handleSignOut();
-      setIsSignOutConfirmOpen(false);
     } catch {
-      setSignOutError("Sign out couldn't be confirmed. Try again.");
+      setSignOutError(SIGN_OUT_FAILED);
     } finally {
       setIsSubmittingSignOut(false);
     }
@@ -66,8 +63,8 @@ export function WebAccountSettingsSection(
             <SettingsRow
               label="Sign out"
               help={
-                props.authError ? (
-                  <span className="settings-v1-error">{props.authError}</span>
+                signOutError || props.authError ? (
+                  <span className="settings-v1-error" role="alert">{signOutError ?? props.authError}</span>
                 ) : (
                   "On this device."
                 )
@@ -77,9 +74,9 @@ export function WebAccountSettingsSection(
                 className="settings-v1-button"
                 type="button"
                 disabled={isSubmittingSignOut}
-                onClick={() => setIsSignOutConfirmOpen(true)}
+                onClick={() => void handleConfirmSignOut()}
               >
-                Sign out
+                {isSubmittingSignOut ? "Signing out…" : "Sign out"}
               </button>
             </SettingsRow>
           </>
@@ -102,18 +99,6 @@ export function WebAccountSettingsSection(
           </SettingsRow>
         )}
       </SettingsGroup>
-      <WebSignOutConfirmModal
-        isOpen={Boolean(props.session) && isSignOutConfirmOpen}
-        isSubmitting={isSubmittingSignOut}
-        error={signOutError}
-        onClose={() => {
-          if (!isSubmittingSignOut) {
-            setIsSignOutConfirmOpen(false);
-            setSignOutError(null);
-          }
-        }}
-        onConfirm={handleConfirmSignOut}
-      />
     </>
   );
 }

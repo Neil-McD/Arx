@@ -44,7 +44,7 @@ test("the account menu's header says the role and where it holds", () => {
 
 test("the account menu is who you are, this community, you, then sign out", () => {
   const menu = read("apps/web/src/components/WebAccountMenu.tsx");
-  const order = ["account-menu-head", ">This community<", '"Host view" : "View as a member"', ">You<", "<span>Settings</span>", "<span>Appearance</span>", "<span>Sign out</span>"].map((text) => menu.indexOf(text));
+  const order = ["account-menu-head", ">This community<", '"Host view" : "View as a member"', ">You<", "<span>Settings</span>", "<span>Appearance</span>", "<SignOutItem "].map((text) => menu.indexOf(text));
   expect(order.every((at) => at >= 0)).toBe(true);
   expect([...order].sort((a, b) => a - b)).toEqual(order);
   // Appearance says the mode you're in, not the one you'd switch to.
