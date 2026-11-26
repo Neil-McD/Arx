@@ -14,6 +14,7 @@ const RealAppPreview = lazy(() => import("./RealAppPreview").then((module) => ({
 const GuideScene = lazy(() => import("./GuideScene").then((module) => ({ default: module.GuideScene })));
 const BrainScene = lazy(() => import("./BrainScene").then((module) => ({ default: module.BrainScene })));
 const ChiefScene = lazy(() => import("./ChiefScene").then((module) => ({ default: module.ChiefScene })));
+const BoardScene = lazy(() => import("./BoardScene").then((module) => ({ default: module.BoardScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
@@ -531,6 +532,12 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           live={<Suspense fallback={<div className="gsc-wait" />}><ChiefScene /></Suspense>}
           features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "A monthly AI allowance you control"]}>
           In most communities you only find out someone's gone when they cancel. Polynet sees it early: the new member who never said hello, the one stuck halfway through a course, the regular who's gone quiet. Your chief of staff drafts the right nudge for each, and you send it, change it or skip it.
+        </FeatureSection>
+
+        <FeatureSection id="members-board" title={["Nobody can see who's", "getting results."]} sceneLabel="Try the members board: move a member on, filter who needs you, and see what the guide did on each card"
+          live={<Suspense fallback={<div className="gsc-wait" />}><BoardScene /></Suspense>}
+          features={["Every member's progress, stage by stage", "Checkpoints that tick themselves", "Wins logged on each member", "Who's ready to move on, one click to approve", "Follow-ups that run on their own", "Board highlights in your morning brief"]}>
+          The members board tracks everyone from the day they join to the result your community promises. Checkpoints tick themselves as they post and finish lessons. Your chief of staff works the board: it spots who's ready to move on and who's stuck, follows up on its own, logs what happened, and brings the wins to your morning brief. You approve each move.
         </FeatureSection>
 
         <section className="plans-line" aria-labelledby="plans-line-title" data-rv>

@@ -72,3 +72,16 @@ test("the Chief of Staff scene: the 8am brief and the guide's suggestions, and o
   // Nothing reaches people who already left; the buttons say Send, Edit, Skip.
   expect(page).not.toMatch(/Win-backs|Approve, edit or skip|Usage and limits/);
 });
+
+test("the members board section is the app's own board, and only claims what the AI really does", async () => {
+  const { boardPulse } = await import("../apps/web/src/components/polynetLanding/BoardScene");
+  const { sampleJourneyBoard } = await import("../apps/web/src/components/polynetLanding/boardSample");
+  const board = sampleJourneyBoard(Date.UTC(2026, 10, 25, 12));
+  // Dev and Jon have every checkpoint done; Rosa, Josh, Amir are stuck and Hana's payment is on hold.
+  expect(boardPulse(board)).toBe("2 ready to move on · 4 need you · Jon: passed 100 members");
+  const page = renderToStaticMarkup(React.createElement(ConversionLanding)).replace(/&#x27;/g, "'");
+  expect(page).toContain("Nobody can see who's<br/>getting results.");
+  expect(page).toContain("You approve each move.");
+  // The AI suggests moves and follows up; it never moves anyone or judges progress by itself.
+  expect(page).not.toMatch(/moves (members|them|people) (on )?(by itself|automatically|on its own)|judges? (their )?progress/i);
+});
