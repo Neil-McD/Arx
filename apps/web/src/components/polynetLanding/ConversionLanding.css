@@ -599,41 +599,13 @@
 .pn-landing .grid-six article { display: flex; flex-direction: column; gap: 6px; padding: 22px; background: #0b0c0e; }
 .pn-landing .grid-six p { color: var(--muted); font-size: 14.5px; }
 
-/* Showcase: one row that scrolls sideways, and a way to see them all. */
-.pn-landing .showcase-head,
+/* A section title with a "more" link on its right. */
 .pn-landing .plans-line-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .pn-landing a.more { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); font-size: 14px; text-decoration: none; white-space: nowrap; }
 .pn-landing a.more:hover { color: var(--text); }
-.pn-landing .showcase-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: calc((100% - 32px) / 3);
-  gap: 16px;
-  margin-top: 12px;
-  padding-bottom: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-}
-.pn-landing .showcase-row > a { scroll-snap-align: start; }
 
-/* Home's pricing in one line; the full story is on /pricing. */
+/* Home's pricing: the three plan cards, each with its own button; the full comparison is on /pricing. */
 .pn-landing .plans-line h2 { font-size: clamp(22px, 2vw, 28px); }
-.pn-landing .plans-line-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
-.pn-landing .plans-line-item { display: flex; flex-direction: column; gap: 6px; padding: 22px; background: #0b0c0e; color: var(--muted); font-size: 14.5px; text-decoration: none; }
-.pn-landing .plans-line-item:hover { background: #101114; }
-.pn-landing .plans-line-item b { color: var(--text); font-size: 15px; font-weight: 500; }
-.pn-landing .plans-line-price strong { color: var(--text); font-size: 26px; font-weight: 500; letter-spacing: -0.02em; }
-.pn-landing .plans-line-item.lit { background: linear-gradient(180deg, rgba(var(--ai-rgb), .1), rgba(var(--ai-rgb), .02)) #0b0c0e; }
-.pn-landing .plans-line-item.lit > span:last-child { color: var(--ai); }
-.pn-landing .showcase-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line-default); border-radius: 14px; background: var(--surface); color: var(--text); text-decoration: none; }
-.pn-landing .showcase-card:hover { border-color: var(--line-strong); }
-.pn-landing .showcase-banner { display: block; width: 100%; aspect-ratio: 16 / 7; background: var(--surface-raised); }
-.pn-landing .showcase-body { display: flex; flex-direction: column; gap: 6px; padding: 18px; }
-.pn-landing .showcase-body strong { font-size: 16px; font-weight: 500; }
-.pn-landing .showcase-body span { color: var(--muted); font-size: 14px; line-height: 1.5; }
-.pn-landing .showcase-body em { color: var(--quiet); font-size: 13px; font-style: normal; }
 
 /* Pricing: Chief of Staff is the lit one. */
 .pn-landing .plan { gap: 16px; padding: 24px; border-radius: 14px; }
@@ -708,12 +680,10 @@
 .pn-landing .footer-base button { min-height: 44px; padding: 0; border: 0; background: none; color: var(--text); font-size: 13.5px; }
 
 @media (max-width: 900px) {
-  .pn-landing .cards.three,
-  .pn-landing .plans-line-row { grid-template-columns: 1fr; }
-  .pn-landing .showcase-row { grid-auto-columns: 78%; }
+  .pn-landing .cards.three { grid-template-columns: 1fr; }
   /* Carousels run edge to edge: the first card lines up with the text, and
      the rest fall off the screen on both sides as they scroll. */
-  .pn-landing .figs, .pn-landing .showcase-row { margin-inline: calc(50% - 50vw); padding-inline: calc(50vw - 50%); scroll-padding-inline: 24px; }
+  .pn-landing .figs { margin-inline: calc(50% - 50vw); padding-inline: calc(50vw - 50%); scroll-padding-inline: 24px; }
   .pn-landing .grid-six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pn-landing .figs { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84%; gap: 12px; margin-top: 48px; padding-bottom: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .pn-landing .figs::-webkit-scrollbar { display: none; }
@@ -743,7 +713,7 @@
 
 @media (max-width: 560px) {
   .pn-landing .page { width: min(100% - 32px, var(--content)); }
-  .pn-landing .figs, .pn-landing .showcase-row { scroll-padding-inline: 16px; }
+  .pn-landing .figs { scroll-padding-inline: 16px; }
   .pn-landing .hero-text { padding-top: 124px; }
   .pn-landing .doors { flex-direction: column; width: 100%; }
   .pn-landing .doors > .cta { width: 100%; }
@@ -760,7 +730,6 @@
   line-height: 1;
   letter-spacing: -0.045em;
 }
-.pn-landing .plans-line-item b { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 /* On a phone all three plans stay in view: smaller type, no column buttons
    (the plan cards above have them). */
