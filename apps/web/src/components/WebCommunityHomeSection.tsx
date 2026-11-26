@@ -151,11 +151,34 @@ function opener(target: OwnerNoticed["target"] | MemberNextStep["target"], actio
   };
 }
 
-// A waiting question the guide has drafted a reply for shows once, under
-// "Your guide suggests", not also as a row of its own.
-export function noticedWithoutDrafted(noticed: OwnerNoticed[], drafts: Array<Pick<ReplyDraftView, "author" | "channel">>): OwnerNoticed[] {
-  return noticed.filter((entry) => !(entry.key === "questions_waiting" && entry.target.kind === "channel"
-    && drafts.some((draft) => entry.target.kind === "channel" && entry.target.name === draft.channel && entry.title.startsWith(`${draft.author}'s question `))));
+// Any problem the guide has already prepared a concrete draft for shows once
+// as that draft, not also as a duplicate generic legacy reminder row.
+export function noticedWithoutDrafted(
+  noticed: OwnerNoticed[],
+  drafts: Array<Pick<ReplyDraftView, "author" | "channel">>,
+  coachDrafts: Array<Pick<MemberCoachDraftView, "reason">> = [],
+): OwnerNoticed[] {
+  const hasNewcomerDraft = coachDrafts.some(
+    (draft) => draft.reason === "quiet_newcomer" || draft.reason === "member_onboarding",
+  );
+  const hasStalledLearnerDraft = coachDrafts.some((draft) => draft.reason === "course_stall");
+  return noticed.filter((entry) => {
+    if (
+      entry.key === "questions_waiting" &&
+      entry.target.kind === "channel" &&
+      drafts.some(
+        (draft) =>
+          entry.target.kind === "channel" &&
+          entry.target.name === draft.channel &&
+          entry.title.startsWith(`${draft.author}'s question `),
+      )
+    ) {
+      return false;
+    }
+    if (entry.key === "quiet_newcomers" && hasNewcomerDraft) return false;
+    if (entry.key === "course_stall" && hasStalledLearnerDraft) return false;
+    return true;
+  });
 }
 
 const NOTICED_ICON = { questions_waiting: "question", quiet_newcomers: "people", course_stall: "lesson" } as const;
@@ -430,13 +453,16 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const joinReview = hasLoadedJoinReview && props.joinReview!.requests.length > 0 ? props.joinReview! : null;
   const joinCount = !isHost ? 0 : hasLoadedJoinReview ? props.joinReview!.requests.length : snapshot?.joinRequestsPending ?? 0;
   const things = isHost
-    ? hostThingsFor(noticedWithoutDrafted(noticed ?? [], drafts ?? []), { agentOn, actions: props, onNotNow: notNow })
+    ? hostThingsFor(noticedWithoutDrafted(noticed ?? [], drafts ?? [], coachDrafts ?? []), { agentOn, actions: props, onNotNow: notNow })
     : memberThingsFor(steps ?? [], props);
   const tagThings = tagThingsFor(shownTags, (channelSlug, rootId) => {
     setHeldTags(null);
     props.onOpenTag?.(channelSlug, rootId);
   });
-  const needs = homeThingsCount({ joinRequests: joinCount, things: things.length + tagThings.length });
+  const suggestionsCount = isHost && agentOn
+    ? (drafts?.length ?? 0) + (coachDrafts?.length ?? 0) + (stageProposals?.length ?? 0)
+    : 0;
+  const needs = homeThingsCount({ joinRequests: joinCount, things: things.length + tagThings.length + suggestionsCount });
   // The page draws as one piece once its parts have answered, so the list is
   // never drawn and then pushed down by the brief (docs/specs/web-architecture
   // -end-state.md: nothing moves after it is drawn).
@@ -479,13 +505,15 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           </div>
         ) : null}
         {ready && brief && isHost && needs === 0 ? <p className={cx("hnone")}>Nothing needs you today.</p> : null}
-        {ready ? (
-          <NeedsYou label={isHost ? "Needs you" : "For you"} join={joinReview} joinCount={joinCount}
-            onShowAllJoinRequests={props.onOpenJoinRequests} things={things} tags={tagThings} />
-        ) : null}
-        {ready && isHost ? (
+        {ready && isHost && agentOn ? (
           <Suspense fallback={null}>
             <GuideSuggests
+              label="Needs you"
+              tags={tagThings}
+              join={joinReview}
+              joinCount={joinCount}
+              onShowAllJoinRequests={props.onOpenJoinRequests}
+              things={things}
               drafts={drafts ?? []}
               onPost={postDraft}
               onSkip={skipDraft}
@@ -497,6 +525,9 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
               onDismissStageProposal={dismissStageProposal}
             />
           </Suspense>
+        ) : ready ? (
+          <NeedsYou label={isHost ? "Needs you" : "For you"} join={joinReview} joinCount={joinCount}
+            onShowAllJoinRequests={props.onOpenJoinRequests} things={things} tags={tagThings} />
         ) : null}
         {ready && isHost && !agentOn && things.length > 0 && props.onTurnOnAgent ? (
           <TextLink style={{ marginTop: 14 }} onClick={props.onTurnOnAgent}>Turn on your guide</TextLink>

@@ -2085,7 +2085,7 @@
   grid-row: 1 / span 2;
 }
 
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:has(.community-page-rail-content) {
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:has(.community-page-rail-content, .knowledge-shelf[data-reserve-rail="true"]) {
   grid-template-columns: minmax(0, 1fr) var(--right-column-width);
 }
 
@@ -2093,7 +2093,7 @@
   min-height: 0;
 }
 
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-rail:empty {
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:not(:has(.knowledge-shelf[data-reserve-rail="true"])) > .community-page-rail:empty {
   display: none;
 }
 
@@ -3357,7 +3357,7 @@
    becomes two layers (list, then the conversation with a back arrow). */
 @media (max-width: 1023px) {
   /* Pages in the frame, a channel, Members: one column, no right column. */
-  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:has(.community-page-rail-content) { grid-template-columns: minmax(0, 1fr); }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:has(.community-page-rail-content, .knowledge-shelf[data-reserve-rail="true"]) { grid-template-columns: minmax(0, 1fr); }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-page-rail { display: none; }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context,
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page),
@@ -4113,8 +4113,10 @@
 
 /* The Knowledge shelf with nothing in its right column (a member, before
    the guide has learned anything) takes the whole room, not the reading
-   width beside an empty space (Neil, Nov 17). */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:not(:has(.community-page-rail-content)) > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-shelf) {
+   width beside an empty space (Neil, Nov 17). While the rail is reserved
+   during load, keep the normal reading width so the shelf never flashes
+   full-width and collapses when the panel arrives. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:not(:has(.community-page-rail-content, .knowledge-shelf[data-reserve-rail="true"])) > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-shelf) {
   max-width: none;
 }
 

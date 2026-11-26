@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
-import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve } from "../shared/channelRowsMemory";
+import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve, shouldReserveKnowledgeRail } from "../shared/channelRowsMemory";
 
 // Layout before data: a page has its shape before its data arrives, so
 // nothing that is drawn moves afterwards. The staging measurements in the
@@ -60,10 +60,19 @@ test("a channel's header row is held until its record arrives", () => {
     .toMatch(/\) : \([\s\S]{0,220}<header className="community-channel-header" aria-hidden="true" \/>/);
 });
 
-test("Knowledge draws its right column as one piece and keeps the top shelf free of async builder buttons", () => {
+test("Knowledge draws its right column as one piece, reserves its column before data arrives, and keeps the top shelf free of async builder buttons", () => {
   const classroom = read("apps/web/src/v1/KitClassroom.tsx");
   expect(classroom).toMatch(/usePanelSettled\(briefSettled && brainSettled && progressLoaded\)/);
   expect(classroom).not.toContain("onOpenGuideMemory?.(true)");
+  // Hosts always reserve the right column while loading; members honor remembered state and default to reserved.
+  expect(shouldReserveKnowledgeRail({ canManage: true, remembered: null, settled: false, hasContent: false })).toBe(true);
+  expect(shouldReserveKnowledgeRail({ canManage: true, remembered: false, settled: false, hasContent: false })).toBe(true);
+  expect(shouldReserveKnowledgeRail({ canManage: false, remembered: null, settled: false, hasContent: false })).toBe(true);
+  expect(shouldReserveKnowledgeRail({ canManage: false, remembered: false, settled: false, hasContent: false })).toBe(false);
+  expect(shouldReserveKnowledgeRail({ canManage: false, remembered: true, settled: false, hasContent: false })).toBe(true);
+  // Once settled, the live content determines whether the rail stays reserved.
+  expect(shouldReserveKnowledgeRail({ canManage: false, remembered: true, settled: true, hasContent: false })).toBe(false);
+  expect(shouldReserveKnowledgeRail({ canManage: false, remembered: false, settled: true, hasContent: true })).toBe(true);
 });
 
 test("a pod's panel and landing page draw their parts once they have answered", () => {

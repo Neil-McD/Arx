@@ -284,13 +284,62 @@ test("what the guide suggests is its own group: a row per draft, opened by the h
   expect(openedStackedHtml).toContain("Show less");
 });
 
-test("a question the guide drafted a reply for shows once, under what the guide suggests", async () => {
+test("a question or member signal the guide drafted for shows once, not also as a duplicate legacy reminder", async () => {
   const { noticedWithoutDrafted } = await import("../apps/web/src/components/WebCommunityHomeSection");
   const noticed = ownerNoticed({ facts, records: [], nowMs: NOW });
   expect(noticedWithoutDrafted(noticed, [{ author: "Rafael", channel: "general" }]).map((row) => row.key)).toEqual(["quiet_newcomers", "course_stall"]);
   // Another person's question, or the same person in another channel, is still its own row.
   expect(noticedWithoutDrafted(noticed, [{ author: "Sara", channel: "general" }, { author: "Rafael", channel: "wins" }])).toHaveLength(3);
   expect(noticedWithoutDrafted(noticed, [])).toHaveLength(3);
+  // Proactive check-in/welcome drafts deduplicate quiet_newcomers and course_stall too.
+  expect(
+    noticedWithoutDrafted(
+      noticed,
+      [{ author: "Rafael", channel: "general" }],
+      [{ reason: "quiet_newcomer" }, { reason: "course_stall" }],
+    ),
+  ).toEqual([]);
+  expect(
+    noticedWithoutDrafted(noticed, [], [{ reason: "member_onboarding" }]).map((row) => row.key),
+  ).toEqual(["questions_waiting", "course_stall"]);
+});
+
+test("unified host Needs you in guide style prioritizes tags and join requests ahead of guide drafts in one deck", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { GuideSuggests } = await import("../apps/web/src/v1/KitGuideSuggests");
+  const tag = { key: "tag:1", icon: "tag" as const, title: "Maya tagged you in #General", detail: "can you look?", action: "Open", onAction: () => {} };
+  const coachDraft = {
+    id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_member" as const,
+    reason_label: "Quiet member", signal_summary: "Quiet for 25 days", text: "Hey Josh!", created_at: "2026-11-25T10:00:00.000Z",
+  };
+  const unifiedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    label: "Needs you",
+    tags: [tag],
+    join: null,
+    joinCount: 2,
+    onShowAllJoinRequests: () => {},
+    things: [],
+    drafts: [],
+    coachDrafts: [coachDraft],
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  expect(unifiedHtml).toContain("Needs you");
+  expect(unifiedHtml).toContain("<i>3</i>");
+  expect(unifiedHtml).toContain("Maya tagged you in #General");
+  expect(unifiedHtml).toContain("View more (2)");
+  // With only coach drafts, the unified list still renders under Needs you with exact count.
+  const draftsOnlyHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    label: "Needs you",
+    drafts: [],
+    coachDrafts: [coachDraft],
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  expect(draftsOnlyHtml).toContain("Needs you");
+  expect(draftsOnlyHtml).toContain("<i>1</i>");
+  expect(draftsOnlyHtml).toContain("Check in with Josh Universe");
+  expect(draftsOnlyHtml).not.toContain("View more");
 });
 
 test("tags come first in either list, open their message, have no Not now, and count like any row", async () => {

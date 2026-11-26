@@ -66,3 +66,45 @@ export function recallNavRows(communitySlug: string | null | undefined, part: Na
     return Number.isFinite(rows) && rows >= 0 ? rows : null;
   } catch { return null; }
 }
+
+// Knowledge's right column: reserve its space from the first paint on desktop
+// so the course shelf never flashes full-width and collapses when the panel's
+// data arrives. Hosts always have a right column; members remember per
+// community (defaulting to reserved on first visit for active communities).
+const knowledgeRailKey = (communityId: string, role: "host" | "member") =>
+  `polynet_knowledge_rail:${role}:${communityId}`;
+
+export function shouldReserveKnowledgeRail(args: {
+  canManage: boolean;
+  remembered: boolean | null;
+  settled: boolean;
+  hasContent: boolean;
+}): boolean {
+  if (args.settled) return args.hasContent;
+  if (args.canManage) return true;
+  return args.remembered ?? true;
+}
+
+export function rememberKnowledgeRail(
+  communityId: string | null | undefined,
+  canManage: boolean,
+  hasRail: boolean,
+): void {
+  const id = String(communityId ?? "").trim();
+  if (!id) return;
+  const role = canManage ? "host" : "member";
+  try { window.localStorage.setItem(knowledgeRailKey(id, role), hasRail ? "1" : "0"); } catch { /* not remembered */ }
+}
+
+export function recallKnowledgeRail(
+  communityId: string | null | undefined,
+  canManage: boolean,
+): boolean | null {
+  const id = String(communityId ?? "").trim();
+  if (!id) return null;
+  const role = canManage ? "host" : "member";
+  try {
+    const raw = window.localStorage.getItem(knowledgeRailKey(id, role));
+    return raw === "1" ? true : raw === "0" ? false : null;
+  } catch { return null; }
+}
