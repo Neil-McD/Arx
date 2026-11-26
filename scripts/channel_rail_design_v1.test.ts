@@ -11,7 +11,7 @@ const { ChannelRosterPanel, CommunityMembersPagePanel } = await import("../apps/
 const props = {
   communityName: "Kiln",
   presenceSummary: { online_count: 4, online_count_capped: false, online_faces: [] } as any,
-  memberSettings: {} as any,
+  canManageMembers: false,
   getAvatarColor: () => "#000",
   getInitials: (name: string) => name.slice(0, 1),
   pinned: { label: "How to post a win", author: "Maya Chen", at: null, title: "How to post a win", excerpt: "Say what you sent, the grade, and one thing that made it go.", onOpen: () => {} },
@@ -86,7 +86,7 @@ test("design v1: beside a channel, asking for members never draws them over the 
 
 test("design v1: people who manage members get the table and the record", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityMembersPagePanel, {
-    ...props, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
+    ...props, canManageMembers: true }));
   // The host's page is fetched on demand: its place is held while it loads.
   expect(html).toContain('class="members-page is-kit"');
   expect(html).toContain('aria-label="Member record"');

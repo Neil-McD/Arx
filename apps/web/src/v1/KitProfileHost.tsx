@@ -21,6 +21,7 @@ import {
 } from "../../../../shared/communityMemberJourney";
 import { Btn, cx } from "./kit";
 import { cardReason, guideDidShort } from "./KitMembersBoard";
+import { paymentText } from "./memberTime";
 import "./KitProfileHost.css";
 
 export type JourneyPatch = {
@@ -224,6 +225,13 @@ export function HostPart(props: { host: ProfileHost; now: number; state: Profile
   const done = card ? card.checkpoints.filter((cp) => cp.done) : [];
   const left = card ? card.checkpoints.filter((cp) => !cp.done) : [];
   const close = () => state.setWriting(null);
+  // Opened from a board card: their progress, in view.
+  const progressRef = useRef<HTMLDivElement | null>(null);
+  const wantsProgress = host.focus === "progress" && Boolean(card);
+  useEffect(() => {
+    if (wantsProgress) progressRef.current?.scrollIntoView({ block: "nearest" });
+  }, [wantsProgress, record.membership_id]);
+  const latestPayment = [...(host.payments?.events ?? [])].sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))[0] ?? null;
   return (
     <section className="pfh" aria-label="Only hosts see this">
       <div className="pfh-h"><Lock size={12} strokeWidth={1.8} aria-hidden="true" />Only hosts see this</div>
@@ -242,11 +250,12 @@ export function HostPart(props: { host: ProfileHost; now: number; state: Profile
       ) : null}
 
       {card ? (
-        <div className="pfh-sec" id="profile-progress" data-focus={host.focus === "progress" ? "" : undefined}>
+        <div className="pfh-sec" ref={progressRef} data-focus={host.focus === "progress" ? "" : undefined}>
           {card.checkpoints.length ? (
             <p className="pfh-line"><span>Done</span>{done.length ? done.map((cp) => cp.label).join(", ") : "Nothing yet"}</p>
           ) : null}
           {left.length ? <p className="pfh-line"><span>Next</span>{left.map((cp) => cp.label).join(", ")}</p> : null}
+          {latestPayment ? <p className="pfh-line"><span>Payment</span>{paymentText(latestPayment)}</p> : null}
           {card.outcomes.length ? (
             <p className="pfh-line"><span>Wins</span>{card.outcomes.slice(0, 3).map((item) => item.text).join(" · ")}</p>
           ) : null}

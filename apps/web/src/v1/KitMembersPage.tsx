@@ -5,17 +5,12 @@
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveChange } from "../../../../shared/liveQuery";
-import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { createPortal } from "react-dom";
-import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
-  addCloudCommunityMemberNote,
-  deleteCloudCommunityMemberNote,
-  getCloudCommunityMemberRecord,
   getCloudCommunityMemberSummary,
   listCloudCommunityMemberRecordsPage,
-  type CloudMemberRecord,
   type CloudMemberRecordRow,
   type CloudMemberSummary,
   type CloudPastMemberRow,
@@ -25,58 +20,29 @@ import {
   saveCloudCommunityJourneyStages,
   updateCloudMemberJourneyCard,
   type CloudMemberJourneyBoard,
-  type CloudMemberJourneyCard,
 } from "../../../../shared/cloudCommunityMemberJourneyGateway";
-import {
-  JOURNEY_CARD_STATUSES,
-  JOURNEY_CARD_STATUS_LABELS,
-  MAX_FOUNDER_INSTRUCTION_CHARS,
-  MAX_OUTCOME_TEXT_CHARS,
-  type JourneyCardStatus,
-  type JourneyStageDefinition,
-} from "../../../../shared/communityMemberJourney";
 
 const KitMembersBoard = lazy(() =>
   import("./KitMembersBoard").then((module) => ({ default: module.KitMembersBoard })),
 );
-import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
-import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import type {
   CommunityAdmissionControl,
   CommunityAdmissionJoinRequest,
 } from "../components/communityAdmissionTypes";
 import { matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
-import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
+import { cx, KitApp, Rail, Top, View } from "./kit";
 import { Face, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
 import { TableRowsSkeleton } from "../components/WebLoadingSkeleton";
+import { KitProfileFor } from "./KitProfile";
 
 type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "know_little" | "past";
 
 const OWNER_KEY = "owner";
 const keyOf = memberKey;
 
-export function memberTimeFor(iso: string | null, now: number): string {
-  if (!iso) return "—";
-  const at = Date.parse(iso);
-  if (!Number.isFinite(at)) return "—";
-  const minutes = Math.round((now - at) / 60000);
-  if (minutes < 5) return "Now";
-  if (minutes < 60) return `${minutes} min ago`;
-  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
-  const date = new Date(at);
-  if (minutes < 7 * 24 * 60) return date.toLocaleDateString("en-US", { weekday: "long" });
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-// "Jun 27", with the year only when it isn't this one.
-export function shortDay(iso: string | null, now: number): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return null;
-  const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return date.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-}
+import { memberTimeFor, shortDay } from "./memberTime";
+export { memberTimeFor, paymentText, shortDay } from "./memberTime";
 
 const roleTag = (role: string) => (role === "owner" ? "host" : role === "admin" ? "admin" : role === "moderator" ? "moderator" : null);
 
@@ -122,17 +88,17 @@ export function KitMembersPage(props: {
   const openKey = routeMember && routeMember !== "requests" ? routeMember : null;
   const setSide = (next: "record" | "requests" | null) =>
     writeRouteDetail("member", next === "requests" ? "requests" : next === "record" ? openKey : null);
-  const openRecord = (key: string) => writeRouteDetail("member", key);
+  // Opened from a board card: the profile starts at their progress.
+  const [fromBoard, setFromBoard] = useState(false);
+  const openRecord = (key: string) => { setFromBoard(false); writeRouteDetail("member", key); };
+  const openFromBoard = (key: string) => { setFromBoard(true); writeRouteDetail("member", key); };
   const picked = side !== null;
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   // Another view or community: what was ticked there is let go.
   useEffect(() => { setSelected(new Set()); }, [scope?.communityId, view]);
   useEffect(() => { setSearch(""); }, [scope?.communityId]);
-  const [record, setRecord] = useState<CloudMemberRecord | null>(null);
-  const [recordVersion, setRecordVersion] = useState(0);
   const [tableVersion, setTableVersion] = useState(0);
-  const [payments, setPayments] = useState<{ membershipId: string; history: CloudCommunityMemberBillingHistory | null } | null>(null);
   const [now] = useState(Date.now);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -216,8 +182,8 @@ export function KitMembersPage(props: {
     if (search.trim() && loaded && !loaded.done && !loading) void loadMore(false);
   }, [search, loaded, loading, loadMore]);
 
-  // Load Member Journey Board when Board view or an active member record is open.
-  const needsBoard = surfaceMode === "board" || Boolean(openKey && openKey !== OWNER_KEY);
+  // The board, when it is the view (a person's profile loads its own progress).
+  const needsBoard = surfaceMode === "board";
   useEffect(() => {
     if (!scope || !needsBoard) return;
     let cancelled = false;
@@ -230,26 +196,7 @@ export function KitMembersPage(props: {
     return () => { cancelled = true; };
   }, [scope?.session, scope?.communityId, needsBoard, boardVersion, props.refreshKey, tableVersion]);
 
-  useEffect(() => {
-    if (!scope || !openKey) return;
-    let cancelled = false;
-    if (!recordVersion && !props.refreshKey) setRecord(null);
-    getCloudCommunityMemberRecord({ session: scope.session, communityId: scope.communityId, membershipId: openKey === OWNER_KEY ? null : openKey })
-      .then((next) => { if (!cancelled) setRecord(next); })
-      .catch(() => { if (!cancelled) setRecord(null); });
-    return () => { cancelled = true; };
-  }, [scope?.session, scope?.communityId, openKey, recordVersion, props.refreshKey]);
 
-  // Their payments: what the billing history already records.
-  const paymentsFor = record?.membership_id ?? null;
-  useEffect(() => {
-    if (!scope || !paymentsFor) { setPayments(null); return; }
-    let cancelled = false;
-    fetchCloudCommunityMemberBillingHistory({ session: scope.session, communityId: scope.communityId, membershipId: paymentsFor, limit: 12 })
-      .then((history) => { if (!cancelled) setPayments({ membershipId: paymentsFor, history }); })
-      .catch(() => { if (!cancelled) setPayments({ membershipId: paymentsFor, history: null }); });
-    return () => { cancelled = true; };
-  }, [scope?.session, scope?.communityId, paymentsFor, props.refreshKey]);
 
   const rows = useMemo(() => {
     if (!loaded || loaded.view !== view) return [];
@@ -361,7 +308,7 @@ export function KitMembersPage(props: {
                   openKey={side === "record" ? openKey : null}
                   now={now}
                   timeFor={memberTimeFor}
-                  onOpenCard={openRecord}
+                  onOpenCard={openFromBoard}
                   onMoveCard={async (membershipId, stageKey) => {
                     if (!scope) return;
                     await updateCloudMemberJourneyCard({
@@ -459,34 +406,14 @@ export function KitMembersPage(props: {
         <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
       </button>
       <button type="button" className="members-record-close" onClick={() => setSide(null)} aria-label="Close">×</button>
-      <Rail index={5} label={record ? record.name : "Member"}>
-        {record ? <MemberRecordView record={record} now={now} self={record.user_id === props.currentUserId}
-          onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
-          journeyStages={board?.stages ?? null}
-          journeyCard={record.membership_id ? board?.cards.find((card) => card.membership_id === record.membership_id) ?? null : null}
-          hostedAiTier={board?.hosted_ai_tier ?? null}
-          hostedAgentOn={board?.hosted_agent_on ?? null}
-          onUpdateJourney={record.membership_id && !record.out ? async (patch) => {
-            if (!scope || !record.membership_id) return;
-            await updateCloudMemberJourneyCard({
-              session: scope.session,
-              communityId: scope.communityId,
-              membershipId: record.membership_id,
-              ...patch,
-            });
-            setBoardVersion((version) => version + 1);
-          } : undefined}
-          onAddNote={async (body) => {
-            if (!scope) return;
-            await addCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, membershipId: record.membership_id, body });
-            setRecordVersion((version) => version + 1);
-          }}
-          payments={payments && payments.membershipId === record.membership_id ? payments.history : null}
-          onDeleteNote={async (noteId) => {
-            if (!scope) return;
-            await deleteCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, noteId });
-            setRecordVersion((version) => version + 1);
-          }} /> : null}
+      {/* The same profile as anywhere else a person is opened, with the host's part. */}
+      <Rail index={5} label="Profile">
+        {openKey ? (
+          <KitProfileFor key={openKey} target={{ membershipId: openKey === OWNER_KEY ? null : openKey }}
+            focus={fromBoard ? "progress" : null} onMessage={props.onMessage ? (userId) => props.onMessage?.(userId) : undefined}
+            onChanged={() => { setBoardVersion((version) => version + 1); setTableVersion((version) => version + 1); }}
+            getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+        ) : null}
       </Rail>
     </KitApp>
   );
@@ -501,368 +428,4 @@ export function KitMembersPage(props: {
   return <>{page}{props.recordContainer && side ? createPortal(recordRail, props.recordContainer) : null}</>;
 }
 
-function MemberRecordView(props: {
-  record: CloudMemberRecord;
-  now: number;
-  self: boolean;
-  onMessage?: (userId: string) => void;
-  onManage?: (member: { id: string; user_id: string; display_name: string; avatar_url: string | null; role: string; created_at: string | null }) => void;
-  getAvatarColor: (id: string) => string;
-  getInitials: (name: string) => string;
-  onAddNote: (body: string) => Promise<void>;
-  onDeleteNote: (noteId: string) => Promise<void>;
-  payments: CloudCommunityMemberBillingHistory | null;
-  journeyStages?: JourneyStageDefinition[] | null;
-  journeyCard?: CloudMemberJourneyCard | null;
-  hostedAiTier?: "free" | "guide" | "chief_of_staff" | null;
-  hostedAgentOn?: boolean | null;
-  onUpdateJourney?: (patch: {
-    stageKey?: string;
-    statusOverride?: JourneyCardStatus | "auto";
-    founderInstruction?: string | null;
-    toggleMilestone?: { key: string; label?: string; completed: boolean };
-    addOutcomeText?: string;
-    removeOutcomeId?: string;
-  }) => Promise<void>;
-}) {
-  const { record } = props;
-  const manage = () => record.membership_id && props.onManage?.({ id: record.membership_id, user_id: record.user_id, display_name: record.name,
-    avatar_url: record.avatar_url, role: record.role, created_at: record.joined_at });
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [noteError, setNoteError] = useState<string | null>(null);
-  const [instructionDraft, setInstructionDraft] = useState(props.journeyCard?.founder_instruction ?? "");
-  const [outcomeDraft, setOutcomeDraft] = useState("");
-  const [savingJourney, setSavingJourney] = useState(false);
-  const [journeyError, setJourneyError] = useState<string | null>(null);
-  useEffect(() => {
-    setInstructionDraft(props.journeyCard?.founder_instruction ?? "");
-    setOutcomeDraft("");
-    setJourneyError(null);
-  }, [record.membership_id, props.journeyCard?.founder_instruction]);
-  const saveNote = async () => {
-    const body = draft.trim();
-    if (!body || saving) return;
-    setSaving(true);
-    setNoteError(null);
-    try {
-      await props.onAddNote(body);
-      setDraft("");
-    } catch {
-      setNoteError("The note couldn't be saved. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-  const first = record.name.split(/\s+/)[0] || record.name;
-  const joined = shortDay(record.joined_at, props.now);
-  const role = record.role === "owner" ? "Host" : record.role === "admin" ? "Admin" : record.role === "moderator" ? "Moderator" : "Member";
-  const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric" }) : null);
-  // Who they are in one line: "Member · Free · joined Jun 27".
-  const who = [record.out ? record.out.text : role, record.plan.kind === "owner" ? null : record.plan.label, joined ? `joined ${joined}` : null].filter(Boolean).join(" · ");
-  // When they joined is already in that line; the rest of the trail is drawn.
-  const trail = record.events.filter((event) => event.kind !== "joined");
-  const canManage = Boolean(props.onManage && record.membership_id && !record.out);
-  return (
-    <>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Face name={record.name} url={record.avatar_url}
-            focusX={record.avatar_focus_x} focusY={record.avatar_focus_y} zoom={record.avatar_zoom}
-            seed={record.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
-            style={{ width: 44, height: 44, fontSize: 15, flex: "none" }} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.name}</div>
-            <div className={cx("sub")} style={{ fontSize: 12.5 }}>{who}</div>
-          </div>
-        </div>
-        {/* Only when something about their access needs the host. */}
-        {record.money ? (
-          <div className={cx("plan")}>
-            {record.money?.kind === "on_hold" ? <b className={cx("bad")}>Payment on hold{day(record.money.since_at) ? ` since ${day(record.money.since_at)}` : ""}.{record.money.ends_at ? ` Access ends ${day(record.money.ends_at)}.` : ""}</b> : null}
-            {record.money?.kind === "cancelling" ? <b>Leaving{record.money.ends_at ? ` on ${day(record.money.ends_at)}` : " at the end of the period"}.</b> : null}
-          </div>
-        ) : null}
-        {!props.self && ((props.onMessage && !record.out) || canManage) ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {props.onMessage && !record.out ? <Btn small go onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
-            {/* One way into the one place a role is changed and someone is removed or blocked. */}
-            {canManage ? (
-              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} aria-label={`Change ${first}'s role, remove or block`} title="Change role, remove or block" onClick={manage}>
-                Manage<Icon name="more" />
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      {/* What they said. With nothing said, nothing is drawn. */}
-      {record.facts.length ? (
-        <>
-          <Sep />
-          <div className={cx("kv")}>
-            {record.facts.map((fact, index) => (
-              <FactRow key={index} label={fact.label} body={fact.body} note={[fact.source, day(fact.at)].filter(Boolean).join(" · ")} />
-            ))}
-          </div>
-        </>
-      ) : null}
-      <Sep />
-      <Sec label="Here">
-        <div className={cx("src")}><Icon name="spark" />Last active<em>{memberTimeFor(record.last_active_at, props.now)}</em></div>
-        {trail.map((event, index) => (
-          <div key={index} className={cx("src")} style={{ marginTop: -8 }}>
-            <Icon name="check" />{event.text}<em>{memberTimeFor(event.at, props.now)}</em>
-          </div>
-        ))}
-      </Sec>
-      {props.payments && props.payments.events.length ? (
-        <>
-          <Sep />
-          <Sec label="Payments">
-            {props.payments.events.slice(0, 8).map((event, index) => (
-              <div key={event.id} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
-                <Icon name="check" />{paymentText(event)}<em>{memberTimeFor(event.occurred_at, props.now)}</em>
-              </div>
-            ))}
-          </Sec>
-        </>
-      ) : null}
-      {props.onUpdateJourney && props.journeyStages && props.journeyCard ? (
-        <>
-          <Sep />
-          <div className={cx("sec")}>
-            <span className={cx("lab")}>Journey<em className={cx("priv")}>Steers your Guide</em></span>
-            <div className="members-journey-record-grid">
-              <div className="members-journey-field">
-                <label htmlFor="member-journey-stage">Stage</label>
-                <select
-                  id="member-journey-stage"
-                  value={props.journeyCard.stage_key}
-                  disabled={savingJourney}
-                  onChange={(event) => {
-                    const nextStageKey = event.target.value;
-                    setSavingJourney(true);
-                    setJourneyError(null);
-                    void props.onUpdateJourney?.({ stageKey: nextStageKey })
-                      .catch(() => setJourneyError("Couldn't update stage."))
-                      .finally(() => setSavingJourney(false));
-                  }}
-                >
-                  {props.journeyStages.map((stage) => (
-                    <option key={stage.key} value={stage.key}>{stage.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="members-journey-field">
-                <label htmlFor="member-journey-status">Status</label>
-                <select
-                  id="member-journey-status"
-                  value={props.journeyCard.status_is_manual ? props.journeyCard.status : "auto"}
-                  disabled={savingJourney}
-                  onChange={(event) => {
-                    const nextStatus = event.target.value as JourneyCardStatus | "auto";
-                    setSavingJourney(true);
-                    setJourneyError(null);
-                    void props.onUpdateJourney?.({ statusOverride: nextStatus })
-                      .catch(() => setJourneyError("Couldn't update status."))
-                      .finally(() => setSavingJourney(false));
-                  }}
-                >
-                  <option value="auto">Auto ({JOURNEY_CARD_STATUS_LABELS[props.journeyCard.status]})</option>
-                  {JOURNEY_CARD_STATUSES.map((status) => (
-                    <option key={status} value={status}>{JOURNEY_CARD_STATUS_LABELS[status]}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            {props.journeyCard.checkpoints.length > 0 ? (
-              <div className="members-journey-checklist" aria-label="Stage checkpoints">
-                <span className="members-board-stage-cp-label">
-                  Stage checkpoints ({props.journeyCard.checkpoints_done}/{props.journeyCard.checkpoints_total})
-                </span>
-                {props.journeyCard.checkpoints.map((cp) => (
-                  <button
-                    key={cp.key}
-                    type="button"
-                    disabled={savingJourney || cp.auto}
-                    className={`members-journey-check-item${cp.done ? " is-done" : ""}`}
-                    onClick={() => {
-                      if (cp.auto || savingJourney) return;
-                      setSavingJourney(true);
-                      setJourneyError(null);
-                      void props.onUpdateJourney?.({
-                        toggleMilestone: { key: cp.key, label: cp.label, completed: !cp.done },
-                      })
-                        .catch(() => setJourneyError("Couldn't update checkpoint."))
-                        .finally(() => setSavingJourney(false));
-                    }}
-                  >
-                    <span>{cp.done ? "✓ " : "○ "}{cp.label}</span>
-                    <em>{cp.auto ? "Auto" : cp.done ? "Done" : "Mark done"}</em>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <div className="members-journey-outcomes">
-              <span className="members-board-stage-cp-label">Wins & outcomes</span>
-              <form
-                className="members-journey-outcome-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const text = outcomeDraft.trim();
-                  if (!text || savingJourney) return;
-                  setSavingJourney(true);
-                  setJourneyError(null);
-                  void props.onUpdateJourney?.({ addOutcomeText: text })
-                    .then(() => setOutcomeDraft(""))
-                    .catch(() => setJourneyError("Couldn't log win."))
-                    .finally(() => setSavingJourney(false));
-                }}
-              >
-                <input
-                  value={outcomeDraft}
-                  maxLength={MAX_OUTCOME_TEXT_CHARS}
-                  placeholder="Log a win or milestone…"
-                  aria-label="Log a member win or outcome"
-                  onChange={(event) => setOutcomeDraft(event.target.value)}
-                />
-                <Btn small go disabled={savingJourney || !outcomeDraft.trim()} onClick={() => {
-                  const text = outcomeDraft.trim();
-                  if (!text || savingJourney) return;
-                  setSavingJourney(true);
-                  setJourneyError(null);
-                  void props.onUpdateJourney?.({ addOutcomeText: text })
-                    .then(() => setOutcomeDraft(""))
-                    .catch(() => setJourneyError("Couldn't log win."))
-                    .finally(() => setSavingJourney(false));
-                }}>
-                  Log
-                </Btn>
-              </form>
-              {props.journeyCard.outcomes.map((item) => (
-                <div key={item.id} className="members-journey-outcome-row">
-                  <span>{item.text}</span>
-                  <em>{shortDay(item.at, props.now) ?? memberTimeFor(item.at, props.now)}</em>
-                  <button
-                    type="button"
-                    aria-label={`Remove win ${item.text}`}
-                    disabled={savingJourney}
-                    onClick={() => {
-                      if (savingJourney) return;
-                      setSavingJourney(true);
-                      setJourneyError(null);
-                      void props.onUpdateJourney?.({ removeOutcomeId: item.id })
-                        .catch(() => setJourneyError("Couldn't remove win."))
-                        .finally(() => setSavingJourney(false));
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="members-journey-field" style={{ marginTop: 10 }}>
-              <label htmlFor="member-journey-instruction">Instruction for your Guide</label>
-              <textarea
-                id="member-journey-instruction"
-                value={instructionDraft}
-                maxLength={MAX_FOUNDER_INSTRUCTION_CHARS}
-                placeholder="e.g. Check if they finished onboarding, or pause nudges this week"
-                onChange={(event) => setInstructionDraft(event.target.value)}
-              />
-              {props.hostedAiTier ? (
-                <p className="members-board-card-outcome" style={{ marginTop: 4 }}>
-                  {props.hostedAiTier === "free" || props.hostedAgentOn === false
-                    ? "Your connected AI can read this note now. Turn on Guide or Chief of Staff in Settings for hosted member coaching."
-                    : props.hostedAiTier === "guide"
-                      ? "Your Guide follows this privately when this member chats. Chief of Staff also runs automatic check-ins."
-                      : "Your Guide follows this privately in chat, and Chief of Staff picks up fresh notes on its next check-in."}
-                </p>
-              ) : null}
-            </div>
-            {instructionDraft.trim() !== (props.journeyCard.founder_instruction ?? "") ? (
-              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                <Btn
-                  small
-                  go
-                  onClick={() => {
-                    if (savingJourney) return;
-                    setSavingJourney(true);
-                    setJourneyError(null);
-                    void props.onUpdateJourney?.({ founderInstruction: instructionDraft.trim() })
-                      .catch(() => setJourneyError("Couldn't save instruction."))
-                      .finally(() => setSavingJourney(false));
-                  }}
-                >
-                  {savingJourney ? "Saving…" : "Save instruction"}
-                </Btn>
-                {props.journeyCard.founder_instruction ? (
-                  <Btn
-                    small
-                    onClick={() => {
-                      if (savingJourney) return;
-                      setSavingJourney(true);
-                      setJourneyError(null);
-                      void props.onUpdateJourney?.({ founderInstruction: "" })
-                        .then(() => setInstructionDraft(""))
-                        .catch(() => setJourneyError("Couldn't clear instruction."))
-                        .finally(() => setSavingJourney(false));
-                    }}
-                  >
-                    Clear
-                  </Btn>
-                ) : null}
-              </div>
-            ) : null}
-            {props.journeyCard.agent_outcome ? (
-              <p className={cx("sub")} style={{ margin: "6px 0 0", fontSize: 12 }}>
-                {props.journeyCard.agent_outcome}
-                {props.journeyCard.agent_outcome_at ? ` · ${memberTimeFor(props.journeyCard.agent_outcome_at, props.now)}` : ""}
-              </p>
-            ) : null}
-            {journeyError ? <p className={cx("bad")} role="alert" style={{ margin: "4px 0 0", fontSize: 12 }}>{journeyError}</p> : null}
-          </div>
-        </>
-      ) : null}
-      <Sep />
-      <div className={cx("sec")}>
-        <span className={cx("lab")}>Notes<em className={cx("priv")}>Only hosts see these</em></span>
-        {record.notes.map((note) => (
-          <div key={note.id} className={cx("hnote")}>
-            <p>{note.body}</p>
-            <span>{note.author === "you" ? "You" : note.author} · {memberTimeFor(note.at, props.now)}
-              {note.can_delete ? <button type="button" className={cx("note-del")} onClick={() => void props.onDeleteNote(note.id)}>Delete</button> : null}</span>
-          </div>
-        ))}
-        <form className={cx("note-add")} onSubmit={(event) => { event.preventDefault(); void saveNote(); }}>
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add a note" aria-label="Add a note" rows={draft ? 3 : 1} maxLength={2000}
-            onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void saveNote(); } }} />
-          {draft.trim() ? <Btn small onClick={() => void saveNote()}>{saving ? "Saving…" : "Save note"}</Btn> : null}
-        </form>
-        {noteError ? <p className={cx("bad")} role="alert">{noteError}</p> : null}
-      </div>
-    </>
-  );
-}
 
-function FactRow(props: { label: string; body: string; note: string }) {
-  return <><span>{props.label}</span><p>{props.body}{props.note ? <em>{props.note}</em> : null}</p></>;
-}
-
-type PaymentEvent = CloudCommunityMemberBillingHistory["events"][number];
-
-// One line of the payment history, in plain words.
-export function paymentText(event: PaymentEvent): string {
-  const amount = typeof event.amount_base_units === "number" && event.currency
-    ? `${formatPrice(event.amount_base_units, event.currency, event.currency_decimals ?? 2)}${event.billing_period === "annual" ? " a year" : event.billing_period === "monthly" ? " a month" : ""}`
-    : "";
-  const status = String(event.status ?? "").toLowerCase();
-  const what = status.includes("past_due") || status.includes("failed") ? "Payment failed"
-    : status.includes("cancel_at_period_end") || status.includes("cancel_requested") ? "Asked to stop renewing"
-      : status.includes("ended") || status.includes("canceled") ? "Subscription ended"
-        : status.includes("refund") ? "Refunded"
-          : status.includes("dispute") ? "Disputed"
-            : event.kind === "checkout" ? "Paid to join"
-              : "Subscription active";
-  return amount ? `${what} · ${amount}` : what;
-}

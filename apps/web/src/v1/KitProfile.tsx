@@ -3,16 +3,20 @@
 // here, where else you meet; and, for those who manage members only, a fenced block
 // from the person's record. The server decides what each reader gets
 // (convex/communityMemberProfiles.ts, convex/communityMemberRecords.ts).
-import { ExternalLink, Lock, MessageCircle } from "lucide-react";
+import { ExternalLink, MessageCircle } from "lucide-react";
 import { Fragment, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { memberTimeFor } from "./memberTime";
 import { readMemberPreviewCommunityId, subscribeMemberPreview } from "../../../../shared/communityMemberPreview";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { memberRoleTag } from "../../../../shared/communityMemberWords";
-import { goToMembersPage } from "../../../../shared/routeDetails";
+import { goToHomeDraft } from "../../../../shared/routeDetails";
 import { SOCIAL_PROFILE_KINDS, type SocialProfileKind } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { banCloudCommunityMember, fetchCloudCommunityMemberBillingHistory, removeCloudCommunityMember, setCloudCommunityMemberRole, type CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
+import { getCloudCommunityMemberJourneyBoard, updateCloudMemberJourneyCard, type CloudMemberJourneyBoard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import {
   addCloudCommunityMemberNote,
+  deleteCloudCommunityMemberNote,
   getCloudCommunityMemberProfile,
   getCloudCommunityMemberRecord,
   type CloudMemberProfile,
@@ -21,7 +25,7 @@ import {
 } from "../../../../shared/cloudCommunityMemberRecordsGateway";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import { SocialProfileIcon } from "../components/SocialProfileIcon";
-import { Btn, cx, KitApp, Rail, Sep } from "./kit";
+import { cx, KitApp, Rail, Sep } from "./kit";
 import { HostMenu, HostPart, HostSummary, useProfileHost, type ProfileHost } from "./KitProfileHost";
 
 type Avatars = { getAvatarColor: (id: string) => string; getInitials: (name: string) => string };
@@ -32,24 +36,6 @@ export function profileSubLine(profile: Pick<CloudMemberProfile, "handle" | "her
   const handle = String(profile.handle ?? "").trim().replace(/^@+/, "");
   return [handle ? `@${handle}` : null, profile.you ? "This is what other members see" : profile.here_now ? "Here now" : null]
     .filter(Boolean).join(" · ");
-}
-
-// A day in the host block: "May 15", with the year once it is not this one.
-export function profileDay(iso: string | null, now: number): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return null;
-  const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return date.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-}
-
-// When a host last saw them: "Today", "Yesterday", then the day.
-export function profileLastHere(iso: string | null, now: number): string | null {
-  if (!iso) return null;
-  const at = Date.parse(iso);
-  if (!Number.isFinite(at)) return null;
-  const days = Math.floor((new Date(now).setHours(0, 0, 0, 0) - new Date(at).setHours(0, 0, 0, 0)) / 86_400_000);
-  return days <= 0 ? "Today" : days === 1 ? "Yesterday" : profileDay(iso, now);
 }
 
 function Communities(props: { rows: CloudMemberProfileCommunity[]; note: string }) {
@@ -75,68 +61,16 @@ function Communities(props: { rows: CloudMemberProfileCommunity[]; note: string 
   );
 }
 
-function HostBlock(props: { record: CloudMemberRecord; now: number; onAddNote?: (body: string) => Promise<void>; onOpenMembers?: () => void }) {
-  const { record } = props;
-  const [writing, setWriting] = useState(false);
-  const [body, setBody] = useState("");
-  const [saving, setSaving] = useState(false);
-  const save = async () => {
-    const text = body.trim();
-    if (!text || !props.onAddNote) return;
-    setSaving(true);
-    try { await props.onAddNote(text); setBody(""); setWriting(false); } finally { setSaving(false); }
-  };
-  const rows: Array<[string, string | null]> = [
-    ["Plan", [record.plan.label, record.money?.label].filter(Boolean).join(" · ")],
-    ["Joined", profileDay(record.joined_at, props.now)],
-    ["Last here", profileLastHere(record.last_active_at, props.now)],
-  ];
-  return (
-    <section className={cx("pfhost")} aria-label="Only hosts see this">
-      <div className={cx("pfhost-h")}><Lock size={12} strokeWidth={1.8} aria-hidden="true" />Only hosts see this</div>
-      <div className={cx("pfkv")}>
-        {rows.filter(([, value]) => value).map(([label, value]) => <Fragment key={label}><span>{label}</span><p>{value}</p></Fragment>)}
-      </div>
-      {record.notes.length ? (
-        <div className={cx("pfnotes")}>
-          <span className={cx("lab")}>Notes</span>
-          {record.notes.slice(0, 3).map((note) => (
-            <div key={note.id} className={cx("pfnote")}><p>{note.body}</p><em>{note.author === "you" ? "You" : note.author} · {profileDay(note.at, props.now)}</em></div>
-          ))}
-        </div>
-      ) : null}
-      {writing ? (
-        <div className={cx("pfwrite")}>
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={3} maxLength={2000} autoFocus
-            aria-label={`A private note about ${record.name}`} placeholder="A private note. Only hosts see it." />
-          <div className={cx("acts")}>
-            <Btn small go disabled={saving || !body.trim()} onClick={() => { void save(); }}>{saving ? "Saving…" : "Save note"}</Btn>
-            <Btn small txt onClick={() => { setWriting(false); setBody(""); }}>Cancel</Btn>
-          </div>
-        </div>
-      ) : (
-        <div className={cx("acts")}>
-          {props.onAddNote ? <Btn small onClick={() => setWriting(true)}>Add a note</Btn> : null}
-          {props.onOpenMembers ? <Btn small onClick={props.onOpenMembers}>Open in Members</Btn> : null}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// The profile itself, from what the server sent. `record`: the host block,
+// The profile itself, from what the server sent. `host`: the host's part,
 // only ever passed for someone who manages members.
 export function KitProfile(props: Avatars & {
   profile: CloudMemberProfile;
   communityName?: string | null;
-  record?: CloudMemberRecord | null;
   // Everything a host sees on top of the profile (one Rashid, everywhere):
   // the summary line under the name and the fenced part below.
   host?: ProfileHost | null;
   now?: number;
   onMessage?: (userId: string, communityId: string | null) => void;
-  onAddNote?: (body: string) => Promise<void>;
-  onOpenMembers?: () => void;
 }) {
   const { profile } = props;
   const now = props.now ?? Date.now();
@@ -210,24 +144,30 @@ export function KitProfile(props: Avatars & {
         </section>
       ) : null}
 
-      {props.host ? <HostPart host={props.host} now={now} state={hostState} />
-        : props.record ? <HostBlock record={props.record} now={now} onAddNote={props.onAddNote} onOpenMembers={props.onOpenMembers} /> : null}
+      {props.host ? <HostPart host={props.host} now={now} state={hostState} /> : null}
     </div>
   );
 }
 
 // The profile of one person in the community on the page, loaded and kept
-// current after a note is added. Nothing shows while it loads; `fallback`
-// shows when the person has no profile here (someone who has left).
+// current. Nothing shows while it loads; `fallback` shows when the person has
+// no profile here (someone who has left). For someone who manages members it
+// also loads their record and progress and wires the host's part: the same
+// window wherever a person is opened (a name in a channel, a message, the
+// Members table, a board card).
 export function KitProfileFor(props: Avatars & {
   target: { membershipId: string | null } | { userId: string };
   communityName?: string | null;
   // The community the profile is read in, when it is not the one in the
-  // address bar (a conversation from another community): where Members opens.
+  // address bar (a conversation from another community): where Home opens.
   communitySlug?: string | null;
   fallback?: ReactNode;
+  // Opened from the board: start at their progress.
+  focus?: "progress" | null;
   onMessage?: (userId: string, communityId: string | null) => void;
   onLoaded?: (profile: CloudMemberProfile | null) => void;
+  // Something the host changed (stage, role, removal): lists elsewhere refresh.
+  onChanged?: () => void;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
   const session = scope?.session ?? null;
@@ -237,14 +177,16 @@ export function KitProfileFor(props: Avatars & {
   // undefined: still loading. null: no profile here.
   const [profile, setProfile] = useState<CloudMemberProfile | null | undefined>(undefined);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
+  const [board, setBoard] = useState<CloudMemberJourneyBoard | null>(null);
+  const [payments, setPayments] = useState<CloudCommunityMemberBillingHistory | null>(null);
   const [turn, setTurn] = useState(0);
-  // Seeing the community as a member sees it shows no host block, wherever
+  // Seeing the community as a member sees it shows no host part, wherever
   // the profile is opened (the page's own switch, or the one kept for this
   // community when it is opened from Inbox).
   const previewing = useSyncExternalStore(subscribeMemberPreview, readMemberPreviewCommunityId, () => null);
   const asMember = Boolean(scope?.memberPreview) || (Boolean(communityId) && previewing === communityId);
   const hostView = Boolean(profile?.viewer_can_manage) && !asMember;
-  const { onLoaded } = props;
+  const { onLoaded, onChanged } = props;
 
   useEffect(() => {
     setProfile(undefined);
@@ -261,24 +203,42 @@ export function KitProfileFor(props: Avatars & {
 
   const recordKey = hostView && profile ? profile.membership_id ?? "owner" : null;
   useEffect(() => {
-    if (!session || !communityId || !recordKey) { setRecord(null); return; }
+    if (!session || !communityId || !recordKey) { setRecord(null); setBoard(null); setPayments(null); return; }
     let live = true;
     void getCloudCommunityMemberRecord({ session, communityId, membershipId: recordKey === "owner" ? null : recordKey })
       .then((next) => { if (live) setRecord(next); })
       .catch(() => { if (live) setRecord(null); });
+    // Their progress: the board, for this one card (hosts only, as the board is).
+    void getCloudCommunityMemberJourneyBoard({ session, communityId })
+      .then((next) => { if (live) setBoard(next); })
+      .catch(() => { if (live) setBoard(null); });
+    if (recordKey !== "owner") {
+      void fetchCloudCommunityMemberBillingHistory({ session, communityId, membershipId: recordKey, limit: 6 })
+        .then((next) => { if (live) setPayments(next); })
+        .catch(() => { if (live) setPayments(null); });
+    }
     return () => { live = false; };
   }, [session, communityId, recordKey, turn]);
 
   if (profile === undefined) return null;
   if (!profile) return <>{props.fallback ?? null}</>;
+  const card = board && profile.membership_id ? board.cards.find((entry) => entry.membership_id === profile.membership_id) ?? null : null;
+  const changed = () => { setTurn((value) => value + 1); onChanged?.(); };
+  const member = profile.membership_id;
+  const host: ProfileHost | null = hostView && record && session && communityId ? {
+    record, card, stages: board?.stages ?? null, aiTier: board?.hosted_ai_tier ?? null, agentOn: board?.hosted_agent_on ?? null,
+    focus: props.focus ?? null, timeFor: memberTimeFor, payments,
+    onUpdateJourney: member ? async (patch) => { await updateCloudMemberJourneyCard({ session, communityId, membershipId: member, ...patch }); changed(); } : undefined,
+    onAddNote: async (body) => { await addCloudCommunityMemberNote({ session, communityId, membershipId: member, body }); setTurn((value) => value + 1); },
+    onDeleteNote: async (noteId) => { await deleteCloudCommunityMemberNote({ session, communityId, noteId }); setTurn((value) => value + 1); },
+    onSetRole: member ? async (role) => { await setCloudCommunityMemberRole({ session, communityId, membershipId: member, role }); changed(); } : undefined,
+    onRemove: member ? async () => { await removeCloudCommunityMember({ session, communityId, membershipId: member }); changed(); } : undefined,
+    onBlock: member ? async () => { await banCloudCommunityMember({ session, communityId, membershipId: member }); changed(); } : undefined,
+    onOpenDraft: () => goToHomeDraft(profile.handle, props.communitySlug ?? null),
+  } : null;
   return (
-    <KitProfile profile={profile} communityName={props.communityName} record={hostView ? record : null}
-      getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} onMessage={props.onMessage}
-      onAddNote={hostView && session && communityId ? async (body) => {
-        await addCloudCommunityMemberNote({ session, communityId, membershipId: profile.membership_id, body });
-        setTurn((value) => value + 1);
-      } : undefined}
-      onOpenMembers={hostView ? () => goToMembersPage(profile.membership_id ?? "owner", props.communitySlug ?? null) : undefined} />
+    <KitProfile profile={profile} communityName={props.communityName} host={host}
+      getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} onMessage={props.onMessage} />
   );
 }
 

@@ -2563,13 +2563,9 @@
   line-height: 1.45;
 }
 
-.app-root.mobile-shell .member-settings-modal {
-  width: min(calc(100vw - 20px), 520px);
-}
 
-.app-root.mobile-shell .member-settings-summary {
-  align-items: flex-start;
-}
+
+
 
 .app-root.mobile-shell .community-settings-form {
   gap: 14px;

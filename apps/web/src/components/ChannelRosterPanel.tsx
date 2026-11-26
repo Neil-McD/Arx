@@ -1,6 +1,4 @@
-import { lazy, Suspense, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent } from "react";
-import { createPortal } from "react-dom";
-import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import type { CommunityAdmissionControl, CommunityJoinRequestReviewProps } from "./communityAdmissionTypes";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { KitChannelRail, type ChannelPinned } from "../v1/KitChannelRail";
@@ -16,23 +14,6 @@ const KitMembersPage = lazy(() =>
   import("../v1/KitMembersPage").then((module) => ({ default: module.KitMembersPage })),
 );
 
-function trapTab(event: KeyboardEvent, container: HTMLElement | null) {
-  if (event.key !== "Tab") return;
-  const controls = Array.from(
-    container?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]',
-    ) ?? [],
-  ).filter((element) => element.getClientRects().length > 0);
-  const first = controls[0];
-  const last = controls[controls.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last?.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first?.focus();
-  }
-}
 
 type RosterProps = {
   memberDetailOpen?: boolean;
@@ -50,7 +31,7 @@ type RosterProps = {
   onOpenProfile?: (id: string) => void;
   onMessageUser?: (id: string) => void;
   currentUserId?: string | null;
-  memberSettings: Omit<ComponentProps<typeof CommunityMemberSettingsDialog>, "member" | "onClose">;
+  canManageMembers: boolean;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
 };
@@ -165,36 +146,9 @@ export function CommunityMembersPagePanel(props: RosterProps) {
 }
 
 function MembersPageSurface(props: RosterProps) {
-  const settingsRef = useRef<HTMLDivElement | null>(null);
   const [recordEl, setRecordEl] = useState<HTMLElement | null>(null);
-  const [kitTarget, setKitTarget] = useState<
-    ComponentProps<typeof CommunityMemberSettingsDialog>["member"]
-  >(null);
-  const [kitVersion, setKitVersion] = useState(0);
 
-  if (props.memberSettings.canManageMembers) {
-    const after =
-      <A extends unknown[]>(run: (...args: A) => Promise<void> | void, close = false) =>
-      async (...args: A) => {
-        try {
-          await run(...args);
-          if (close) setKitTarget(null);
-        } finally {
-          setKitVersion((version) => version + 1);
-        }
-      };
-
-    const settings = (
-      <CommunityMemberSettingsDialog
-        {...props.memberSettings}
-        handleSetCommunityMemberRole={after(props.memberSettings.handleSetCommunityMemberRole)}
-        handleRemoveCommunityMember={after(props.memberSettings.handleRemoveCommunityMember, true)}
-        handleBanCommunityMember={after(props.memberSettings.handleBanCommunityMember, true)}
-        member={kitTarget}
-        onClose={() => setKitTarget(null)}
-      />
-    );
-
+  if (props.canManageMembers) {
     return (
       <>
         <Suspense
@@ -207,8 +161,7 @@ function MembersPageSurface(props: RosterProps) {
             onApprove={(id) => void props.joinReview?.onApproveJoinRequest?.(id)}
             onDecline={(id) => void props.joinReview?.onDenyJoinRequest?.(id)}
             onMessage={props.onMessageUser}
-            onManage={setKitTarget}
-            refreshKey={kitVersion}
+            refreshKey={0}
             admission={props.admission}
             currentUserId={props.currentUserId ?? null}
             recordContainer={recordEl}
@@ -217,24 +170,6 @@ function MembersPageSurface(props: RosterProps) {
           />
         </Suspense>
         <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member record" />
-        {kitTarget
-          ? createPortal(
-              <div
-                ref={settingsRef}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setKitTarget(null);
-                  }
-                  trapTab(event, settingsRef.current);
-                }}
-              >
-                {settings}
-              </div>,
-              document.body,
-            )
-          : null}
       </>
     );
   }

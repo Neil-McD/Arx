@@ -693,10 +693,6 @@ export default function App() {
     upsertCommunityVisualIdentities,
   });
   const {
-    loadMemberBillingHistory: loadCommunityMemberBillingHistory,
-    setMemberRole: handleSetCommunityContextMemberRole,
-    removeMember: handleRemoveCommunityContextMember,
-    banMember: handleBanCommunityContextMember,
     setFreeAccessMode: handleSetCommunityContextFreeAccessMode,
   } = communityMemberManagement;
   const {
@@ -1420,10 +1416,6 @@ export default function App() {
         canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
         communityInitials,
-        onSetCommunityMemberRole: handleSetCommunityContextMemberRole,
-        onRemoveCommunityMember: handleRemoveCommunityContextMember,
-        onBanCommunityMember: handleBanCommunityContextMember,
-        loadMemberBillingHistory: loadCommunityMemberBillingHistory,
       }),
     });
   const activateDiscoverCommunityCard =
