@@ -8,6 +8,7 @@ import type {
 } from "./agentHeartbeat";
 
 export const MEMBER_COACH_REASONS = [
+  "member_onboarding",
   "commitment_followup",
   "board_coaching",
   "quiet_newcomer",
@@ -23,6 +24,12 @@ export const MEMBER_COACH_REASON_LABELS: Record<
   MemberCoachReason,
   { label: string; description: string; shortTag: string; privateAutoOnly?: boolean }
 > = {
+  member_onboarding: {
+    label: "Welcome new members on Day 0",
+    description:
+      "Sends a personalized onboarding welcome as soon as someone joins, guided by your Member Board Stage 1 goal, handbook, starter course, and connected app.",
+    shortTag: "Day-0 welcome",
+  },
   commitment_followup: {
     label: "Follow up on member commitments",
     description:

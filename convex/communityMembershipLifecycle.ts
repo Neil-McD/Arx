@@ -1,3 +1,6 @@
+import { internal } from "./_generated/api";
+import { communityAgentIsOn } from "./communityApps";
+import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import { memberAccessChanged } from "./communityPlanPods";
 import {
   type CommunityMembershipLike,
@@ -151,6 +154,28 @@ export async function activateCommunityMembershipCore(args: {
   });
   // One door: the community's connected apps re-read this person's access.
   await memberAccessChanged(args.ctx, args.communityId, args.userId);
+  // Automated Day-0 Member Onboarding (Chief of Staff plan only; $0 on Free/Guide).
+  if (role === "member" && args.ctx.scheduler) {
+    try {
+      const [agentOn, hasProactive] = await Promise.all([
+        communityAgentIsOn(args.ctx, args.communityId),
+        communityHasProactiveAgentTier(args.ctx, args.communityId, args.nowMs),
+      ]);
+      if (agentOn && hasProactive) {
+        await args.ctx.scheduler.runAfter(
+          15_000,
+          (internal as any).communityMemberCoach.runNewMemberOnboardingInternal,
+          {
+            communityId: args.communityId,
+            memberUserId: args.userId,
+            activationSequence,
+          },
+        );
+      }
+    } catch {
+      // Best-effort: never block membership activation or checkout settlement.
+    }
+  }
   return {
     membership,
     accessGranted: true,

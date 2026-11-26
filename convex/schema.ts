@@ -2183,6 +2183,7 @@ export default defineSchema({
     enabled: v.boolean(),
     autoReasons: v.array(
       v.union(
+        v.literal("member_onboarding"),
         v.literal("commitment_followup"),
         v.literal("board_coaching"),
         v.literal("quiet_newcomer"),
@@ -2241,6 +2242,7 @@ export default defineSchema({
     communityId: v.id("communities"),
     memberUserId: v.id("users"),
     reason: v.union(
+      v.literal("member_onboarding"),
       v.literal("commitment_followup"),
       v.literal("board_coaching"),
       v.literal("quiet_newcomer"),

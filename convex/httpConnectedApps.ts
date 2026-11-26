@@ -7,6 +7,7 @@ import { sha256Hex } from "./communityCheckoutBuyer";
 export const CONNECTED_APP_ACCESS_PATH = "/apps/v1/access";
 export const CONNECTED_APP_SALES_PATH = "/apps/v1/sales";
 export const CONNECTED_APP_OAUTH_TOKEN_PATH = "/apps/v1/oauth/token";
+export const CONNECTED_APP_MILESTONES_PATH = "/apps/v1/milestones";
 
 function json(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -116,6 +117,45 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
         return json(400, { error: exchanged.error });
       }
       return json(200, { user: exchanged.user, access: exchanged.access });
+    }),
+  });
+
+  // Report a member's product milestone or win directly onto their Member Board
+  // card (source: "app") so automated onboarding and Chief of Staff reflect
+  // real progress inside the founder's software.
+  args.http.route({
+    path: CONNECTED_APP_MILESTONES_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx: any, req: Request) => {
+      const app = await requireApp(ctx, req);
+      if (app instanceof Response) return app;
+      const raw = await req.text();
+      if (raw.length > 4_000) return json(413, { error: "invalid_request" });
+      let body: any = null;
+      try { body = JSON.parse(raw); } catch { body = null; }
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return json(400, { error: "invalid_request" });
+      }
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const milestone = typeof body.milestone === "string" ? body.milestone.trim().slice(0, 64) : "";
+      const label = typeof body.label === "string" ? body.label.trim().slice(0, 64) : "";
+      const outcome = typeof body.outcome === "string" ? body.outcome.trim().slice(0, 180) : "";
+      const done = typeof body.done === "boolean" ? body.done : undefined;
+      if (!email || email.length > 320 || !email.includes("@")) {
+        return json(400, { error: "email_required" });
+      }
+      if (!milestone && !outcome) {
+        return json(400, { error: "milestone_or_outcome_required" });
+      }
+      const result = await ctx.runMutation(internal.communityMemberJourney.recordConnectedAppMilestoneInternal, {
+        communityId: app.communityId,
+        email,
+        ...(milestone ? { milestone } : {}),
+        ...(label ? { label } : {}),
+        ...(done !== undefined ? { done } : {}),
+        ...(outcome ? { outcome } : {}),
+      });
+      return json(200, result);
     }),
   });
 }

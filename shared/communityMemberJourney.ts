@@ -322,13 +322,15 @@ export function formatCoachOutcomeSummary(check: {
   replied?: boolean;
 }): string {
   const reasonLabel =
-    check.reason === "quiet_newcomer"
-      ? "newcomer welcome"
-      : check.reason === "course_stall"
-        ? "course check-in"
-        : check.reason === "commitment_followup"
-          ? "commitment follow-up"
-          : "check-in";
+    check.reason === "member_onboarding"
+      ? "Day-0 welcome"
+      : check.reason === "quiet_newcomer"
+        ? "newcomer welcome"
+        : check.reason === "course_stall"
+          ? "course check-in"
+          : check.reason === "commitment_followup"
+            ? "commitment follow-up"
+            : "check-in";
   if (check.status === "waiting" || check.status === "draft") return `Guide drafted a ${reasonLabel} (waiting on Home)`;
   if (check.status === "sent") {
     return check.replied ? `Guide sent ${reasonLabel} · replied` : `Guide sent ${reasonLabel}`;

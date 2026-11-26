@@ -108,6 +108,7 @@ const HANDBOOK_EXCERPT_CHARS = 1_500;
 const UNSEEN_EMAIL_BATCH_LIMIT = 50;
 
 const reasonValidator = v.union(
+  v.literal("member_onboarding"),
   v.literal("commitment_followup"),
   v.literal("board_coaching"),
   v.literal("quiet_newcomer"),
@@ -1432,6 +1433,266 @@ export const processDueMemberCoachScansInternal = internalAction({
       builderUnseenEmailsEnqueued: builders.unseenEmailsEnqueued,
       allowanceAlertsSent: allowanceAlerts.alertsSent,
     };
+  },
+});
+
+// ---------- Automated Day-0 Member Onboarding (Chief of Staff Plan Only) ----------
+
+export const readNewMemberOnboardingCandidateInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    memberUserId: v.id("users"),
+    activationSequence: v.number(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const community: any = await ctx.db.get(args.communityId);
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !(await communityAgentIsOn(ctx, args.communityId)) ||
+      !(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))
+    ) {
+      return null;
+    }
+
+    const [settingsRow, allowanceState, touchedToday, eligibility] = await Promise.all([
+      ctx.db
+        .query("communityMemberCoachSettings")
+        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .first(),
+      readActiveCommunityAllowanceState(ctx, args.communityId, args.nowMs),
+      countCommunityCoachTouchesToday(ctx, args.communityId, args.nowMs),
+      checkMemberEligibleForCoach(ctx, community, args.memberUserId),
+    ]);
+    if (settingsRow && !settingsRow.enabled) return null;
+    if (allowanceState && shouldPauseBackgroundAiForAllowance(allowanceState)) return null;
+    if (touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) return null;
+    if (!eligibility.ok || String(eligibility.membership?.role ?? "member") !== "member") return null;
+
+    const actSeq = Math.max(0, Math.floor(Number(args.activationSequence)));
+    const currentSeq = Math.max(0, Math.floor(Number(eligibility.membership?.activationSequence ?? 0)));
+    if (currentSeq > 0 && actSeq > 0 && currentSeq !== actSeq) return null;
+
+    const dedupeKey = `member_onboarding:act:${actSeq || currentSeq || 1}`;
+    const [lastUserAgentAt, recentHistory, tz, person, journeyGuidance, courseProgress, eventCandidates, connectedApps] =
+      await Promise.all([
+        readLastUserAgentMessageAt(ctx, args.communityId, args.memberUserId),
+        readRecentCoachHistoryForMember(ctx, args.communityId, args.memberUserId),
+        communityTimeZone(ctx, args.communityId),
+        readPersonFacts(ctx, {
+          communityId: args.communityId,
+          subjectUserId: args.memberUserId,
+          lens: "self",
+        }),
+        readMemberJourneyGuidanceForCoach(ctx, {
+          communityId: args.communityId,
+          memberUserId: args.memberUserId,
+          nowMs: args.nowMs,
+        }),
+        readMemberCourseProgress(ctx, args.communityId, args.memberUserId),
+        listCommunityEventExpansionCandidates({
+          ctx,
+          communityId: args.communityId,
+          startMs: args.nowMs,
+          endMs: args.nowMs + QUIET_MEMBER_EVENT_HORIZON_MS,
+          includeCancelled: false,
+        }),
+        ctx.db
+          .query("connectedApps")
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+          .collect(),
+      ]);
+    if (!person) return null;
+    if (instructionRequestsPause(journeyGuidance?.founderInstruction)) return null;
+
+    const autoReasons = normalizeMemberCoachReasons(settingsRow?.autoReasons ?? []);
+    const gate = evaluateMemberCoachGate({
+      nowMs: args.nowMs,
+      isOwner: false,
+      memberMuted: false,
+      reason: "member_onboarding",
+      dedupeKey,
+      lastUserThreadMessageAt: lastUserAgentAt,
+      recentHistory,
+      autoReasonEnabled: autoReasons.includes("member_onboarding"),
+      communityTimeZone: tz,
+    });
+    if (!gate.allowed) return null;
+
+    const firstCourse = courseProgress.find((course) => course.next_lesson) ?? null;
+    const nextEvent =
+      eventCandidates
+        .filter((row) => !row.podChannelId)
+        .flatMap((row) =>
+          expandCommunityEventRows({
+            rows: [row],
+            startMs: args.nowMs,
+            endMs: args.nowMs + QUIET_MEMBER_EVENT_HORIZON_MS,
+            includeCancelled: false,
+            limit: 1,
+          }),
+        )
+        .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))[0] ?? null;
+    const activeAppNames = (connectedApps as any[])
+      .filter((row) => !row.revokedAt && typeof row.appUrl === "string" && row.appUrl.trim())
+      .map((row) => String(row.name ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 3);
+
+    const detailParts = [
+      "This member just joined the community (Day 0). Send a warm, concise welcome with one concrete first step.",
+    ];
+    if (firstCourse?.next_lesson) {
+      detailParts.push(`Starter course: "${firstCourse.title}" (first lesson: "${firstCourse.next_lesson.title}").`);
+    }
+    if (nextEvent) {
+      detailParts.push(`Next upcoming community event: "${nextEvent.title}" at ${nextEvent.starts_at_zoned}.`);
+    }
+    if (activeAppNames.length > 0) {
+      detailParts.push(
+        `Connected software product available from the sidebar Launch button: ${activeAppNames.join(", ")}.`,
+      );
+    }
+
+    return {
+      communityName: String(community.name ?? "this community"),
+      communityOneLiner: String(community.oneLiner ?? "").trim() || null,
+      ownerUserId: community.ownerId,
+      memberUserId: args.memberUserId,
+      memberName: person.name || (person.handle ? `@${person.handle}` : "Member"),
+      memberBio: person.bio,
+      memberSharedFacts: person.shared.slice(0, 6).map((fact) => `${fact.label}: ${fact.body}`),
+      dedupeKey,
+      signalSummary: "Just joined · Day-0 onboarding welcome",
+      signalDetail: detailParts.join(" "),
+      journeyStageName: journeyGuidance?.stageName ?? null,
+      journeyStageGoal: journeyGuidance?.stageGoal ?? null,
+      founderCardInstruction: journeyGuidance?.founderInstruction ?? null,
+      mode: gate.mode,
+    };
+  },
+});
+
+export const runNewMemberOnboardingInternal = internalAction({
+  args: {
+    communityId: v.id("communities"),
+    memberUserId: v.id("users"),
+    activationSequence: v.number(),
+  },
+  handler: async (ctx, args): Promise<{ outcome: string }> => {
+    const nowMs = Date.now();
+    const candidate = await ctx.runQuery(
+      internalRefs.communityMemberCoach.readNewMemberOnboardingCandidateInternal,
+      {
+        communityId: args.communityId,
+        memberUserId: args.memberUserId,
+        activationSequence: args.activationSequence,
+        nowMs,
+      },
+    );
+    if (!candidate) return { outcome: "skipped" };
+
+    const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
+    if (!funding.ok || !founderPlanTierHasProactiveAgent(funding.planTier)) {
+      return { outcome: "unfunded" };
+    }
+
+    let run;
+    try {
+      run = await startFundedInferenceRun({
+        ctx,
+        communityId: args.communityId,
+        actorUserId: candidate.ownerUserId,
+        surface: "community_autonomous_cognition",
+        receiptKey: `member_onboarding:${String(args.communityId)}:${String(args.memberUserId)}:${candidate.dedupeKey}`,
+        sourceRunId: `member-onboarding:${String(args.communityId)}:${nowMs}`,
+        admission: funding,
+        requireProactiveTier: true,
+      });
+    } catch {
+      return { outcome: "budget_blocked" };
+    }
+
+    const handbook = await ctx
+      .runQuery(internalRefs.communityHandbook.readApprovedCommunityHandbookInternal, {
+        communityId: args.communityId,
+      })
+      .catch(() => null);
+    const handbookExcerpt = handbook
+      ? renderCommunityHandbook(handbook).slice(0, HANDBOOK_EXCERPT_CHARS)
+      : "";
+
+    const system = [
+      MEMBER_COACH_INSTRUCTIONS,
+      "For a brand-new member's Day-0 onboarding welcome, warmly welcome them to the community, name one clear first step from their Stage 1 goal, starter course, upcoming event, or connected app, and invite them to reply with what they want to achieve first. Keep it concise, personal, and concrete.",
+      `Community: ${candidate.communityName}${candidate.communityOneLiner ? ` — ${candidate.communityOneLiner}` : ""}`,
+      ...(handbookExcerpt ? [`Community handbook (excerpt):\n${handbookExcerpt}`] : []),
+    ].join("\n\n");
+
+    const user = [
+      `Member: ${candidate.memberName}`,
+      ...(candidate.memberBio ? [`Bio: ${candidate.memberBio}`] : []),
+      ...(candidate.memberSharedFacts.length
+        ? [`Shared profile facts:\n- ${candidate.memberSharedFacts.join("\n- ")}`]
+        : []),
+      ...(candidate.journeyStageName
+        ? [
+            `Member journey stage: ${candidate.journeyStageName}${candidate.journeyStageGoal ? ` — Goal: ${candidate.journeyStageGoal}` : ""}`,
+          ]
+        : []),
+      ...(candidate.founderCardInstruction
+        ? [
+            `Founder instruction on this member's card (follow naturally without mentioning any card or note):\n${candidate.founderCardInstruction}`,
+          ]
+        : []),
+      `Signal (member_onboarding): ${candidate.signalDetail}`,
+      "Write their Day-0 onboarding welcome now, or skip only if a founder instruction explicitly asks to pause outreach.",
+    ].join("\n\n");
+
+    let decision: ReturnType<typeof parseMemberCoachJudgeResponse> = {
+      action: "skip",
+      reason: "provider_failed",
+    };
+    try {
+      const response = await run.request({
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        maxTokens: JUDGE_MAX_OUTPUT_TOKENS,
+        tools: [],
+      });
+      if (!response.ok || response.type !== "assistant") {
+        await run.fail(response.ok ? "invalid_model_output" : response.code);
+        return { outcome: "provider_failed" };
+      }
+      const settled = await run.settle("provider_completed");
+      if (!settled) return { outcome: "settle_failed" };
+      decision = parseMemberCoachJudgeResponse(response.assistantText);
+    } catch (error) {
+      await run
+        .fail(error instanceof Error ? error.message.slice(0, 120) : "member_onboarding_provider_failed")
+        .catch(() => {});
+      return { outcome: "provider_failed" };
+    }
+
+    const recorded = await ctx.runMutation(
+      internalRefs.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal,
+      {
+        communityId: args.communityId,
+        memberUserId: args.memberUserId,
+        reason: "member_onboarding",
+        dedupeKey: candidate.dedupeKey,
+        signalSummary: candidate.signalSummary,
+        decision: decision.action,
+        ...(decision.action === "send" ? { text: decision.text } : { skipReason: decision.reason }),
+        requestedMode: candidate.mode,
+        usedPrivateContext: false,
+        nowMs: Date.now(),
+      },
+    );
+    return { outcome: recorded?.ok ? recorded.outcome : recorded?.code ?? "failed" };
   },
 });
 

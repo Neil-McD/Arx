@@ -224,6 +224,15 @@ If you are building a new app and want Polynet to be your only sign-in and check
    The response returns `{ "user": { "id", "email", "email_verified", "name", "avatar_url" }, "access": { "allowed", "tier", "grants" } }`. Keep checking `GET /apps/v1/access?email=...` for live grant authority (never store permanent grants in a cookie).
 4. To send a user straight to a specific plan and return them to your app automatically after buying, link to:
    `https://www.polynet.ai/c/{community-slug}?plan={tier_key}&app={APP_ID}`
+5. To report key product onboarding milestones or wins directly onto a member's Member Board card:
+   ```http
+   POST {POLYNET_API_ORIGIN}/apps/v1/milestones
+   Authorization: Bearer {POLYNET_APP_SECRET}
+   Content-Type: application/json
+
+   { "email": "member@example.com", "milestone": "launched_first_campaign", "outcome": "Launched first campaign" }
+   ```
+   Returns `{ "recorded": true, "stage_key": "...", "milestone_key": "..." }` for active verified members, and `{ "recorded": false }` for unknown, unverified, non-member, or blocked emails.
 
 ## Rules
 

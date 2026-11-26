@@ -191,6 +191,9 @@ Implement these 4 parts in this codebase following its conventions:
 4. **Community link in the app:**
    - Add a clean link to \`${args.communityUrl}\` in navigation so members can jump between "${args.appName}" and "${args.communityName}" in one click.
 
+5. **(Optional) Report key product milestones to the Member Board:**
+   - When a member finishes an onboarding or activation milestone inside "${args.appName}", send \`POST ${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/milestones\` with \`Authorization: Bearer \${POLYNET_APP_SECRET}\` and JSON \`{ "email": "...", "milestone": "first_win", "outcome": "Completed first setup" }\` (fire-and-forget; never block app actions). Their Member Board card and automated onboarding update automatically.
+
 Before writing code, inspect this repo's framework and routing structure, propose your exact file plan, and ask me if any details need adjusting. Add tests for PKCE state verification, token exchange error handling, and fail-closed grant checks, and add the env variable names to \`.env.example\`.
 `;
 }
