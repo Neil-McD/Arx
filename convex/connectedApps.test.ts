@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
+import { buildLandingCheckoutReturnQuery } from "./communityLanding";
 import { pkceS256Challenge, redirectUrlIsAllowed, signStandardWebhook, webhookUrlIsAllowed } from "./connectedApps";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
@@ -409,4 +410,11 @@ test("community landing page resolves return_app only for an active app belongin
     appId: otherApp.app_id,
   });
   expect(cross.return_app).toBeNull();
+
+  // Checkout return query preserves selected tier / annual period alongside verified appId.
+  expect(buildLandingCheckoutReturnQuery({ plan: "pro", billingPeriod: "monthly", appId: ownApp.app_id }))
+    .toBe(`&plan=pro&app=${ownApp.app_id}`);
+  expect(buildLandingCheckoutReturnQuery({ plan: null, billingPeriod: "annual", appId: ownApp.app_id }))
+    .toBe(`&period=annual&app=${ownApp.app_id}`);
+  expect(buildLandingCheckoutReturnQuery({ plan: null, billingPeriod: "monthly", appId: null })).toBe("");
 });

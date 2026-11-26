@@ -330,7 +330,19 @@ export function WebCommunityLandingPage(props: Props) {
     if (phase.kind === "checkout_expired") {
       return (
         <Card title="That checkout didn't complete" note="Stripe didn't finish this payment. You can start again.">
-          <button type="button" className="cl-primary" onClick={() => { setPhase({ kind: "idle" }); window.history.replaceState({}, "", returnApp ? `/c/${slug}?app=${encodeURIComponent(returnApp.app_id)}` : `/c/${slug}`); }}>Try again</button>
+          <button
+            type="button"
+            className="cl-primary"
+            onClick={() => {
+              setPhase({ kind: "idle" });
+              const clean = new URLSearchParams(window.location.search);
+              clean.delete("checkout");
+              const qs = clean.toString();
+              window.history.replaceState({}, "", `/c/${slug}${qs ? `?${qs}` : ""}`);
+            }}
+          >
+            Try again
+          </button>
         </Card>
       );
     }

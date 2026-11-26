@@ -35,6 +35,18 @@ function cleanAppId(raw: unknown): string | null {
   return APP_ID_PATTERN.test(value) ? value : null;
 }
 
+export function buildLandingCheckoutReturnQuery(args: {
+  plan?: string | null;
+  billingPeriod?: "monthly" | "annual";
+  appId?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (args.plan) parts.push(`plan=${encodeURIComponent(args.plan)}`);
+  else if (args.billingPeriod === "annual") parts.push("period=annual");
+  if (args.appId) parts.push(`app=${encodeURIComponent(args.appId)}`);
+  return parts.length ? `&${parts.join("&")}` : "";
+}
+
 export const resolveReturnAppForLandingInternal = internalQuery({
   args: { communitySlug: v.string(), appId: v.string() },
   handler: async (ctx, args) => {
@@ -208,14 +220,18 @@ export const startCommunityLandingCheckout = action({
     const verifiedApp = requestedAppId
       ? await ctx.runQuery(internal.communityLanding.resolveReturnAppForLandingInternal, { communitySlug: slug, appId: requestedAppId })
       : null;
-    const appQuery = verifiedApp ? `&app=${encodeURIComponent(verifiedApp.app_id)}` : "";
+    const returnQuery = buildLandingCheckoutReturnQuery({
+      plan,
+      billingPeriod: args.billingPeriod,
+      appId: verifiedApp?.app_id ?? null,
+    });
     const origin = readCanonicalPublicAppOrigin();
     const page = `${origin}/c/${encodeURIComponent(slug)}`;
     const started = await startCommunityJoinCheckoutCore(ctx, {
       communitySlug: slug,
       billingPeriod: args.billingPeriod,
-      successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${appQuery}`,
-      cancelUrl: `${page}?checkout=canceled${appQuery}`,
+      successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${returnQuery}`,
+      cancelUrl: `${page}?checkout=canceled${returnQuery}`,
       ...(plan ? { tierKey: plan } : {}),
       authSubject: args.authSubject,
     });

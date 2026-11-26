@@ -6,6 +6,7 @@
 // (communityCheckoutBuyer.guestCheckoutAllowed). The buyer's secret goes back
 // to that browser, which keeps it until it signs in and claims the payment.
 import { internal } from "./_generated/api";
+import { buildLandingCheckoutReturnQuery } from "./communityLanding";
 import { startCommunityJoinCheckoutCore } from "./communityCommerce";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
@@ -47,12 +48,16 @@ export function registerCommunityLandingRoutes(args: { http: any; httpAction: an
       const verifiedApp = requestedAppId
         ? await ctx.runQuery(internal.communityLanding.resolveReturnAppForLandingInternal, { communitySlug: slug, appId: requestedAppId })
         : null;
-      const appQuery = verifiedApp ? `&app=${encodeURIComponent(verifiedApp.app_id)}` : "";
+      const returnQuery = buildLandingCheckoutReturnQuery({
+        plan,
+        billingPeriod: period,
+        appId: verifiedApp?.app_id ?? null,
+      });
       const page = `${readCanonicalPublicAppOrigin()}/c/${encodeURIComponent(slug)}`;
       try {
         const started = await startCommunityJoinCheckoutCore(ctx, {
           communitySlug: slug, billingPeriod: period, guest: true, visitorHash,
-          successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${appQuery}`, cancelUrl: `${page}?checkout=canceled${appQuery}`,
+          successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${returnQuery}`, cancelUrl: `${page}?checkout=canceled${returnQuery}`,
           ...(plan ? { tierKey: plan } : {}),
         });
         if (!started.buyer_secret) return reply(500, { ok: false, code: "join_unavailable" });
