@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Library } from "lucide-react";
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 // The community brain's section (Neil, Nov 25: a graph like the one in his
@@ -269,6 +270,13 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
   const fresh = dots.filter((entry) => kindOf(entry) === "fresh");
   return (
     <div className="bsc">
+      {/* The network inside the app's own window, as on the brain page in
+          Knowledge (Neil, Nov 26): the same graph, a little smaller. */}
+      <div className="bsc-win">
+        <div className="rpw gsc-win">
+          <div className="rpw-panel">
+            <div className="rpw-head"><span className="rpw-ch"><Library size={15} aria-hidden="true" />Knowledge</span><span className="msc-mode">Brain</span></div>
+            <div className="rpw-body bsc-body">
       <svg className="bsc-net" viewBox={`0 0 ${W} ${H}`} role="group" aria-label="The Build Club's memory: pick a kind, a cluster or a dot">
         <defs>
           <radialGradient id="bscGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#A78BFA" stopOpacity=".55" /><stop offset="1" stopColor="#A78BFA" stopOpacity="0" /></radialGradient>
@@ -325,6 +333,10 @@ export function BrainScene(props: { start?: { picked?: string; kind?: Kind } } =
           <text className="bsc-name core" x={C.x} y={C.y + 34} textAnchor="middle">The Build Club</text>
         </g>
       </svg>
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="sc-panel bsc-card" aria-live="polite">{card}</div>
     </div>
   );

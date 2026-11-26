@@ -452,15 +452,20 @@
 .pn-landing .msc-mode::before { content: "›"; margin-right: 10px; }
 .pn-landing .msc-win .rpw-body > [class*="app"] { display: flex; flex-direction: column; height: 100%; padding: 14px 24px 0; overflow: hidden; }
 
-/* The community brain's scene (BrainScene.tsx): a simple network straight on
-   the page (the community, its branches named, a few dots on each), with the
-   card beside it. */
+/* The community brain's scene (BrainScene.tsx): the network (the community,
+   its branches named, a few dots on each) inside the app's own window, the
+   card in front of it on the left, as in the guide and Chief of Staff. */
 .pn-landing .scene.live:has(.bsc) { height: 600px; }
 .pn-landing .bsc { position: relative; height: 100%; }
-/* A soft light behind the network, so the section isn't a dark patch between
-   the two that have an app window behind them. */
-.pn-landing .bsc::before { content: ""; position: absolute; top: -70px; right: -8%; width: 78%; height: 125%; background: radial-gradient(ellipse 52% 50% at 50% 46%, rgba(167, 139, 250, .075), rgba(238, 240, 244, .022) 48%, transparent 72%); pointer-events: none; }
-.pn-landing .bsc-net { position: absolute; top: -30px; right: -3%; width: min(760px, 64%); height: auto; overflow: visible; }
+.pn-landing .bsc-win {
+  position: absolute; top: 40px; left: 30%; width: 980px; height: 540px;
+  -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent 98%), linear-gradient(180deg, #000 80%, transparent);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, #000 78%, transparent 98%), linear-gradient(180deg, #000 80%, transparent); mask-composite: intersect;
+}
+.pn-landing .bsc-win .rpw-head { padding: 0 24px 0 calc(14% + 56px); gap: 10px; }
+/* A soft light behind the network, inside the window. */
+.pn-landing .bsc-body { position: relative; overflow: hidden; background: radial-gradient(ellipse 46% 52% at 56% 50%, rgba(167, 139, 250, .07), transparent 72%); }
+.pn-landing .bsc-net { position: absolute; top: 8px; left: calc(14% + 40px); width: 600px; height: auto; overflow: visible; }
 .pn-landing .bsc-net g[role="button"] { cursor: pointer; outline: none; }
 .pn-landing .bsc-hit { fill: transparent; }
 /* Each kind of memory has the app's own look (kit.module.css, .brain-*). */
@@ -572,11 +577,18 @@
   .pn-landing .gsc .rpw-channel { padding-left: 40px; }
   /* Phones, the brain: the card on the left, the network to its right with
      about half of it off the screen; its left side is the part you tap. */
+  /* Phones: the card up top, the window with the network lower and to the
+     right, running off the screen (the same diagonal as the other scenes). */
   .pn-landing .scene.live:has(.bsc) { height: auto; }
-  .pn-landing .bsc { height: auto; min-height: 430px; }
-  .pn-landing .bsc-card { position: relative; top: auto; width: 50%; zoom: .76; }
+  .pn-landing .bsc { height: auto; min-height: 630px; }
+  .pn-landing .bsc-card { position: relative; z-index: 2; top: auto; width: 62%; zoom: .76; }
   .pn-landing .bsc-kind small { display: none; }
-  .pn-landing .bsc-net { position: absolute; top: 24px; left: 32%; right: auto; width: 520px; max-width: none; }
+  /* Below the card, overlapping its foot: the network shows in full height.
+     (Its offsets are in its own shrunk size: 470px here is about 290px.) */
+  .pn-landing .bsc-win { top: 470px; left: 150px; width: 760px; height: 540px; zoom: .62; margin-right: -100vw;
+    -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent); mask-image: linear-gradient(180deg, #000 82%, transparent); }
+  .pn-landing .bsc-win .rpw-head { padding-left: 40px; }
+  .pn-landing .bsc-net { left: 40px; top: 0; width: 600px; }
 }
 
 /* Inside a scene: a floating panel, and a table or map behind it. */
