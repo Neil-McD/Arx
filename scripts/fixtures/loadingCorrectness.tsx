@@ -14,7 +14,6 @@ import { WebProfileSettingsSection } from "../../apps/web/src/components/WebProf
 import { SettingsPageHead, SettingsSaveStatus } from "../../apps/web/src/components/SettingsRows";
 import { WebCommunityEventsSection } from "../../apps/web/src/components/WebCommunityEventsSection";
 import type { CommunityEvent } from "../../apps/web/src/components/communityEventsContracts";
-import { CommunityResourcesPanel } from "../../apps/web/src/components/CommunityResourcesPanel";
 import { dispatchCommunityResourcesMutated } from "../../shared/communityResourceMutationEvents";
 import { useCommunityEventClock } from "../../shared/useCommunityEventClock";
 import "../../apps/web/src/index.css";
@@ -191,13 +190,6 @@ function useResourcesHarness(props: any) {
   const [selected, setSelected] = useState<string | null>(null);
   return { ...content, selected, setSelected };
 }
-function renderResources(value: any) {
-  return <CommunityResourcesPanel capabilities={{hasActiveCommunity:true,activeCommunityId:"c",activeCommunityName:"Test",canOperateResources:true}}
-    state={{resources:value.resources,modules:value.modules,isLoadingResources:value.isLoadingResources,isLoadingResourceModules:value.isLoadingModules,
-      resourceRead:value.resourceRead,moduleRead:value.moduleRead,selectedModuleId:value.selected}}
-    actions={{...value,handleSelectModule:value.setSelected,retryRead:value.retryResourceRead}} />;
-}
-
 function renderProfile(value: any) {
   const isInitialLoad = Boolean(!value.cloudProfile && (value.ui.profileLoadStatus === "idle" || value.ui.profileLoadStatus === "loading"));
   return (
@@ -477,25 +469,25 @@ function useProfileHarness(props: any) {
   });
   if (baseline) return results;
   await test("Resources reads run in parallel and partial failure has a targeted Retry, not zero lessons", async () => {
+    // The old files panel that drew this is gone (the Knowledge tab is KitClassroom);
+    // the reads, the targeted failure and the Retry are checked on the controller itself.
     let ensures = 0;
-    const hook = await mountHook(useResourcesHarness, {activeCommunityId:"c",session:session("a"),ensureSession:async (s:any)=>{ensures++;return s;}}, renderResources);
+    const hook = await mountHook(useResourcesHarness, {activeCommunityId:"c",session:session("a"),ensureSession:async (s:any)=>{ensures++;return s;}});
     assert(ensures === 1 && pending.length === 2, "initial read was duplicated or serial");
     pending.find((r)=>r.kind === "listCloudCommunityResourceModuleRows")!.resolve([courseFixture]);
     await tick();
-    assert(document.body.textContent?.includes("Lessons not loaded") && !document.body.textContent?.includes("0 lessons"), "pending lessons reported as zero");
+    assert(hook.value.moduleRead.status === "ready" && hook.value.resourceRead.status === "pending" && !hook.value.resourceRead.hasData, "pending lessons reported as loaded");
     flushSync(()=>hook.value.setSelected("course"));
     pending.find((r)=>r.kind === "listCloudCommunityResourceRows")!.reject(new Error("Read unavailable"));
     await tick();
-    assert(hook.value.selected === "course" && document.querySelector('[role="alert"]'), "failed read cleared selection or hid error");
-    assert(!document.body.textContent?.includes("No lessons yet"), "failed read reported empty course");
-    assert(document.querySelector('[aria-label="Lesson count not loaded"]'), "outline reported an unknown count as zero");
-    await (window as any).captureLoadingProofState("resources-partial-error");
-    (document.querySelector('[role="alert"] button') as HTMLButtonElement).click();
+    assert(hook.value.selected === "course" && hook.value.resourceRead.status === "error", "failed read cleared selection or hid error");
+    assert(hook.value.moduleRead.status === "ready" && hook.value.modules.length === 1, "one failed read cleared the other");
+    await hook.value.retryResourceRead("resources");
     await tick();
     assert(ensures === 2 && pending.length === 3 && pending[2].kind === "listCloudCommunityResourceRows", "Retry refetched healthy collection");
     pending[2].resolve([]);
     await tick();
-    assert(document.body.textContent?.includes("No lessons yet") && !document.querySelector('[role="alert"]'), "confirmed empty retry did not settle");
+    assert(hook.value.resourceRead.status === "ready" && hook.value.resources.length === 0, "confirmed empty retry did not settle");
   });
   await test("Resources scope starts before session resolution and old accounts cannot repopulate", async () => {
     const ensures: Array<ReturnType<typeof deferred>> = [];

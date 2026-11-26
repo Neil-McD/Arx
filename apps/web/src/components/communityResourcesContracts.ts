@@ -108,3 +108,10 @@ export type CommunityResourcesActions = {
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
   handleCreateBlankPageDraft: (moduleId: string, title?: string) => Promise<CommunityResource | null>;
 };
+
+// What the Knowledge tab is given (the courses, lessons and their actions).
+export type CommunityResourcesProps = {
+  capabilities: CommunityResourcesCapabilities;
+  state: CommunityResourcesState;
+  actions: CommunityResourcesActions;
+};
