@@ -43,7 +43,8 @@ import { sampleJourneyBoard } from "../components/polynetLanding/boardSample";
 import { KitEventsList, eventClock } from "./KitEventsList";
 import { KitEventForm } from "./KitEventForm";
 import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
-import { memberTimeFor, shortDay } from "./KitMembersPage";
+import { memberTimeFor, paymentText, shortDay } from "./KitMembersPage";
+import type { ProfileHost, JourneyPatch } from "./KitProfileHost";
 import { matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { coursesExample, fullExample, labBrainContent, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
@@ -635,24 +636,75 @@ const LAB_RECORD: CloudMemberRecord = {
   plan: { kind: "paid", label: "Pro · $49/mo", price_point_id: "p1" }, money: null, facts: [], events: [],
   notes: [{ id: "n1", body: "Asked about group calls. Good fit to lead a session on pricing.", author: "you", at: "2026-11-20T12:00:00Z", can_delete: true }],
 };
+// One Rashid, everywhere (Neil, Nov 26): the same profile for everyone, with
+// the host's part on top for hosts. ?page=profile shows Josh as a member sees
+// him beside Josh as the host sees him, and Dev, who is ready to move on.
+function labPerson(name: string, now: number) {
+  const board = sampleJourneyBoard(now);
+  const card = board.cards.find((entry) => entry.name === name)!;
+  const handle = name.toLowerCase().replace(/\s+/g, "-");
+  const profile: CloudMemberProfile = {
+    membership_id: card.membership_id, user_id: card.user_id, name, handle, avatar_url: null,
+    bio: name === "Josh Reed" ? "Course creator. Turning a free YouTube series on pricing into a paid course." : "Building a paid community for indie hackers.",
+    links: { youtube: `https://youtube.com/@${handle}` }, role: "member", here_now: false, you: false,
+    facts: [{ kind: "goal", label: "Working on", body: card.working_on ?? "" }],
+    in_common: [], hosts: [], shared: [], can_message: true, message_community_id: "c1", viewer_can_manage: false,
+  };
+  const record: CloudMemberRecord = {
+    membership_id: card.membership_id, user_id: card.user_id, name, handle, avatar_url: null, role: "member",
+    joined_at: card.joined_at, last_active_at: card.last_active_at, out: null,
+    plan: { kind: "paid", label: "$49 a month", price_point_id: "p1" }, money: null, facts: [],
+    events: [{ kind: "joined", text: "Joined", at: card.joined_at }],
+    notes: name === "Josh Reed" ? [{ id: "n1", body: "Keen on pricing. Asked twice about founding-member offers.", author: "you", at: new Date(now - 9 * 86_400_000).toISOString(), can_delete: true }] : [],
+  };
+  const payments = { community_id: "c1", member_id: card.membership_id, current_plan: null, events: [
+    { id: "e1", kind: "checkout" as const, status: "paid", source: null, billing_period: "monthly" as const, amount_base_units: 4900, currency: "usd", currency_decimals: 2,
+      occurred_at: card.joined_at!, created_at: null, updated_at: null, current_period_start_at: null, current_period_end_at: null, ended_at: null, cancel_at_period_end: null },
+  ] };
+  return { profile, record, card, stages: board.stages, payments };
+}
+
 function ProfileLab() {
-  const avatars = { getAvatarColor: () => "#7A4E9E", getInitials: (name: string) => name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() };
+  const now = Date.now();
+  const avatars = { getAvatarColor: () => "#3F5A7A", getInitials: (name: string) => name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() };
+  const [josh, setJosh] = useStateLab(() => labPerson("Josh Reed", now));
+  const [dev, setDev] = useStateLab(() => labPerson("Dev Patel", now));
+  useEffectLab(() => { void import("../index.css"); }, []);
+  const hostFor = (person: ReturnType<typeof labPerson>, set: (next: ReturnType<typeof labPerson>) => void): ProfileHost => ({
+    record: person.record, card: person.card, stages: person.stages, aiTier: "chief_of_staff", agentOn: true, payments: person.payments,
+    timeFor: memberTimeFor, paymentText,
+    onUpdateJourney: async (patch: JourneyPatch) => {
+      const card = { ...person.card };
+      if (patch.stageKey) {
+        const stage = person.stages.find((entry) => entry.key === patch.stageKey);
+        card.stage_key = patch.stageKey;
+        card.checkpoints = (stage?.checkpoints ?? []).map((cp) => ({ key: cp.key, label: cp.label, kind: cp.kind, done: false, auto: cp.kind !== "custom", completed_at: null }));
+        card.checkpoints_done = 0; card.checkpoints_total = card.checkpoints.length;
+      }
+      if (patch.addOutcomeText) card.outcomes = [{ id: `o${Date.now()}`, text: patch.addOutcomeText, at: new Date().toISOString(), source: "founder" }, ...card.outcomes];
+      if (patch.removeOutcomeId) card.outcomes = card.outcomes.filter((item) => item.id !== patch.removeOutcomeId);
+      if (patch.founderInstruction !== undefined) card.founder_instruction = patch.founderInstruction || null;
+      set({ ...person, card });
+    },
+    onAddNote: async (body) => set({ ...person, record: { ...person.record, notes: [{ id: `n${Date.now()}`, body, author: "you", at: new Date().toISOString(), can_delete: true }, ...person.record.notes] } }),
+    onDeleteNote: async (id) => set({ ...person, record: { ...person.record, notes: person.record.notes.filter((item) => item.id !== id) } }),
+    onSetRole: async () => undefined, onRemove: async () => undefined, onBlock: async () => undefined,
+  });
   const column = (title: string, node: JSX.Element) => (
-    <div style={{ width: 360, flex: "none" }}>
+    <div style={{ width: 380, flex: "none" }}>
       <p style={{ margin: "0 0 10px", font: "500 12px system-ui", color: "#8A8F98" }}>{title}</p>
       <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, background: "#0f1011" }}>
-        <KitApp view="members" part="rail"><Rail index={5} label={title}>{node}</Rail></KitApp>
+        <KitApp view="members" part="rail"><Rail index={5} label="Profile">{node}</Rail></KitApp>
       </div>
     </div>
   );
-  const empty: CloudMemberProfile = { ...LAB_PROFILE, name: "Tom Reyes", handle: "tom-reyes", user_id: "tom", bio: null, links: {}, role: "member", here_now: false, facts: [], in_common: [], hosts: [] };
   return (
     <div style={{ minHeight: "100vh", padding: 32, background: "#08090a", display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
-      {column("A member opens a member", <KitProfile profile={LAB_PROFILE} communityName="Polynet" onMessage={() => undefined} {...avatars} />)}
-      {column("Nothing shared yet", <KitProfile profile={empty} communityName="Polynet" onMessage={() => undefined} {...avatars} />)}
-      {column("Your own", <KitProfile profile={{ ...LAB_PROFILE, you: true, in_common: [], can_message: false }} communityName="Polynet" {...avatars} />)}
-      {column("As the host sees it", <KitProfile profile={{ ...LAB_PROFILE, viewer_can_manage: true }} communityName="Polynet" record={LAB_RECORD}
-        onMessage={() => undefined} onAddNote={async () => undefined} onOpenMembers={() => undefined} {...avatars} />)}
+      {column("A member opens Josh", <KitProfile profile={josh.profile} communityName="the Build Club" onMessage={() => undefined} now={now} {...avatars} />)}
+      {column("You, the host, open Josh", <KitProfile profile={{ ...josh.profile, viewer_can_manage: true }} communityName="the Build Club" now={now}
+        host={hostFor(josh, setJosh)} onMessage={() => undefined} {...avatars} />)}
+      {column("Dev is ready to move on", <KitProfile profile={{ ...dev.profile, viewer_can_manage: true }} communityName="the Build Club" now={now}
+        host={hostFor(dev, setDev)} onMessage={() => undefined} {...avatars} />)}
     </div>
   );
 }

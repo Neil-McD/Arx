@@ -22,6 +22,7 @@ import {
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import { SocialProfileIcon } from "../components/SocialProfileIcon";
 import { Btn, cx, KitApp, Rail, Sep } from "./kit";
+import { HostPart, HostSummary, type ProfileHost } from "./KitProfileHost";
 
 type Avatars = { getAvatarColor: (id: string) => string; getInitials: (name: string) => string };
 const LINK_LABELS: Record<SocialProfileKind, string> = { youtube: "YouTube", x: "X", instagram: "Instagram" };
@@ -129,6 +130,9 @@ export function KitProfile(props: Avatars & {
   profile: CloudMemberProfile;
   communityName?: string | null;
   record?: CloudMemberRecord | null;
+  // Everything a host sees on top of the profile (one Rashid, everywhere):
+  // the summary line under the name and the fenced part below.
+  host?: ProfileHost | null;
   now?: number;
   onMessage?: (userId: string, communityId: string | null) => void;
   onAddNote?: (body: string) => Promise<void>;
@@ -161,6 +165,7 @@ export function KitProfile(props: Avatars & {
         <div className={cx("pf-name")}><b>{profile.name}</b>{tag ? <span className={cx("tag")}>{tag}</span> : null}</div>
         {sub ? <span className={cx("sub")}>{sub}</span> : null}
       </div>
+      {props.host ? <HostSummary host={props.host} now={now} /> : null}
       {profile.bio ? <p className={cx("pf-bio")}>{profile.bio}</p> : null}
       {links.length ? (
         <div className={cx("pf-links")}>
@@ -201,7 +206,8 @@ export function KitProfile(props: Avatars & {
         </section>
       ) : null}
 
-      {props.record ? <HostBlock record={props.record} now={now} onAddNote={props.onAddNote} onOpenMembers={props.onOpenMembers} /> : null}
+      {props.host ? <HostPart host={props.host} now={now} self={Boolean(profile.you)} />
+        : props.record ? <HostBlock record={props.record} now={now} onAddNote={props.onAddNote} onOpenMembers={props.onOpenMembers} /> : null}
     </div>
   );
 }

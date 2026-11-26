@@ -1,0 +1,70 @@
+/* KitProfileHost.tsx: what hosts see on a profile. The kit's own colours
+   (--ink, --line, --s1 …, set on .app), never the app-wide names, which are
+   near-invisible under the live theme. Grey for everything; amber only for
+   who needs you; green only for ready to move on; violet only for the AI. */
+
+/* Under the name: one line of where they are and how they're doing. */
+.pfh-sum { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: -4px; }
+.pfh-sum p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0; color: var(--ink3); font-size: 12.5px; line-height: 1.45; }
+.pfh-sum p > span + span::before { content: "·"; margin: 0 7px; color: var(--ink4, var(--ink3)); }
+.pfh-sum-status { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); }
+.pfh-sum-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink3); }
+.pfh-sum-status.is-look { color: color-mix(in srgb, #d9a45b 70%, var(--ink)); }
+.pfh-sum-status.is-look i { background: #d9a45b; box-shadow: 0 0 0 3px rgba(217, 164, 91, .16); }
+.pfh-move {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid rgba(92, 191, 134, .35);
+  border-radius: 999px; background: rgba(92, 191, 134, .08); color: #5cbf86; font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer;
+}
+.pfh-move:hover { background: rgba(92, 191, 134, .16); }
+.pfh-move:disabled { opacity: .55; cursor: default; }
+
+/* Below the profile, fenced off. */
+.pfh { display: flex; flex-direction: column; gap: 18px; margin-top: 6px; padding: 14px; border: 1px solid var(--line2); border-radius: 12px; background: var(--s1); }
+.pfh-h { display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 11.5px; font-weight: 500; letter-spacing: .02em; text-transform: uppercase; }
+.pfh-sec { display: flex; flex-direction: column; gap: 8px; }
+.pfh-sec[data-focus] { scroll-margin-top: 12px; }
+.pfh-lab { color: var(--ink2); font-size: 12.5px; font-weight: 600; }
+.pfh-row { display: flex; gap: 8px; }
+.pfh select, .pfh-text, .pfh-add input {
+  min-width: 0; padding: 6px 9px; border: 1px solid var(--line2); border-radius: 8px; background: var(--s1);
+  color: var(--ink); font: inherit; font-size: 13px; outline: none;
+}
+.pfh-row select { flex: 1; }
+.pfh select:focus-visible, .pfh-text:focus, .pfh-add input:focus { border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+.pfh-text { width: 100%; resize: vertical; line-height: 1.45; }
+
+.pfh-checks { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.pfh-checks li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pfh-checks button { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 0; border: 0; background: none; color: var(--ink2); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.pfh-checks button:disabled { cursor: default; }
+.pfh-checks button i { position: relative; flex: none; width: 14px; height: 14px; border: 1.5px solid var(--ink3); border-radius: 4px; }
+.pfh-checks button.is-done { color: var(--ink); }
+.pfh-checks button.is-done i { border-color: transparent; background: color-mix(in srgb, var(--ink) 70%, transparent); }
+.pfh-checks button.is-done i::after { content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 3.5px; height: 7px; border: solid var(--panel2, #141516); border-width: 0 1.6px 1.6px 0; transform: rotate(45deg); }
+.pfh-checks em, .pfh-win em, .pfh-note em, .pfh-hist em, .pfh-did em { color: var(--ink3); font-size: 11.5px; font-style: normal; white-space: nowrap; }
+
+.pfh-wins { display: flex; flex-direction: column; gap: 4px; }
+.pfh-win { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--ink); }
+.pfh-win span { flex: 1; min-width: 0; }
+.pfh-win span::before { content: "🏆"; margin-right: 6px; font-size: 11px; filter: grayscale(1); opacity: .7; }
+.pfh-win button { padding: 0 2px; border: 0; background: none; color: var(--ink3); font: inherit; cursor: pointer; }
+.pfh-add { display: flex; align-items: flex-start; gap: 6px; }
+.pfh-add input { flex: 1; }
+
+.pfh-did { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--ink); font-size: 13px; }
+.pfh-did svg { flex: none; color: #a78bfa; }
+.pfh-did em { margin-left: auto; }
+.pfh-did.is-none { color: var(--ink3); }
+.pfh-hint { margin: 0; color: var(--ink3); font-size: 12px; }
+
+.pfh-note { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 8px; background: var(--s2); }
+.pfh-note p { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.pfh-note button { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--ink3); font: inherit; font-size: 11.5px; cursor: pointer; }
+.pfh-note button:hover { color: var(--ink); }
+
+.pfh-hist { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0; color: var(--ink2); font-size: 13px; }
+
+.pfh-acts { flex-direction: row; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pfh-role { display: inline-flex; align-items: center; gap: 8px; color: var(--ink2); font-size: 13px; }
+.pfh-acts-end { display: inline-flex; gap: 2px; margin-left: auto; }
+.pfh-error { margin: 0; color: #ff8a7a; font-size: 12.5px; }
