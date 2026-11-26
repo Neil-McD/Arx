@@ -15,7 +15,7 @@ import {
 import { KitBrainMap } from "../../v1/KitBrainMap";
 import { GuideSuggests } from "../../v1/KitGuideSuggests";
 import { JoinRequestsLine, MembersTable, MembersToolbar } from "../../v1/KitMembersTable";
-import { NeedsYou, type HomeThing } from "../../v1/KitNeedsYou";
+import type { HomeThing } from "../../v1/KitNeedsYou";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "../../v1/KitPanel";
 
 // The home page's product preview: Polynet as it is today, drawn with the
@@ -136,7 +136,7 @@ export const GUIDE_REPLY =
 // The live app's chips on Home, and what the guide says to each.
 export const CHIP_ANSWERS: Record<string, string> = {
   "How was this week?": "Busy. 132 people were active, three joined, and I answered 41 questions. Jon's invitation post was the most useful thing shared.",
-  "Who is at risk of leaving?": "Josh. He's been quiet for 25 days and missed the last two calls. I've drafted a check-in for you, it's under Your guide suggests.",
+  "Who is at risk of leaving?": "Josh. He's been quiet for 25 days and missed the last two calls. I've drafted a check-in for you—it's right under Needs you.",
   "Who should I welcome?": "Lena joined yesterday and said hello in #general. Kai and Rosa are waiting to join, so you could welcome them once you let them in.",
 };
 
@@ -780,12 +780,14 @@ export function RealAppPreview() {
                       <button type="button" onClick={() => go("wins")}>#wins</button>
                     </span>
                   </div>
-                  <NeedsYou label="Needs you"
+                  <GuideSuggests
+                    label="Needs you"
                     join={{ requests, loaded: true, decidingId: null,
                       onApprove: (id) => { track("join_approved"); dispatch({ type: "approve", id }); },
                       onDecline: (id) => { track("join_declined"); dispatch({ type: "decline", id }); } }}
-                    joinCount={requests.length} onShowAllJoinRequests={() => go("members")} things={things} />
-                  <GuideSuggests
+                    joinCount={requests.length}
+                    onShowAllJoinRequests={() => go("members")}
+                    things={things}
                     drafts={state.replyDraft === "waiting" ? [REPLY_DRAFT] : []}
                     onPost={async () => { track("reply_posted"); dispatch({ type: "post_reply" }); return null; }}
                     onSkip={() => dispatch({ type: "skip_reply" })}

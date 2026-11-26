@@ -102,7 +102,7 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
       <SettingsGroup label="Plan">
         <SettingsRow
           label="Chief of Staff"
-          help="Included by Polynet ($20/month AI allowance & full proactive suite). The community itself is free."
+          help="Included by Polynet (20,000 AI credits/month & full proactive suite). The community itself is free."
         >
           <span className="settings-v1-value">Included</span>
         </SettingsRow>
@@ -127,8 +127,8 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
     const currentPriceLabel = formatBuilderOfferPrice(community.monthly_price_base_units);
     const currentSummary =
       currentTier === "guide"
-        ? `${periodNote} ${currentPriceLabel} · $3/month AI included · Reactive 1:1 chats, @mentions, active threads & living memory.`
-        : `${periodNote} ${currentPriceLabel}${isGrandfatheredLegacy ? " (grandfathered)" : ""} · $20/month AI included · Full proactive Chief of Staff suite & optional $30 usage boosts.`;
+        ? `${periodNote} ${currentPriceLabel} · 3,000 AI credits/month included · Reactive 1:1 chats, @mentions, active threads & living memory.`
+        : `${periodNote} ${currentPriceLabel}${isGrandfatheredLegacy ? " (grandfathered)" : ""} · 20,000 AI credits/month included · Full proactive Chief of Staff suite & optional $30 boosts (+20,000 credits).`;
 
     return (
       <SettingsGroup label="Plan">
@@ -153,7 +153,7 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
         {currentTier === "guide" && plan.switchTier ? (
           <SettingsRow
             label={`Upgrade to Chief of Staff — ${chiefOfStaffPriceLabel}`}
-            help="Unlocks Daily Founder Briefs, proactive member & builder check-ins, unanswered-question auto-replies, optional $30 usage boosts, and $20/month AI included. Prorated immediately on your card on file."
+            help="Unlocks Daily Founder Briefs, proactive member & builder check-ins, unanswered-question auto-replies, optional $30 boosts (+20,000 credits), and 20,000 AI credits/month included. Prorated immediately on your card on file."
           >
             <SettingsButton
               variant="primary"
@@ -169,8 +169,8 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
             label={`Switch to Guide — ${guidePriceLabel}`}
             help={
               isGrandfatheredLegacy
-                ? "Switches to reactive Guide ($3/month AI) and pauses proactive check-ins, Daily Briefs, and usage boosts. Leaving your grandfathered $79 rate moves you to current pricing if you upgrade again later."
-                : "Switches to reactive Guide ($3/month AI) and pauses proactive check-ins, Daily Briefs, and usage boosts."
+                ? "Switches to reactive Guide (3,000 AI credits/month) and pauses proactive check-ins, Daily Briefs, and usage boosts. Leaving your grandfathered $79 rate moves you to current pricing if you upgrade again later."
+                : "Switches to reactive Guide (3,000 AI credits/month) and pauses proactive check-ins, Daily Briefs, and usage boosts."
             }
           >
             <SettingsButton
@@ -250,7 +250,7 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
       {guideTierAvailable ? (
         <SettingsRow
           label={`Guide — ${guidePriceLabel}`}
-          help="The community that remembers. Reactive AI guide for 1:1 chats, @mentions, active-thread follow-ups, and living community & personal memory ($3/month AI included)."
+          help="The community that remembers. Reactive AI guide for 1:1 chats, @mentions, active-thread follow-ups, and living community & personal memory (3,000 AI credits/month included)."
         >
           <SettingsButton
             variant="secondary"
@@ -267,7 +267,7 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
       ) : null}
       <SettingsRow
         label={`Chief of Staff — ${chiefOfStaffPriceLabel}`}
-        help="The agent that helps run your community. Everything in Guide plus Daily Founder Briefs, proactive member & builder check-ins, unanswered-question auto-replies, and optional $30 usage boosts ($20/month AI included)."
+        help="The agent that helps run your community. Everything in Guide plus Daily Founder Briefs, proactive member & builder check-ins, unanswered-question auto-replies, and optional $30 boosts (+20,000 credits; 20,000 AI credits/month included)."
       >
         <SettingsButton
           variant="primary"

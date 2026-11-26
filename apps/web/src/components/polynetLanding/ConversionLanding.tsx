@@ -1,6 +1,7 @@
 import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
+import { formatAiCredits } from "../../../../../shared/agentRoiSummary";
 import {
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
   POLYNET_FOUNDER_TIER_CATALOG,
@@ -19,9 +20,8 @@ import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 
 type JoinProps = { onJoin: () => void };
 
-// The prices and included AI come from the same numbers checkout charges.
+// The prices and included AI credits come from the same numbers checkout charges.
 const dollars = (baseUnits: number) => `$${baseUnits / 100}`;
-const aiDollars = (micros: number) => `$${micros / 1_000_000}`;
 const GUIDE = POLYNET_FOUNDER_TIER_CATALOG.guide;
 const CHIEF = POLYNET_FOUNDER_TIER_CATALOG.chief_of_staff;
 export const LANDING_OFFER_LINE =
@@ -32,35 +32,53 @@ type Plan = { tier: FounderPlanTier | null; name: string; line: string; price: s
 export const LANDING_PLANS: Plan[] = [
   {
     tier: null, name: "Free", line: "Run your community", price: "$0", per: "/ month", ai: null, button: "Start free",
-    points: ["Unlimited members", "Channels, messages, courses, events and pods", "Paid memberships and weekly digest emails", "Connect your own Claude or ChatGPT"],
+    points: [
+      "Unlimited members",
+      "Channels, courses, events and pods",
+      "Members board with automatic checkpoints",
+      "Paid memberships and weekly digest emails",
+      "Connect your own Claude or ChatGPT",
+    ],
   },
   {
     tier: "guide", name: GUIDE.label, line: "It answers and remembers", price: dollars(GUIDE.monthlyPriceBaseUnits), per: "/ month per community",
     button: `Start with ${GUIDE.label}`,
-    ai: `${aiDollars(GUIDE.includedCostMicros)} of AI included each month`,
-    points: ["Everything in Free", "A private guide for every member", "Replies when tagged in channels", "A community brain that keeps what's learned"],
+    ai: `${formatAiCredits(GUIDE.includedCostMicros, { unit: false })} AI credits included each month`,
+    points: [
+      "Everything in Free",
+      "A private guide for every member",
+      "Replies when tagged in channels",
+      "Community brain that keeps what's learned",
+    ],
   },
   {
     tier: "chief_of_staff", name: CHIEF.label, line: "It helps run the place", price: dollars(CHIEF.monthlyPriceBaseUnits), per: "/ month per community", lit: true,
     button: `Start with ${CHIEF.label}`,
     note: "Less than a few hours of a community manager's time, every month.",
-    ai: `${aiDollars(CHIEF.includedCostMicros)} of AI included each month; add more if you need it`,
-    points: ["Everything in Guide", "A morning brief for you", "Check-ins for quiet members", "Reply drafts for unanswered questions"],
+    ai: `${formatAiCredits(CHIEF.includedCostMicros, { unit: false })} AI credits included each month · optional boosts under your cap`,
+    points: [
+      "Everything in Guide",
+      "Daily morning brief for you",
+      "Proactive member check-ins & welcomes",
+      "Reply drafts & auto-replies for unanswered questions",
+      "AI working your Members board",
+    ],
   },
 ];
 
 export const INCLUDED: Array<[string, string]> = [
-  ["Channels and messages", "Group channels, threaded replies and a calm inbox."],
+  ["Channels and messages", "Group channels, threaded replies, direct messages and a calm inbox."],
   ["Courses and knowledge", "Publish lessons, see who's progressing, attach notes and files."],
-  ["Events", "One-off or recurring sessions, with reminders."],
-  ["Pods", "Give cohorts or small groups their own room and calls."],
+  ["Members board", "Track every member from day one to real results, with checkpoints that tick themselves and optional Auto-move."],
+  ["Events and pods", "One-off or recurring sessions with reminders, plus private rooms and calls for cohorts and small groups."],
   ["Paid memberships", "Charge for access, with payouts straight to you through Stripe."],
   ["Works with your own AI", "Connect Claude or ChatGPT. It acts inside your permissions."],
 ];
 
 export const QUESTIONS: Array<[string, string]> = [
-  ["Is the Free plan really free?", "Yes. Unlimited members, courses, channels, pods and events, with no time limit. You pay only if you turn on Guide or Chief of Staff, or when you sell memberships."],
-  ["What happens at the monthly AI limit?", "The AI pauses until your next billing cycle. You never get a surprise bill. On Chief of Staff you can turn on prepaid boosts, under a monthly cap you set."],
+  ["Is the Free plan really free?", "Yes. Unlimited members, courses, channels, pods, events and the Members board, with no time limit. You pay only if you turn on Guide or Chief of Staff, or when you sell memberships."],
+  ["How far do AI credits go?", "A typical member question or reply uses just a few credits. 3,000 credits on Guide covers hundreds of answers a month, and 20,000 credits on Chief of Staff covers daily briefs, proactive member check-ins and active discussions for a growing community."],
+  ["What happens at the monthly credit limit?", "The AI pauses until your next billing cycle. You never get a surprise bill. On Chief of Staff you can turn on optional $30 boosts (+20,000 credits), under a monthly cap you set."],
   ["How does charging members work?", `Connect Stripe once and set your community to free, approval-only or paid. Payouts go to your account, less a ${FEE} Polynet fee and Stripe's processing fee.`],
   ["Can I change plans later?", "Yes. Plans are month to month per community. Start free and move up or down whenever you like."],
 ];
@@ -172,6 +190,7 @@ const PRODUCT_MENU: Array<Array<[string, string, string]>> = [
     ["The guide", "Answers your members from your courses and past posts", "/#guide"],
     ["Community brain", "What your community learns, kept and connected", "/#brain"],
     ["Chief of Staff", "Morning briefs, member check-ins and reply drafts", "/#chief-of-staff"],
+    ["Members board", "See every member's progress and who needs a nudge", "/#members-board"],
   ],
   [
     ["Community home", "Channels, messages, courses, events and pods", "/pricing#included"],
@@ -524,7 +543,6 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <Suspense fallback={<div className="rp rp-wait" aria-hidden="true" />}>
               <RealAppPreview />
             </Suspense>
-            <p className="caption">Try it: send Josh's check-in, let Kai in, ask the guide in #general, open a pod.</p>
           </div>
         </section>
 
@@ -544,14 +562,14 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
         <FeatureSection id="chief-of-staff" title={["Catch members", "before they drift away."]} sceneLabel="Try the Chief of Staff: read the 8am brief, then send, edit or skip the check-in for a quiet member and the reply drafted for an unanswered question"
           live={<Suspense fallback={<div className="gsc-wait" />}><ChiefScene /></Suspense>}
-          features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "A monthly AI allowance you control"]}>
+          features={["A morning brief at 8am, when you turn it on", "Check-ins for quiet members", "Drafts for questions nobody answered", "Send, edit or skip", "Monthly AI credits you control"]}>
           In most communities you only find out someone's gone when they cancel. Polynet sees it early: the new member who never said hello, the one stuck halfway through a course, the regular who's gone quiet. Your chief of staff drafts the right nudge for each, and you send it, change it or skip it.
         </FeatureSection>
 
         <FeatureSection id="members-board" title={["See who's getting", "real results."]} sceneLabel="Try the members board: move a member on, filter who needs you, and see what the guide did on each card"
           live={<Suspense fallback={<div className="gsc-wait" />}><BoardScene /></Suspense>}
-          features={["Every member's progress, stage by stage", "Checkpoints that tick themselves", "Wins logged on each member", "A green arrow when someone's ready to move on", "Follow-ups drafted, or sent for the kinds you allow", "Board highlights in your morning brief"]}>
-          Most hosts can't tell who's actually getting results until someone posts a win or cancels. The members board shows every member's path, from the day they join to the result your community promises. Checkpoints tick themselves as they post and finish lessons. When someone stalls, your chief of staff follows up and marks it on their card. When someone finishes a stage, a green arrow appears by their name: press it to move them on.
+          features={["Every member's progress, stage by stage", "Checkpoints that tick themselves", "Wins logged on each member", "A green arrow when someone's ready to move on", "Optional Auto-move when every checkpoint is done", "Follow-ups drafted, or sent for the kinds you allow", "Board highlights in your morning brief"]}>
+          Most hosts can't tell who's actually getting results until someone posts a win or cancels. The members board shows every member's path, from the day they join to the result your community promises. Checkpoints tick themselves as they post and finish lessons. When someone stalls, your chief of staff follows up and marks it on their card. When someone finishes a stage, a green arrow appears by their name: press it to move them on, or turn on Auto-move.
         </FeatureSection>
 
         <section className="plans-line" aria-labelledby="plans-line-title" data-rv>

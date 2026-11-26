@@ -5,7 +5,9 @@ import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
   countReengagedMembersFromSentChecks,
+  formatAiCredits,
   formatMicrosUsd,
+  microsToAiCredits,
   summarizeCommunityAiSpend,
 } from "../shared/agentRoiSummary";
 
@@ -44,6 +46,14 @@ describe("zero-AI system re-engagement & founder spend/win-back visibility (Slic
     expect(formatMicrosUsd(0)).toBe("$0.00");
     expect(formatMicrosUsd(2_500)).toBe("<$0.01");
     expect(formatMicrosUsd(3_000_000)).toBe("$3.00");
+    expect(microsToAiCredits(0)).toBe(0);
+    expect(microsToAiCredits(400)).toBe(1);
+    expect(microsToAiCredits(3_000_000)).toBe(3_000);
+    expect(microsToAiCredits(20_000_000)).toBe(20_000);
+    expect(formatAiCredits(0)).toBe("0 credits");
+    expect(formatAiCredits(400)).toBe("1 credit");
+    expect(formatAiCredits(3_000_000)).toBe("3,000 credits");
+    expect(formatAiCredits(20_000_000, { unit: false })).toBe("20,000");
 
     const winBacks = countReengagedMembersFromSentChecks({
       sentChecks: [

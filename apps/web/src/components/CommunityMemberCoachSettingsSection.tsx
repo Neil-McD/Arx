@@ -3,7 +3,7 @@
 // community owners only so members never download it.
 import { useEffect, useState } from "react";
 import { formatAllowanceResetDate } from "../../../../shared/allowanceGuardrails";
-import { formatMicrosUsd } from "../../../../shared/agentRoiSummary";
+import { formatAiCredits } from "../../../../shared/agentRoiSummary";
 import {
   MEMBER_COACH_REASONS,
   MEMBER_COACH_REASON_LABELS,
@@ -54,7 +54,7 @@ export function CommunityMemberCoachSettingsSection(props: {
       }
     }
     if (returnState.status === "success") {
-      setBoostNotice("Boost payment received — updating your allowance as soon as Stripe confirms it.");
+      setBoostNotice("Boost payment received — updating your credits as soon as Stripe confirms it.");
     } else {
       setBoostNotice(null);
     }
@@ -72,7 +72,7 @@ export function CommunityMemberCoachSettingsSection(props: {
             returnState.previousPaidBoostMicros !== null &&
             loadedBoostMicros > returnState.previousPaidBoostMicros
           ) {
-            setBoostNotice("Boost applied — your extra +$20.00 AI allowance is live for this billing cycle.");
+            setBoostNotice("Boost applied — your extra +20,000 AI credits are live for this billing cycle.");
             return;
           }
           const baselineBoostMicros = returnState.previousPaidBoostMicros ?? loadedBoostMicros;
@@ -86,7 +86,7 @@ export function CommunityMemberCoachSettingsSection(props: {
                   setSettings(refreshed);
                   if ((refreshed?.impact?.paid_boost_micros ?? 0) > baselineBoostMicros) {
                     applied = true;
-                    setBoostNotice("Boost applied — your extra +$20.00 AI allowance is live for this billing cycle.");
+                    setBoostNotice("Boost applied — your extra +20,000 AI credits are live for this billing cycle.");
                   }
                 })
                 .catch(() => {});
@@ -187,17 +187,17 @@ export function CommunityMemberCoachSettingsSection(props: {
   const effectivePlanTier: FounderPlanTier | null =
     props.planTier ?? impact?.plan_tier ?? null;
   const isGuideTier = effectivePlanTier === "guide";
-  const includedLabel = formatMicrosUsd(impact?.included_allowance_micros ?? impact?.allowance_micros ?? 20_000_000);
+  const includedLabel = formatAiCredits(impact?.included_allowance_micros ?? impact?.allowance_micros ?? 20_000_000);
   const tierLabel =
     heartbeat?.community_tier === "paused"
-      ? "Paused · $0 AI until new activity"
+      ? "Paused · 0 credits until new activity"
       : heartbeat?.community_tier === "cooling"
         ? "Cooling · daily rhythm"
         : heartbeat?.community_tier === "warm"
           ? "Warm · 6-hour rhythm"
           : "Active · 2-hour rhythm";
   const countsSummary = heartbeat?.counts
-    ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up ($0 AI)`
+    ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up (0 credits)`
     : "Updates automatically on the next heartbeat scan.";
   const resetLabel = formatAllowanceResetDate(impact?.cycle_end_at);
   const paidBoostMicros = impact?.paid_boost_micros ?? 0;
@@ -206,15 +206,15 @@ export function CommunityMemberCoachSettingsSection(props: {
   const firstCycleCapActive = Boolean(impact?.first_cycle_cap_active);
   const allowanceBreakdown =
     paidBoostMicros > 0
-      ? ` (${formatMicrosUsd(includedMicros)} included + ${formatMicrosUsd(paidBoostMicros)} boosts)`
+      ? ` (${formatAiCredits(includedMicros, { unit: false })} included + ${formatAiCredits(paidBoostMicros, { unit: false })} boosts)`
       : "";
   const spendSummary = impact
     ? isGuideTier
-      ? `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)} monthly Guide allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""}.`
-      : `${formatMicrosUsd(impact.total_micros)}${impact.spend_truncated ? "+" : ""} of ${formatMicrosUsd(impact.allowance_micros)}${allowanceBreakdown} monthly allowance used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatMicrosUsd(impact.live_chat_micros)} · Heartbeats ${formatMicrosUsd(impact.proactive_micros)} · Briefs ${formatMicrosUsd(impact.brief_micros)}.`
+      ? `${formatAiCredits(impact.total_micros, { unit: false })}${impact.spend_truncated ? "+" : ""} of ${formatAiCredits(impact.allowance_micros)} used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""}.`
+      : `${formatAiCredits(impact.total_micros, { unit: false })}${impact.spend_truncated ? "+" : ""} of ${formatAiCredits(impact.allowance_micros)}${allowanceBreakdown} used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatAiCredits(impact.live_chat_micros, { unit: false })} · Heartbeats ${formatAiCredits(impact.proactive_micros, { unit: false })} · Briefs ${formatAiCredits(impact.brief_micros, { unit: false })}.`
     : null;
   const reserveNote = !isGuideTier && impact?.background_ai_paused
-    ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining allowance for live chats, @mentions, and your Daily Brief."
+    ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining credits for live chats, @mentions, and your Daily Brief."
     : null;
   const winBackSummary = !isGuideTier && impact
     ? impact.contacted_30d > 0
@@ -231,7 +231,7 @@ export function CommunityMemberCoachSettingsSection(props: {
         : "";
 
   return (
-    <SettingsGroup label={isGuideTier ? "Guide allowance & automation" : "Chief of Staff & allowance"}>
+    <SettingsGroup label={isGuideTier ? "Guide credits & automation" : "Chief of Staff & credits"}>
       {!isGuideTier && settings ? (
         <SettingsRow
           label="Heartbeat cadence"
@@ -242,13 +242,13 @@ export function CommunityMemberCoachSettingsSection(props: {
       ) : null}
       {impact && spendSummary ? (
         <SettingsRow
-          label="Monthly allowance & impact"
+          label="Monthly AI credits & impact"
           help={
             <div className="guide-allowance-meter">
               <div
                 className="guide-allowance-track"
                 role="progressbar"
-                aria-label="Monthly AI allowance used"
+                aria-label="Monthly AI credits used"
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={impact.percent_used}
@@ -270,14 +270,14 @@ export function CommunityMemberCoachSettingsSection(props: {
       ) : null}
       {!isGuideTier && impact ? (
         <SettingsRow
-          label="Extra usage safety cap"
+          label="Extra credit safety cap"
           htmlFor="usage-boost-cap"
           help={
             usageBoostCapCents <= 0
-              ? `Paused at your ${includedLabel}/month included allowance — zero extra charges.`
+              ? `Paused at your ${includedLabel}/month included limit — zero extra charges.`
               : firstCycleCapActive && usageBoostCapCents > FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS
-                ? `Allows prepaid usage boosts ($30 for +$20 AI allowance) up to $${usageBoostCapCents / 100}/month after your first renewal (capped at $${FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS / 100} during your first billing cycle).`
-                : `Allows prepaid usage boosts ($30 for +$20 AI allowance) up to $${usageBoostCapCents / 100}/month. Extra boosts expire at billing cycle reset; nothing is charged automatically without your payment.`
+                ? `Allows prepaid boosts ($30 for +20,000 AI credits) up to $${usageBoostCapCents / 100}/month after your first renewal (capped at $${FOUNDER_USAGE_BOOST_FIRST_CYCLE_MAX_CENTS / 100} during your first billing cycle).`
+                : `Allows prepaid boosts ($30 for +20,000 AI credits) up to $${usageBoostCapCents / 100}/month. Extra boosts expire at billing cycle reset; nothing is charged automatically without your payment.`
           }
         >
           <SettingsSelect
@@ -312,28 +312,28 @@ export function CommunityMemberCoachSettingsSection(props: {
       ) : null}
       {!isGuideTier && impact && usageBoostCapCents > 0 && impact.can_buy_usage_boost ? (
         <SettingsRow
-          label="Add extra AI usage"
-          help={`Prepaid $30 boost adds +$20.00 AI allowance for this billing cycle (${impact.usage_boost_remaining_this_cycle ?? 0} remaining under your safety cap).`}
+          label="Add extra AI credits"
+          help={`Prepaid $30 boost adds +20,000 AI credits for this billing cycle (${impact.usage_boost_remaining_this_cycle ?? 0} remaining under your safety cap).`}
         >
           <SettingsButton
             variant="primary"
             disabled={buyingBoost || saving}
             onClick={() => void handleBuyBoost()}
           >
-            {buyingBoost ? "Opening checkout…" : "Add $30 boost (+$20 AI)"}
+            {buyingBoost ? "Opening checkout…" : "Add 20,000 credits ($30)"}
           </SettingsButton>
         </SettingsRow>
       ) : null}
       <SettingsRow
-        label="Weekly community digest ($0 AI)"
+        label="Weekly community digest (0 credits)"
         help={
           weeklyDigestEnabled
-            ? "Sends a zero-AI-cost weekly highlights email (new posts, lessons, and activity) so quiet and handed-off members stay in the loop and return. Quiet weeks are skipped automatically."
+            ? "Sends a zero-credit weekly highlights email (new posts, lessons, and activity) so quiet and handed-off members stay in the loop and return. Quiet weeks are skipped automatically."
             : "Weekly community digest emails are paused for this community."
         }
       >
         <SettingsSwitch
-          label="Weekly community digest ($0 AI)"
+          label="Weekly community digest (0 credits)"
           checked={weeklyDigestEnabled}
           disabled={!settings || saving}
           onChange={(checked) =>
@@ -361,7 +361,7 @@ export function CommunityMemberCoachSettingsSection(props: {
       {isGuideTier ? (
         <SettingsRow
           label="Proactive member check-ins & auto-replies"
-          help="Included on Chief of Staff ($100/month with $20 AI included). Unlocks proactive member check-ins, unanswered-question auto-replies, Daily Briefs, personal builder check-ins, and optional $30 usage boosts."
+          help="Included on Chief of Staff ($100/month with 20,000 AI credits included). Unlocks proactive member check-ins, unanswered-question auto-replies, Daily Briefs, personal builder check-ins, and optional $30 boosts (+20,000 credits)."
         >
           {props.onUpgradeToChiefOfStaff ? (
             <SettingsButton

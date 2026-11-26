@@ -11,6 +11,7 @@ const { ConversionLanding, LANDING_OFFER_LINE, LANDING_PLANS, movedToPricing } =
 const { PricingPage, COMPARE } = await import("../apps/web/src/components/polynetLanding/PricingPage");
 const { resolvePublicEntryRoute } = await import("../shared/publicEntryRoute");
 const { POLYNET_FOUNDER_TIER_CATALOG } = await import("../shared/founderPlan");
+const { formatAiCredits } = await import("../shared/agentRoiSummary");
 
 test("the landing page's prices are the ones checkout charges", () => {
   const guide = POLYNET_FOUNDER_TIER_CATALOG.guide;
@@ -20,8 +21,8 @@ test("the landing page's prices are the ones checkout charges", () => {
     ["Guide", `$${guide.monthlyPriceBaseUnits / 100}`],
     ["Chief of Staff", `$${chief.monthlyPriceBaseUnits / 100}`],
   ]);
-  expect(LANDING_PLANS[1].ai).toContain(`$${guide.includedCostMicros / 1_000_000} of AI`);
-  expect(LANDING_PLANS[2].ai).toContain(`$${chief.includedCostMicros / 1_000_000} of AI`);
+  expect(LANDING_PLANS[1].ai).toContain(`${formatAiCredits(guide.includedCostMicros, { unit: false })} AI credits`);
+  expect(LANDING_PLANS[2].ai).toContain(`${formatAiCredits(chief.includedCostMicros, { unit: false })} AI credits`);
   expect(LANDING_OFFER_LINE).toBe("Free to build · Guide $20/mo · Chief of Staff $100/mo");
   // Chief of Staff is the one plan lit up.
   expect(LANDING_PLANS.filter((plan) => plan.lit).map((plan) => plan.name)).toEqual(["Chief of Staff"]);
@@ -80,10 +81,17 @@ test("the pricing page has the plans, what every plan includes, a full compariso
   const guide = POLYNET_FOUNDER_TIER_CATALOG.guide;
   const chief = POLYNET_FOUNDER_TIER_CATALOG.chief_of_staff;
   const rows = COMPARE.flatMap((group) => group.rows);
-  expect(rows.find((row) => row.name === "AI included each month")!.cells)
-    .toEqual([false, `$${guide.includedCostMicros / 1_000_000}`, `$${chief.includedCostMicros / 1_000_000}`]);
+  expect(rows.find((row) => row.name === "AI credits included each month")!.cells)
+    .toEqual([
+      false,
+      formatAiCredits(guide.includedCostMicros, { unit: false }),
+      formatAiCredits(chief.includedCostMicros, { unit: false }),
+    ]);
+  expect(rows.find((row) => row.name === "Members board")!.cells).toEqual([true, true, true]);
+  expect(rows.find((row) => row.name === "AI follow-ups & highlights on the Members board")!.cells).toEqual([false, false, true]);
   // Only Chief of Staff has the proactive work.
-  expect(rows.find((row) => row.name === "Morning brief for you")!.cells).toEqual([false, false, true]);
+  expect(rows.find((row) => row.name === "Daily morning brief for you")!.cells).toEqual([false, false, true]);
+  expect(html).toContain("How far do AI credits go?");
   expect(html.replace(/Polynet/g, "")).not.toMatch(/Coming soon|RSVP|trained on|Most popular|unlimited AI/i);
 });
 
