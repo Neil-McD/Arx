@@ -83,7 +83,18 @@ export function BoardScene() {
                   }}
                   onSaveStages={async (stages) => {
                     const next = stages.map((stage, position) => ({ key: stage.key ?? `stage_${position}`, name: stage.name, goal: stage.goal, position, checkpoints: stage.checkpoints })) as JourneyStageDefinition[];
-                    setBoard((last) => ({ ...last, stages: next }));
+                    // As in the app: members of a deleted stage move to the first stage left.
+                    setBoard((last) => {
+                      const keys = new Set(next.map((stage) => stage.key));
+                      const first = next[0];
+                      const fresh = (first?.checkpoints ?? []).map((cp) => ({ key: cp.key, label: cp.label, kind: cp.kind, done: false, auto: cp.kind !== "custom", completed_at: null }));
+                      return {
+                        ...last,
+                        stages: next,
+                        cards: first ? last.cards.map((card) => keys.has(card.stage_key) ? card
+                          : { ...card, stage_key: first.key, checkpoints: fresh, checkpoints_done: 0, checkpoints_total: fresh.length }) : last.cards,
+                      };
+                    });
                     return next;
                   }}
                   getAvatarColor={colour} getInitials={initials} />

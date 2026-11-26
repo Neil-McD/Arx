@@ -31,8 +31,8 @@ test("the page sells the product in plain words, with one door in", () => {
   const html = renderToStaticMarkup(React.createElement(ConversionLanding, { onJoin: () => undefined })).replace(/&#x27;/g, "'");
   expect(html).toContain("A normal community forgets.");
   expect(html).toContain("Yours will think.");
-  for (const heading of ["Stop answering<br/>the same question twice.", "Good answers get<br/>buried in old threads.",
-    "Members drift away<br/>before you notice.", "Free to build. Add an AI when you're ready.", "Compare plans"]) {
+  for (const heading of ["An answer for every<br/>member, at any hour.", "Every good answer,<br/>kept and found again.",
+    "Catch members<br/>before they drift away.", "See who's getting<br/>real results.", "Free to build. Add an AI when you're ready.", "Compare plans"]) {
     expect(html).toContain(heading);
   }
   expect(html).toContain("Recommended");
