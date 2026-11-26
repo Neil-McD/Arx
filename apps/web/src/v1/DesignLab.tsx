@@ -39,6 +39,7 @@ import { KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { brainCanDrawMap } from "../../../../shared/communityBrain";
 import { KitBrainPageFrame, KitBrainPageView, NoteActions } from "./KitBrainPage";
 import { KitMembersBoard } from "./KitMembersBoard";
+import { BoardScene } from "../components/polynetLanding/BoardScene";
 import type { CloudMemberJourneyBoard, CloudMemberJourneyCard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
 import { DEFAULT_JOURNEY_STAGES, type JourneyCardStatus } from "../../../../shared/communityMemberJourney";
 import { KitEventsList, eventClock } from "./KitEventsList";
@@ -691,5 +692,5 @@ function ProfileLab() {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "landing" ? <ConversionLanding onJoin={() => undefined} /> : page === "pricing" ? <PricingPage onJoin={() => undefined} /> : page === "profile" ? <ProfileLab /> : page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "board" ? <BoardLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "landing" ? <ConversionLanding onJoin={() => undefined} /> : page === "pricing" ? <PricingPage onJoin={() => undefined} /> : page === "profile" ? <ProfileLab /> : page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "board" ? <BoardLab /> : page === "board-new" ? <div style={{ minHeight: "100vh", padding: 32, background: "#08090a" }}><BoardScene /></div> : page === "board-new-open" ? <div style={{ minHeight: "100vh", padding: 32, background: "#08090a" }}><BoardScene start={{ open: "m6" }} /></div> : page === "board-new-phone" ? <div style={{ minHeight: "100vh", padding: 16, background: "#08090a", maxWidth: 390 }}><BoardScene start={{ phone: true }} /></div> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
