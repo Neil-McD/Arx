@@ -124,10 +124,6 @@
 .members-board-filter.is-ready .members-board-dot { background: var(--mb-green); }
 
 /* Phones: one stage at a time. */
-.members-board-tabs { flex: none; display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
-.members-board-tabs button { flex: none; display: inline-flex; gap: 6px; padding: 6px 10px; border: 0; border-radius: 7px; background: none; color: var(--ink3); font: inherit; font-size: 13px; cursor: pointer; }
-.members-board-tabs button.is-on { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
-.members-board-tabs em { font-style: normal; opacity: .7; }
 
 /* Columns: no box, just the stage and its cards. */
 .members-board-columns {
@@ -143,7 +139,9 @@
   overflow-y: hidden;
   align-items: stretch;
 }
-.members-board-shell.is-phone .members-board-columns { margin-top: 12px; overflow-x: hidden; }
+/* Phones: the same columns, a little narrower, swiped across; each snaps into place. */
+.members-board-shell.is-phone .members-board-columns { scroll-snap-type: x proximity; scrollbar-width: none; }
+.members-board-shell.is-phone .members-board-columns::-webkit-scrollbar { display: none; }
 .members-board-col {
   flex: 1 0 236px;
   min-width: 236px;
@@ -156,12 +154,10 @@
   border-radius: 12px;
   transition: background-color .14s ease, box-shadow .14s ease;
 }
-.members-board-shell.is-phone .members-board-col { flex: 1 1 auto; max-width: none; min-width: 0; }
+.members-board-shell.is-phone .members-board-col { flex: 0 0 78vw; min-width: 0; max-width: 300px; scroll-snap-align: start; }
 .members-board-col.is-drop-target { background: var(--s1); box-shadow: 0 0 0 1px var(--line2); }
 
 .members-board-col-head { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 6px; }
-.members-board-shell.is-phone .members-board-col-head .members-board-inline-name,
-.members-board-shell.is-phone .members-board-col-head .members-board-col-count { display: none; }
 .members-board-col-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .members-board-inline-name {
   min-width: 0;
@@ -547,3 +543,6 @@
   padding: 0 2px;
   font-size: 13px;
 }
+
+/* Phones: the toolbar's right side wraps under the filters instead of running off. */
+.members-board-shell.is-phone .members-board-toolbar-end { flex-wrap: wrap; margin-left: 0; }
