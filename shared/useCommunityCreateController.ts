@@ -101,7 +101,7 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
     return "Pick a different web address: 3-32 letters, numbers and dashes, and not a reserved word like admin or www.";
   }
   if (message.includes("founder_subscription_already_attached")) {
-    return "This Agent plan is already attached to a community.";
+    return "That plan is already on one of your communities.";
   }
   return message;
 }

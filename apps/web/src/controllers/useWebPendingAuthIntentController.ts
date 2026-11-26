@@ -32,7 +32,7 @@ export function useWebPendingAuthIntentController(params: {
         select_model: () => true,
         connect_provider: () => {
           params.showToast(
-            "Personal AI connections are no longer supported. Community AI is provided by the community.",
+            "Each community brings its own AI now, so there's nothing to connect.",
           );
           return true;
         },

@@ -67,15 +67,6 @@ export function buildWebAppGlobalOverlayProps(params: {
   canonicalSessionUserId: string | null;
   displayName: (userId: string) => string;
   savedProfilesByUserId: Record<string, SharedUserProfile>;
-  builderOffer: {
-    community: any;
-    close: () => void;
-    confirm: (action: any) => Promise<void> | void;
-  };
-  founderBilling: {
-    actionCommunityId: string | null;
-    error: string | null;
-  };
   pendingLaunchCommunity: any;
   session: AuthSession | null;
   ensureSession: any;
@@ -105,15 +96,6 @@ export function buildWebAppGlobalOverlayProps(params: {
         hostAvatarFocusY,
         hostAvatarZoom,
       },
-    },
-    builderOfferProps: {
-      community: params.builderOffer.community,
-      isSubmitting:
-        Boolean(params.builderOffer.community) &&
-        params.founderBilling.actionCommunityId === params.builderOffer.community?.community_id,
-      error: params.founderBilling.error,
-      onClose: params.builderOffer.close,
-      onConfirm: params.builderOffer.confirm,
     },
     communityLaunchProps: params.pendingLaunchCommunity && params.session
       ? {
