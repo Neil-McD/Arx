@@ -170,11 +170,11 @@ async function seedCommunity(
   });
 }
 
-test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or Guide", async () => {
+test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or Guide, and enforces atomic daily cap", async () => {
   for (const tier of ["free", "guide"] as const) {
     const t = convexTest(schema, modules);
     const ids = await seedCommunity(t, tier);
-    const candidate = await t.query(internal.communityMemberCoach.readNewMemberOnboardingCandidateInternal, {
+    const candidate = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
       communityId: ids.communityId,
       memberUserId: ids.memberId,
       activationSequence: 1,
@@ -193,7 +193,7 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
   });
 
   // Draft mode by default, carrying full Member Board Stage 1 + starter course + event + connected app context.
-  const draftCandidate = await t.query(internal.communityMemberCoach.readNewMemberOnboardingCandidateInternal, {
+  const draftCandidate = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
     communityId: ids.communityId,
     memberUserId: ids.memberId,
     activationSequence: 1,
@@ -215,7 +215,7 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
     enabled: true,
     autoReasons: ["member_onboarding"],
   });
-  const autoCandidate = await t.query(internal.communityMemberCoach.readNewMemberOnboardingCandidateInternal, {
+  const autoCandidate = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
     communityId: ids.communityId,
     memberUserId: ids.memberId,
     activationSequence: 1,
@@ -239,7 +239,7 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
   expect(delivered).toMatchObject({ ok: true, outcome: "sent_auto" });
 
   // Dedupe prevents a duplicate Day-0 welcome for the same join.
-  const secondCheck = await t.query(internal.communityMemberCoach.readNewMemberOnboardingCandidateInternal, {
+  const secondCheck = await t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
     communityId: ids.communityId,
     memberUserId: ids.memberId,
     activationSequence: 1,
@@ -255,6 +255,48 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
       .unique(),
   );
   expect(card?.agentOutcomeNote).toContain("Day-0 welcome");
+
+  // Atomic daily cap: a burst of 6 simultaneous new joins cannot exceed 5 total daily reservations (2 already reserved above -> only 3 more succeed).
+  const burstIds = await t.run(async (ctx) => {
+    const out: any[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const uid = await ctx.db.insert("users", {
+        authSubject: `burst-${i}`,
+        displayName: `Burst ${i}`,
+        handle: `burst_${i}`,
+        normalizedHandle: `burst_${i}`,
+        email: `burst-${i}@example.com`,
+        normalizedEmail: `burst-${i}@example.com`,
+        emailVerifiedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      await ctx.db.insert("communityMemberships", {
+        communityId: ids.communityId,
+        userId: uid,
+        role: "member",
+        accessSource: "free_grant",
+        state: "active",
+        activationSequence: 1,
+        activatedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as any);
+      out.push(uid);
+    }
+    return out;
+  });
+  const claimed = await Promise.all(
+    burstIds.map((uid) =>
+      t.mutation(internal.communityMemberCoach.claimNewMemberOnboardingCandidateInternal, {
+        communityId: ids.communityId,
+        memberUserId: uid,
+        activationSequence: 1,
+        nowMs: NOW + 60_000,
+      }),
+    ),
+  );
+  expect(claimed.filter(Boolean)).toHaveLength(3);
 });
 
 test("activateCommunityMembershipCore schedules onboarding only for Chief of Staff members, never Free", async () => {

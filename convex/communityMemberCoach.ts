@@ -998,7 +998,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
     const eligibility = await checkMemberEligibleForCoach(ctx, community, args.memberUserId);
     if (!eligibility.ok) return { ok: false as const, code: eligibility.code };
 
-    const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, tz, settingsRow] = await Promise.all([
+    const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, tz, settingsRow, touchedToday] = await Promise.all([
       readLatestMemberChannelActivityAt(ctx, args.communityId, args.memberUserId),
       readLastUserAgentMessageAt(ctx, args.communityId, args.memberUserId),
       readRecentCoachHistoryForMember(ctx, args.communityId, args.memberUserId),
@@ -1008,8 +1008,12 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
         .query("communityMemberCoachSettings")
         .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
         .first(),
+      countCommunityCoachTouchesToday(ctx, args.communityId, args.nowMs),
     ]);
     if (settingsRow && !settingsRow.enabled) return { ok: false as const, code: "coach_disabled" };
+    if (args.decision === "send" && touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) {
+      return { ok: false as const, code: "daily_cap_reached" };
+    }
 
     const joinedAt = Number(eligibility.membership?.activatedAt ?? eligibility.membership?.createdAt ?? 0);
     const lastLessonMs = courseProgress.reduce((best, course) => {
@@ -1438,7 +1442,10 @@ export const processDueMemberCoachScansInternal = internalAction({
 
 // ---------- Automated Day-0 Member Onboarding (Chief of Staff Plan Only) ----------
 
-export const readNewMemberOnboardingCandidateInternal = internalQuery({
+// Atomically validates eligibility AND reserves a daily outreach slot on
+// communityMemberCoachSettings so concurrent join bursts cannot exceed
+// MEMBER_COACH_DAILY_COMMUNITY_CAP before inference runs.
+export const claimNewMemberOnboardingCandidateInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     memberUserId: v.id("users"),
@@ -1467,7 +1474,13 @@ export const readNewMemberOnboardingCandidateInternal = internalQuery({
     ]);
     if (settingsRow && !settingsRow.enabled) return null;
     if (allowanceState && shouldPauseBackgroundAiForAllowance(allowanceState)) return null;
-    if (touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) return null;
+    const dayKey = new Date(args.nowMs).toISOString().slice(0, 10);
+    const reservedCount =
+      settingsRow?.onboardingReservedDayKey === dayKey
+        ? Math.max(0, Math.floor(Number(settingsRow.onboardingReservedCount ?? 0)))
+        : 0;
+    const effectiveTouches = Math.max(touchedToday, reservedCount);
+    if (effectiveTouches >= MEMBER_COACH_DAILY_COMMUNITY_CAP) return null;
     if (!eligibility.ok || String(eligibility.membership?.role ?? "member") !== "member") return null;
 
     const actSeq = Math.max(0, Math.floor(Number(args.activationSequence)));
@@ -1519,6 +1532,28 @@ export const readNewMemberOnboardingCandidateInternal = internalQuery({
       communityTimeZone: tz,
     });
     if (!gate.allowed) return null;
+
+    // Atomically reserve 1 daily slot on the single per-community settings doc.
+    const nextReservedCount = effectiveTouches + 1;
+    if (settingsRow) {
+      await ctx.db.patch(settingsRow._id, {
+        onboardingReservedDayKey: dayKey,
+        onboardingReservedCount: nextReservedCount,
+        updatedAt: args.nowMs,
+      });
+    } else {
+      await ctx.db.insert("communityMemberCoachSettings", {
+        communityId: args.communityId,
+        enabled: true,
+        autoReasons: [],
+        onboardingReservedDayKey: dayKey,
+        onboardingReservedCount: nextReservedCount,
+        nextScanAt: args.nowMs,
+        builderNextScanAt: args.nowMs,
+        createdAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+    }
 
     const firstCourse = courseProgress.find((course) => course.next_lesson) ?? null;
     const nextEvent =
@@ -1582,8 +1617,8 @@ export const runNewMemberOnboardingInternal = internalAction({
   },
   handler: async (ctx, args): Promise<{ outcome: string }> => {
     const nowMs = Date.now();
-    const candidate = await ctx.runQuery(
-      internalRefs.communityMemberCoach.readNewMemberOnboardingCandidateInternal,
+    const candidate = await ctx.runMutation(
+      internalRefs.communityMemberCoach.claimNewMemberOnboardingCandidateInternal,
       {
         communityId: args.communityId,
         memberUserId: args.memberUserId,
