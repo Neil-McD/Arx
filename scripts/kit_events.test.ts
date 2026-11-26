@@ -105,6 +105,7 @@ test("KitEventsList shows an inline cancelled notice in the Next card when an ea
     renderRail: () => null,
   }));
   expect(html).toContain("Canceled for Thanksgiving.");
-  expect(html).toContain("is cancelled");
+  expect(html).toContain("Cancelled");
+  expect(html).toContain("Friday");
   expect(html).toContain("Group Call");
 });

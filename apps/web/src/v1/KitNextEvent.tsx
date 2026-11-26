@@ -113,9 +113,9 @@ export function KitNextEvent(props: {
   };
   const cancelledNotice =
     earlierCancelled.length === 1
-      ? `${formatCancelledDay(earlierCancelled[0]!.starts_at)} is cancelled`
+      ? formatCancelledDay(earlierCancelled[0]!.starts_at)
       : earlierCancelled.length >= 2
-        ? `${formatCancelledDay(earlierCancelled[0]!.starts_at)} & ${eventDayWord(earlierCancelled[1]!.starts_at, props.now)}${earlierCancelled.length > 2 ? ` (+${earlierCancelled.length - 2})` : ""} cancelled`
+        ? `${formatCancelledDay(earlierCancelled[0]!.starts_at)} & ${eventDayWord(earlierCancelled[1]!.starts_at, props.now)}${earlierCancelled.length > 2 ? ` (+${earlierCancelled.length - 2})` : ""}`
         : null;
   return (
     <PanelPart label="Next up" fact={label.live ? null : label.text} action={<PanelAction onClick={props.onOpenEvents}>All events</PanelAction>}>
@@ -124,7 +124,8 @@ export function KitNextEvent(props: {
         action={label.live && event.url ? <a className={cx("btn go")} href={event.url} target="_blank" rel="noreferrer">Join</a> : null} />
       {cancelledNotice ? (
         <button type="button" className={cx("nx-cancel")} onClick={props.onOpenEvents}>
-          {cancelledNotice}
+          <span className={cx("evtag bad")}>Cancelled</span>
+          <span>{cancelledNotice}</span>
         </button>
       ) : null}
     </PanelPart>

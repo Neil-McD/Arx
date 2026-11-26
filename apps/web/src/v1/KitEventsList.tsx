@@ -341,17 +341,21 @@ export function KitEventsList(props: {
   const earlierCancelledPrimary = earlierCancelled[0] ?? null;
   const earlierCancelledText = (() => {
     if (earlierCancelled.length === 0) return "";
+    const formatDay = (startsAtIso: string) => {
+      const word = eventDayWord(startsAtIso, props.now);
+      return /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/.test(word) ? `This ${word}` : word;
+    };
     const days = earlierCancelled.map((item) => eventDayWord(item.starts_at, props.now));
+    const firstDay = formatDay(earlierCancelled[0]!.starts_at);
     const lead =
       days.length === 1
-        ? `${days[0]} is cancelled`
+        ? firstDay
         : days.length === 2
-          ? `${days[0]} and ${days[1]} are cancelled`
-          : `${days[0]}, ${days[1]} (+${days.length - 2} more) are cancelled`;
+          ? `${firstDay} & ${days[1]}`
+          : `${firstDay}, ${days[1]} (+${days.length - 2} more)`;
     const note = earlierCancelled.find((item) => item.cancellation_note?.trim())?.cancellation_note?.trim() ?? "";
-    if (!note) return `${lead}.`;
-    const punctuatedNote = /[.!?]$/.test(note) ? note : `${note}.`;
-    return `${lead} — ${punctuatedNote}`;
+    if (!note) return lead;
+    return `${lead} — ${note}`;
   })();
 
   return (
@@ -385,22 +389,22 @@ export function KitEventsList(props: {
             <>
               <span className={cx("lab")} style={{ display: "block", marginTop: 28 }}>Next</span>
               <div className={cx("evnext", pickedId === featured.id && "on", props.editingId === featured.parent_event_id && "evdim")} id={`community-event-${featured.id}`}>
-                {earlierCancelledPrimary ? (
-                  <button
-                    type="button"
-                    className={cx("evnext-cancelled")}
-                    onClick={() => pick(earlierCancelledPrimary)}
-                  >
-                    <span className={cx("evtag bad")}>Cancelled</span>
-                    <span>{earlierCancelledText}</span>
-                  </button>
-                ) : null}
                 <span className={cx("evday")}><b>{featuredBlock.number}</b><span>{featuredBlock.word}</span></span>
                 <div>
                   {label.live ? <span className={cx("livepill")}><i />{label.text}</span> : <span className={cx("evsoon")}><i />{eventSoonWord(featured.starts_at, props.now)}</span>}
                   <h2>{featured.title}{tags(featured)}</h2>
                   <p className={cx("evnext-when")} title={props.timeLabel(featured).secondary ?? undefined}>{eventDayWord(featured.starts_at, props.now)} · {yours(props.timeLabel(featured).primary)}</p>
                   {eventPlaceWord(featured) ? <p className={cx("evnext-where")}>{placeIcon(featured)}{eventPlaceWord(featured)}</p> : null}
+                  {earlierCancelledPrimary ? (
+                    <button
+                      type="button"
+                      className={cx("evnext-cancelled")}
+                      onClick={() => pick(earlierCancelledPrimary)}
+                    >
+                      <span className={cx("evtag bad")}>Cancelled</span>
+                      <span>{earlierCancelledText}</span>
+                    </button>
+                  ) : null}
                   {featured.description_md ? <p className={cx("evnext-say")}>{featured.description_md}</p> : null}
                   <div className={cx("evnext-acts")}>
                     {featured.url ? <a className={cx("btn go")} href={featured.url} target="_blank" rel="noreferrer">{label.live ? "Join now" : "Join when it starts"}</a> : null}
