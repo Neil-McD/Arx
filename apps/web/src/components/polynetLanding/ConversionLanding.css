@@ -406,7 +406,8 @@
 .pn-landing .gsc-chat {
   display: flex; flex-direction: column; padding: 20px 20px 16px;
   border: 1px solid #2a2c32; border-radius: 16px; background: #0f1011;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .65), 0 0 70px rgba(124, 92, 240, .10);
+  /* A light lift only: deep black shadows read as dark streaks on the page (Neil, Nov 25). */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
 }
 .pn-landing .gsc-chat > :first-child { margin-top: 0; }
 .pn-landing .gsc-talk { display: flex; flex-direction: column; justify-content: flex-end; min-height: 214px; margin: 14px 0 18px; }
@@ -505,7 +506,7 @@
 @media (prefers-reduced-motion: reduce) { .pn-landing .bsc-next, .pn-landing .bsc-glow { animation: none; } }
 .pn-landing .bsc-card { position: absolute; z-index: 2; top: 28px; left: 0; width: min(440px, 100%); gap: 0; }
 /* A lighter shadow than the other scenes' panels: here nothing sits behind the card, so a deep one reads as a dark halo. */
-.pn-landing .sc-panel.bsc-card { box-shadow: 0 16px 44px rgba(0, 0, 0, .32); }
+.pn-landing .sc-panel.bsc-card { box-shadow: 0 10px 30px rgba(0, 0, 0, .22); }
 .pn-landing .bsc-card .sc-eyebrow { margin-bottom: 6px; }
 .pn-landing .bsc-crumb-btn { align-self: flex-start; margin: 0 0 14px; padding: 0; text-align: left; border: 0; background: none; color: var(--quiet); font: inherit; font-size: 13px; cursor: pointer; }
 .pn-landing .bsc-crumb-btn:hover { color: var(--text); }
@@ -542,7 +543,7 @@
 .pn-landing .gsc .entity-card {
   position: absolute; z-index: 40; left: 0; bottom: calc(100% + 8px); width: 260px; box-sizing: border-box; padding: 12px 14px;
   display: flex; flex-direction: column; gap: 6px; border: 1px solid rgba(238, 240, 244, .12); border-radius: 10px; background: #16171a;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: #9ea0a3; font-family: "Geist Variable", "Geist", system-ui, sans-serif; font-size: 13px; line-height: 1.45;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .3); color: #9ea0a3; font-family: "Geist Variable", "Geist", system-ui, sans-serif; font-size: 13px; line-height: 1.45;
   opacity: 0; pointer-events: none; visibility: hidden; transform: translateY(4px) scale(.985); transform-origin: 22px bottom;
   transition: opacity 130ms ease, transform 130ms ease, visibility 0s linear 130ms;
 }
@@ -579,7 +580,7 @@
 }
 
 /* Inside a scene: a floating panel, and a table or map behind it. */
-.pn-landing .sc-panel { display: flex; flex-direction: column; gap: 14px; padding: 22px; border: 1px solid #2a2c32; border-radius: 16px; background: #111214; box-shadow: 0 30px 90px rgba(0, 0, 0, .65), 0 0 70px rgba(124, 92, 240, .10); }
+.pn-landing .sc-panel { display: flex; flex-direction: column; gap: 14px; padding: 22px; border: 1px solid #2a2c32; border-radius: 16px; background: #111214; box-shadow: 0 10px 30px rgba(0, 0, 0, .22); }
 .pn-landing .sc-eyebrow { color: var(--ai); font-size: 13px; }
 .pn-landing .sc-hello { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; }
 .pn-landing .sc-text { color: var(--secondary); font-size: 15px; line-height: 1.55; }
