@@ -58,12 +58,6 @@ function messageForError(error: unknown): string {
   if (message.includes("community_restore_forbidden")) {
     return "Only the community owner can restore this community.";
   }
-  if (message.includes("community_restore_payment_required")) {
-    return "This community requires an active Builder subscription before restoration.";
-  }
-  if (message.includes("community_restore_access_mode_invalid")) {
-    return "This community's Builder access needs operator repair before restoration.";
-  }
   if (message.includes("community_restore_lifecycle_generation_conflict")) {
     return "This community changed while you were restoring it. Refresh and try again.";
   }

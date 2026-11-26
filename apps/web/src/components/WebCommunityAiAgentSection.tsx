@@ -33,7 +33,6 @@ export type WebCommunityAgentPlanProps = {
   startCheckout?: (communityId: string, planTier?: FounderPlanTier) => Promise<void> | void;
   switchTier?: (communityId: string, targetTier: FounderPlanTier) => Promise<boolean> | void;
   openPortal: (communityId: string) => Promise<void> | void;
-  onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   refresh: () => Promise<unknown> | void;
 };
 
@@ -223,11 +222,7 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
   const pendingTier = community.checkout_pending ? community.pending_checkout_plan_tier ?? null : null;
   const startPlan = (tier: FounderPlanTier) => {
     clearPlanOffer(community.community_id);
-    if (plan.startCheckout) {
-      void plan.startCheckout(community.community_id, tier);
-    } else {
-      plan.onOpenBuilderOffer(community);
-    }
+    if (plan.startCheckout) void plan.startCheckout(community.community_id, tier);
   };
 
   return (

@@ -116,7 +116,6 @@ import { useWebAccountCommerceStatus } from "./controllers/useWebAccountCommerce
 import { useWebDiscoverAddress } from "./controllers/useWebDiscoverAddress";
 import type { WebCommunityDiscoverPageProps } from "./components/WebCommunityDiscoverPage";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
-import { useWebBuilderOfferController } from "./controllers/useWebBuilderOfferController";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
@@ -638,10 +637,6 @@ export default function App() {
   } = useWebBuilderSetupSubscriptionController(
     founderBilling.overview.unassigned_subscriptions,
   );
-  const builderOffer = useWebBuilderOfferController({
-    startCheckout: founderBilling.startCheckout,
-    openPortal: founderBilling.openPortal,
-  });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
     shellVariant,
@@ -906,13 +901,13 @@ export default function App() {
         ])
         : Promise.resolve([]);
       return refresh.then(() => {
-        showAppToastMessage("Your Agent plan is already attached. We refreshed your communities.");
+        showAppToastMessage("That plan is already on one of your communities. Your list is up to date.");
       });
     },
     onRequiredCommunityCreateUnavailable: (founderSubscriptionId) => {
       suppressBuilderSetupSubscription(founderSubscriptionId, "unavailable");
       showAppToastMessage(
-        "This Agent plan payment is no longer available for setup. Review Account settings to continue.",
+        "That payment can't start a new community any more. Check your plans in Settings.",
       );
       navigateTo("/settings/account");
       void founderBilling.refresh(sessionRef.current);
@@ -1351,7 +1346,6 @@ export default function App() {
         startCheckout: founderBilling.startCheckout,
         switchTier: founderBilling.switchTier,
         openPortal: founderBilling.openPortal,
-        onOpenBuilderOffer: (community) => builderOffer.open({ community }),
         refresh: founderBilling.refresh,
       },
       canViewActiveCommunityAnalytics,
@@ -1487,8 +1481,6 @@ export default function App() {
     canonicalSessionUserId,
     displayName,
     savedProfilesByUserId,
-    builderOffer,
-    founderBilling,
     pendingLaunchCommunity,
     session,
     ensureSession: ensureUsableAuthSession,
