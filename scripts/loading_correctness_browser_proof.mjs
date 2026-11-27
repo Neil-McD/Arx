@@ -24,6 +24,7 @@ const mocks = {
     "restoreCloudCommunityWithoutPayment",
     "banCloudCommunityMember",
     "fetchCloudCommunityAnalyticsSnapshot",
+    "fetchCloudCommunityRetentionAnalytics",
     "removeCloudCommunityMember",
     "setCloudCommunityMemberRole",
     "deleteCloudCommunityResource",
