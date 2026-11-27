@@ -120,9 +120,9 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
     }),
   });
 
-  // Report a member's product milestone or win directly onto their Member Board
-  // card (source: "app") so automated onboarding and Chief of Staff reflect
-  // real progress inside the founder's software.
+  // Report a member's product milestone, win, or daily active app ping onto
+  // their Member Board card (source: "app") so automated onboarding and Chief
+  // of Staff reflect real progress inside the founder's software.
   args.http.route({
     path: CONNECTED_APP_MILESTONES_PATH,
     method: "POST",
@@ -136,24 +136,40 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         return json(400, { error: "invalid_request" });
       }
-      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const rawUserId = typeof body.user_id === "string" ? body.user_id.trim() : "";
+      if (rawEmail && (rawEmail.length > 320 || !rawEmail.includes("@"))) {
+        return json(400, { error: "invalid_email" });
+      }
+      if (rawUserId && !/^pusr_[a-f0-9]{32}$/.test(rawUserId)) {
+        return json(400, { error: "invalid_user_id" });
+      }
+      if (!rawEmail && !rawUserId) {
+        return json(400, { error: "email_or_user_id_required" });
+      }
       const milestone = typeof body.milestone === "string" ? body.milestone.trim().slice(0, 64) : "";
       const label = typeof body.label === "string" ? body.label.trim().slice(0, 64) : "";
       const outcome = typeof body.outcome === "string" ? body.outcome.trim().slice(0, 180) : "";
       const done = typeof body.done === "boolean" ? body.done : undefined;
-      if (!email || email.length > 320 || !email.includes("@")) {
-        return json(400, { error: "email_required" });
-      }
-      if (!milestone && !outcome) {
-        return json(400, { error: "milestone_or_outcome_required" });
+      const active =
+        body.active === true ||
+        (typeof body.kind === "string" && body.kind.trim().toLowerCase() === "active");
+      const idempotencyKey =
+        typeof body.idempotency_key === "string" ? body.idempotency_key.trim().slice(0, 128) : "";
+      if (!milestone && !outcome && !active) {
+        return json(400, { error: "milestone_outcome_or_active_required" });
       }
       const result = await ctx.runMutation(internal.communityMemberJourney.recordConnectedAppMilestoneInternal, {
+        appId: app.appId,
         communityId: app.communityId,
-        email,
+        ...(rawEmail ? { email: rawEmail } : {}),
+        ...(rawUserId ? { pairwiseUserId: rawUserId } : {}),
         ...(milestone ? { milestone } : {}),
         ...(label ? { label } : {}),
         ...(done !== undefined ? { done } : {}),
         ...(outcome ? { outcome } : {}),
+        ...(active ? { active: true } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       });
       return json(200, result);
     }),

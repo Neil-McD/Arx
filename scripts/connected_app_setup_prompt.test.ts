@@ -135,6 +135,48 @@ test("direct plan checkout URLs and unified gate prompt wire Sign in with Polyne
   expect(prompt).toContain("https://studio.de.example/api/auth/polynet/callback");
   expect(prompt).toContain("https://www.polynet.ai/c/de?plan=pro&app=app_0123456789abcdef0123");
   expect(prompt).toContain("code_challenge_method=S256");
+  expect(prompt).toContain("POST https://example.convex.site/apps/v1/milestones");
+  expect(prompt).toContain('"active": true');
+  expect(prompt).toContain("No custom app checkpoints are configured on the Member Board yet");
   expect(prompt).not.toMatch(/psk_[a-f0-9]{48}/);
   expect(prompt).not.toMatch(/whsec_[A-Za-z0-9+/=]{20,}/);
+});
+
+test("both setup prompts dynamically include configured Member Board custom milestones and daily active ping rules", () => {
+  const milestones = [
+    { key: "launched_campaign", label: "Launched first campaign", stageName: "Getting started" },
+    { key: "booked_first_call", label: "Booked first call", stageName: "Active" },
+  ];
+  const unified = buildUnifiedGateAppPrompt({
+    communityName: "Distribution Engineer",
+    appName: "DE Studio",
+    appId: "app_0123456789abcdef0123",
+    appOrigin: "https://www.polynet.ai",
+    apiOrigin: "https://example.convex.site",
+    communityUrl: "https://www.polynet.ai/c/de",
+    redirectUrls: ["https://studio.de.example/api/auth/polynet/callback"],
+    hasWebhook: false,
+    tiers: [],
+    milestones,
+  });
+  expect(unified).toContain("`launched_campaign` — Launched first campaign (Stage: Getting started)");
+  expect(unified).toContain("`booked_first_call` — Booked first call (Stage: Active)");
+  expect(unified).toContain('"user_id": "pusr_..."');
+  expect(unified).toContain('"idempotency_key"');
+  expect(unified).toContain("deduplicates to at most one write per UTC day");
+
+  const existing = buildConnectedAppSetupPrompt({
+    communityName: "Distribution Engineer",
+    appName: "DE Studio",
+    appId: "app_0123456789abcdef0123",
+    apiOrigin: "https://example.convex.site",
+    hasWebhook: false,
+    tiers: [],
+    milestones,
+    guide,
+  });
+  expect(existing).toContain("`launched_campaign` — Launched first campaign (Stage: Getting started)");
+  expect(existing).toContain("`booked_first_call` — Booked first call (Stage: Active)");
+  expect(existing).toContain("POST https://example.convex.site/apps/v1/milestones");
+  expect(existing).toContain('"active": true');
 });

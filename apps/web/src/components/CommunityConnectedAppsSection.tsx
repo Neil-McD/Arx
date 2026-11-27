@@ -12,6 +12,8 @@ import {
   buildUnifiedGateAppPrompt,
 } from "../../../../shared/connectedAppSetupPrompt";
 import { fetchCloudCommunityTiers, type CloudCommunityTier } from "../../../../shared/cloudCommunityTiersGateway";
+import { getCloudCommunityJourneyStages } from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import type { JourneyStageDefinition } from "../../../../shared/communityMemberJourney";
 import {
   fetchCloudConnectedApps,
   registerCloudConnectedApp,
@@ -40,6 +42,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tiers, setTiers] = useState<CloudCommunityTier[]>([]);
+  const [stages, setStages] = useState<JourneyStageDefinition[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
   const withSession = async <T,>(work: (session: any) => Promise<T>): Promise<T | null> => {
@@ -49,6 +52,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
   const load = useCallback(async () => {
     try { setApps(await withSession((session) => fetchCloudConnectedApps({ session, communityId: props.communityId })) ?? []); } catch { setApps(null); }
     try { setTiers((await withSession((session) => fetchCloudCommunityTiers({ session, communityId: props.communityId }))) ?? []); } catch { setTiers([]); }
+    try { setStages((await withSession((session) => getCloudCommunityJourneyStages({ session, communityId: props.communityId })))?.stages ?? []); } catch { setStages([]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId]);
   useEffect(() => { void load(); }, [load]);
@@ -87,6 +91,11 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
   const origin = apiOrigin();
   const communityUrl = props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}` : null;
   const activeTiers = tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants }));
+  const customMilestones = stages.flatMap((stage) =>
+    (stage.checkpoints ?? [])
+      .filter((cp) => cp.kind === "custom")
+      .map((cp) => ({ key: cp.key, label: cp.label, stageName: stage.name })),
+  );
   const copyText = (key: string, text: string, fallbackError = "Couldn't copy. Try again.") => {
     void tryCopyTextToClipboard(text).then((ok) => {
       if (copyTimerRef.current !== null) {
@@ -109,6 +118,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
       hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide, communityUrl, hasAppLink: Boolean(app.app_url),
       tiers: activeTiers,
+      milestones: customMilestones,
     });
     copyText(app.app_id, prompt, "Couldn't copy. Open the guide instead.");
   };
@@ -124,6 +134,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
       redirectUrls: app.redirect_urls ?? [],
       hasWebhook: Boolean(app.webhook_url),
       tiers: activeTiers,
+      milestones: customMilestones,
     });
     copyText(`unified:${app.app_id}`, prompt);
   };

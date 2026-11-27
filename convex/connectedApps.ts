@@ -481,10 +481,35 @@ export const exchangeConnectedAppAuthCodeInternal = internalMutation({
       resolveMemberGrants(ctx, row.communityId, row.userId),
       sha256Hex(`${args.appId}:${String(row.userId)}`),
     ]);
+    const pairwiseUserId = `pusr_${pairwiseHash.slice(0, 32)}`;
+    const existingIdentity = await ctx.db
+      .query("connectedAppUserIdentities")
+      .withIndex("by_app_pairwiseUserId", (q: any) =>
+        q.eq("appId", args.appId).eq("pairwiseUserId", pairwiseUserId),
+      )
+      .first();
+    if (existingIdentity) {
+      if (
+        String(existingIdentity.userId) !== String(row.userId) ||
+        String(existingIdentity.communityId) !== String(row.communityId)
+      ) {
+        return { ok: false as const, error: "invalid_grant" as const };
+      }
+      await ctx.db.patch(existingIdentity._id, { updatedAt: nowMs });
+    } else {
+      await ctx.db.insert("connectedAppUserIdentities", {
+        appId: args.appId,
+        communityId: row.communityId,
+        pairwiseUserId,
+        userId: row.userId,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
     return {
       ok: true as const,
       user: {
-        id: `pusr_${pairwiseHash.slice(0, 32)}`,
+        id: pairwiseUserId,
         email,
         email_verified: true as const,
         name: profile?.display_name ?? (String(user.displayName ?? "").trim() || null),

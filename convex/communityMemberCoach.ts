@@ -679,7 +679,11 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
         const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
         return Number.isFinite(ms) && ms > best ? ms : best;
       }, 0);
-      const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0);
+      const lastAppActivityMs =
+        typeof journeyCardRow?.lastAppActivityAt === "number" && Number.isFinite(journeyCardRow.lastAppActivityAt)
+          ? journeyCardRow.lastAppActivityAt
+          : 0;
+      const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0, lastAppActivityMs);
       const consecutiveUnanswered = countConsecutiveUnansweredCoachTouches(
         recentHistory,
         lastRealActivityMs > 0 ? lastRealActivityMs : null,
@@ -854,11 +858,12 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
         }
       }
 
-      // Signal 2 (priority 2): Quiet newcomer (joined 2..14 days ago, no channel posts/replies yet).
+      // Signal 2 (priority 2): Quiet newcomer (joined 2..14 days ago, no channel posts/replies or app activity yet).
       // Skip if this member already received (or has waiting) a Day-0 onboarding welcome
       // for the same activation so newcomers are never double-welcomed or pushed to cold on Day 2.
       if (
         lastChannelAt === null &&
+        lastAppActivityMs === 0 &&
         memberAgeMs >= QUIET_NEWCOMER_MIN_AGE_MS &&
         memberAgeMs <= QUIET_NEWCOMER_MAX_AGE_MS
       ) {
@@ -906,9 +911,9 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
         }
       }
 
-      // Signal 3 (priority 3): Quiet returning member (14..30 days since last activity)
+      // Signal 3 (priority 3): Quiet returning member (14..30 days since last activity across community + connected app)
       // ONLY when there is a concrete upcoming community event within 7 days.
-      const lastActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs);
+      const lastActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastAppActivityMs);
       if (
         upcomingCommunityEvent &&
         memberAgeMs > QUIET_NEWCOMER_MAX_AGE_MS &&
@@ -1036,7 +1041,7 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
     const eligibility = await checkMemberEligibleForCoach(ctx, community, args.memberUserId);
     if (!eligibility.ok) return { ok: false as const, code: eligibility.code };
 
-    const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, tz, settingsRow, touchedToday] = await Promise.all([
+    const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, tz, settingsRow, touchedToday, journeyCardRow] = await Promise.all([
       readLatestMemberChannelActivityAt(ctx, args.communityId, args.memberUserId),
       readLastUserAgentMessageAt(ctx, args.communityId, args.memberUserId),
       readRecentCoachHistoryForMember(ctx, args.communityId, args.memberUserId),
@@ -1047,6 +1052,12 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
         .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
         .first(),
       countCommunityCoachTouchesToday(ctx, args.communityId, args.nowMs),
+      ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", args.communityId).eq("userId", args.memberUserId),
+        )
+        .unique(),
     ]);
     if (settingsRow && !settingsRow.enabled) return { ok: false as const, code: "coach_disabled" };
     if (args.decision === "send" && touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) {
@@ -1058,7 +1069,11 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
       const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
       return Number.isFinite(ms) && ms > best ? ms : best;
     }, 0);
-    const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0);
+    const lastAppActivityMs =
+      typeof journeyCardRow?.lastAppActivityAt === "number" && Number.isFinite(journeyCardRow.lastAppActivityAt)
+        ? journeyCardRow.lastAppActivityAt
+        : 0;
+    const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0, lastAppActivityMs);
     const consecutiveUnanswered = countConsecutiveUnansweredCoachTouches(
       recentHistory,
       lastRealActivityMs > 0 ? lastRealActivityMs : null,
@@ -1570,7 +1585,11 @@ export const claimNewMemberOnboardingCandidateInternal = internalMutation({
       const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
       return Number.isFinite(ms) && ms > best ? ms : best;
     }, 0);
-    const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0);
+    const lastAppActivityMs =
+      typeof journeyGuidance?.lastAppActivityAtMs === "number" && Number.isFinite(journeyGuidance.lastAppActivityAtMs)
+        ? journeyGuidance.lastAppActivityAtMs
+        : 0;
+    const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0, lastAppActivityMs);
     const consecutiveUnanswered = countConsecutiveUnansweredCoachTouches(
       recentHistory,
       lastRealActivityMs > 0 ? lastRealActivityMs : null,

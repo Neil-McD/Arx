@@ -1457,6 +1457,13 @@ export default defineSchema({
     // Stage key for which the host dismissed a Chief of Staff "ready to advance"
     // proposal (or manually moved a member back to), so Home never nags twice.
     dismissedAdvanceForStageKey: v.optional(v.string()),
+    // Most recent verified connected-app activity timestamp (milestone, win,
+    // or daily active ping via POST /apps/v1/milestones). Pure active pings
+    // are deduplicated to at most one write per UTC day.
+    lastAppActivityAt: v.optional(v.number()),
+    // Bounded ring buffer of recent idempotency keys from POST /apps/v1/milestones
+    // so retries never double-count milestones or wins.
+    appEventKeys: v.optional(v.array(v.string())),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1549,6 +1556,19 @@ export default defineSchema({
     .index("by_codeHash", ["codeHash"])
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_expiresAt", ["expiresAt"]),
+  // Pairwise Sign-in-with-Polynet user IDs (pusr_...) mapped back to users
+  // for server-to-server connected-app calls (e.g. POST /apps/v1/milestones).
+  // Scoped strictly to (appId, pairwiseUserId) so apps stay isolated.
+  connectedAppUserIdentities: defineTable({
+    appId: v.string(),
+    communityId: v.id("communities"),
+    pairwiseUserId: v.string(),
+    userId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_app_pairwiseUserId", ["appId", "pairwiseUserId"])
+    .index("by_app_user", ["appId", "userId"]),
   // Sales a connected app made through its own checkout and reported
   // (communityAppSales.ts): its latest word per email. No fee. userId is set
   // once an account with that verified email exists.

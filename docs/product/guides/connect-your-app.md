@@ -225,15 +225,18 @@ If you are building a new app and want Polynet to be your only sign-in and check
    Users must have a verified email and completed Polynet account setup (profile and platform terms) to authorize; new users are guided through setup or community join automatically and returned straight back to `/oauth/authorize` to complete sign-in. Removing a callback URL in Settings immediately invalidates any unredeemed codes issued for that URL.
 4. To send a user straight to a specific plan and return them to your app automatically after buying, link to:
    `https://www.polynet.ai/c/{community-slug}?plan={tier_key}&app={APP_ID}`
-5. To report key product onboarding milestones or wins directly onto a member's Member Board card:
+5. To report key product milestones, wins, or daily active usage onto a member's Member Board card (and keep active app users marked active for Chief of Staff even when they don't post in channels):
    ```http
    POST {POLYNET_API_ORIGIN}/apps/v1/milestones
    Authorization: Bearer {POLYNET_APP_SECRET}
    Content-Type: application/json
 
-   { "email": "member@example.com", "milestone": "launched_first_campaign", "outcome": "Launched first campaign" }
+   { "user_id": "pusr_...", "milestone": "launched_first_campaign", "label": "Launched first campaign", "outcome": "Launched first campaign", "idempotency_key": "camp_123" }
    ```
-   Returns `{ "recorded": true, "stage_key": "...", "milestone_key": "..." }` for active verified members, and `{ "recorded": false }` for unknown, unverified, non-member, or blocked emails.
+   - Identify the member with either `user_id` (`pusr_...` from Sign in with Polynet) or their verified `email` (if both are supplied, they must refer to the same verified member).
+   - To report daily active app usage without a milestone (works for UI, API, and MCP usage), send `{ "email": "member@example.com", "active": true }` (or `"user_id": "pusr_..."`). Pure active pings are deduplicated to at most one write per UTC day.
+   - Matching custom checkpoints on the Member Board tick automatically (and auto-advance if Auto-move is enabled). Unconfigured milestones are surfaced on the Member Board for one-click tracking.
+   - Returns `{ "recorded": true, "stage_key": "...", "stage_name": "...", ... }` for active verified members (`"deduplicated": true` on repeat `idempotency_key` or same-day active pings), and `{ "recorded": false }` for unknown, unverified, non-member, or blocked users. Always send fire-and-forget with a short timeout so it never blocks app actions.
 
 ## Rules
 
