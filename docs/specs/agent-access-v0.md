@@ -355,9 +355,14 @@ you, then the box to ask it anything (Neil, Nov 18;
 `apps/web/src/components/WebCommunityHomeSection.tsx`,
 `apps/web/src/v1/KitNeedsYou.tsx`). Each thing appears once.
 
-- **The brief**: one to three sentences in the guide's voice about what is
-  happening (the place brief, `convex/communityBriefs.ts`). With the guide
-  off, or before it has written one, a plain sentence of facts stands in.
+- **The brief**: on Chief of Staff, the owner sees their fresh Morning Founder
+  Brief (`convex/communityFounderBrief.ts`) directly at the top of Home (with
+  a full-brief toggle and "Talk it over" link). Members, Guide ($20) hosts,
+  and Chief of Staff hosts before their first morning brief see the community's
+  place brief (1–3 sentences in the guide's voice, `convex/communityBriefs.ts`,
+  refreshed at most every 4 hours on Chief of Staff and 12 hours on Guide).
+  With the guide off, or before a brief is written, a plain sentence of facts
+  stands in.
 - **The list**: the three most important rows show; the rest stack behind
   "N more". Empty, it is not drawn.
   - First, for every role (member, moderator, admin, owner): each tag of you
@@ -373,21 +378,27 @@ you, then the box to ask it anything (Neil, Nov 18;
     is scanned); while the pointer is over Home a new line waits until it
     leaves, so nothing moves under it. Each line counts as one thing that
     needs you, as the join row does. The Inbox stays direct messages only.
-  - A host, "Needs you": people asking to join (answered in place, first),
-    then what was noticed: a question with no answer for a day, new members
-    who haven't posted, people stalling on a lesson. A noticed row has one
-    action and "Not now", which hides it for 30 days. With the guide off a
-    noticed row also says what a guide would do.
+  - A host, "Needs you": shows up to three uncollapsed rows before stacking
+    the rest behind "View more (N)": unread tags, people asking to join
+    (answered in place), and then:
+    - On Free and Guide ($20) communities: deterministic noticed reminders
+      (a question with no answer for a day, new members who haven't posted,
+      people stalling on a lesson). A noticed row has one action and "Not now"
+      (hides it for 30 days); with the guide off it also says what a guide
+      would do.
+    - On Chief of Staff ($100) communities (`proactiveAgentActive`): legacy
+      deterministic noticed reminders are retired so they never duplicate
+      proactive Chief of Staff signals; instead, "Needs you" shows ready Member
+      Board stage moves (2+ collapse into one grouped batch row with one-click
+      Move all), drafted channel replies, and waiting member check-in drafts
+      (2+ collapse into one grouped row).
   - A member, "For you" (guide on): saying hello when new, the lesson they
     are on, the event that is near.
 - **The right column** keeps what is glanceable: the next event, what the
   community knows, who is here.
 - Only what came forward on its own is on Home. There is no news list.
-- **What the guide suggests** (a host with a guide), under the list and
-  apart from it: see "The guide's own work" below.
 - Not yet: money problems, RSVP on the event row, and a count on the Home
-  item in the left column. The morning report stays an email: every part of
-  it is on Home live.
+  item in the left column.
 
 ### The guide's own work
 

@@ -353,6 +353,15 @@ test("multiple ready stage moves and check-in drafts collapse into single groupe
     onSkip: () => {},
   }));
   expect(deepLinkedHtml).toContain("Welcome Elena!");
+
+  const { summarizeBatchStageMoveOutcome } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 3, staleCount: 1, failedCount: 0 })).toBeNull();
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 2, staleCount: 1, failedCount: 1 }))
+    .toBe("Moved 2, but 1 couldn't be updated. Try again.");
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 0, staleCount: 2, failedCount: 1 }))
+    .toBe("2 already up to date, but 1 couldn't be updated. Try again.");
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 0, staleCount: 0, failedCount: 2 }))
+    .toBe("Couldn't move them right now. Try again.");
 });
 
 test("a question or member signal the guide drafted for shows once, not also as a duplicate legacy reminder", async () => {

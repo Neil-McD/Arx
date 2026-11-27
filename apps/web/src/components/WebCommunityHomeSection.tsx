@@ -272,6 +272,21 @@ export function offersConversation(args: { agentOn: boolean; talking: boolean; h
   return args.agentOn && !args.talking && args.hasConversation && args.drawn;
 }
 
+export function summarizeBatchStageMoveOutcome(args: {
+  movedCount: number;
+  staleCount: number;
+  failedCount: number;
+}): string | null {
+  if (args.failedCount <= 0) return null;
+  if (args.movedCount > 0) {
+    return `Moved ${args.movedCount}, but ${args.failedCount} couldn't be updated. Try again.`;
+  }
+  if (args.staleCount > 0) {
+    return `${args.staleCount} already up to date, but ${args.failedCount} couldn't be updated. Try again.`;
+  }
+  return "Couldn't move them right now. Try again.";
+}
+
 // Below 1024px Home has no right-hand column, so the glanceable "Today"
 // panels (Next Event, Community Brain, Who's here) flow cleanly under Home's
 // brief and action rows, stepping aside the moment you enter a guide chat.
@@ -466,7 +481,9 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const approveAllStageProposals = async (proposals: CloudJourneyStageAdvanceProposal[]): Promise<string | null> => {
     const session = await props.ensureSession(props.session).catch(() => null);
     if (!session) return "You're signed out. Sign in and try again.";
-    const succeededIds = new Set<string>();
+    const resolvedIds = new Set<string>();
+    let movedCount = 0;
+    let staleCount = 0;
     let failedCount = 0;
     const CHUNK = 5;
     for (let start = 0; start < proposals.length; start += CHUNK) {
@@ -474,31 +491,28 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       await Promise.all(
         chunk.map(async (proposal) => {
           try {
-            await approveCloudJourneyStageAdvance({
+            const result = await approveCloudJourneyStageAdvance({
               session,
               communityId: props.communityId,
               membershipId: proposal.membership_id,
               expectedFromStageKey: proposal.from_stage_key,
               targetStageKey: proposal.to_stage_key,
             });
-            succeededIds.add(proposal.membership_id);
+            resolvedIds.add(proposal.membership_id);
+            if (result?.status === "moved") movedCount += 1;
+            else staleCount += 1;
           } catch {
             failedCount += 1;
           }
         }),
       );
     }
-    if (succeededIds.size > 0) {
+    if (resolvedIds.size > 0) {
       setStageProposals((current) =>
-        (current ?? []).filter((item) => !succeededIds.has(item.membership_id)),
+        (current ?? []).filter((item) => !resolvedIds.has(item.membership_id)),
       );
     }
-    if (failedCount > 0) {
-      return failedCount === proposals.length
-        ? "Couldn't move them right now. Try again."
-        : `Moved ${succeededIds.size}, but ${failedCount} couldn't be updated. Try again.`;
-    }
-    return null;
+    return summarizeBatchStageMoveOutcome({ movedCount, staleCount, failedCount });
   };
   const dismissStageProposal = (proposal: CloudJourneyStageAdvanceProposal) => {
     setStageProposals((current) =>
