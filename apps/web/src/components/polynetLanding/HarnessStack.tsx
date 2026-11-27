@@ -1,8 +1,9 @@
 // The AIs Polynet's setup prompt works with, as their own marks, overlapped
 // in a small stack under the hero's buttons (Neil, Nov 27: real logos,
-// stacked, no labels). Marks from Simple Icons (CC0; the brands' own
-// trademarks). Screen readers hear the full list.
-const MARKS: Array<{ id: string; name: string; d: string; color?: string }> = [
+// stacked, no labels). Marks from Simple Icons (Claude, OpenAI, Cursor) and
+// LobeHub icons (Antigravity, Grok); the brands' own trademarks. Screen
+// readers hear the full list.
+const MARKS: Array<{ id: string; name: string; d: string; color?: string; evenOdd?: boolean }> = [
   {
     id: "claude",
     name: "Claude",
@@ -19,16 +20,28 @@ const MARKS: Array<{ id: string; name: string; d: string; color?: string }> = [
     name: "Cursor",
     d: "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23",
   },
+  {
+    id: "antigravity",
+    name: "Antigravity",
+    evenOdd: true,
+    d: "M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z",
+  },
+  {
+    id: "grok",
+    name: "Grok",
+    evenOdd: true,
+    d: "M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815",
+  },
 ];
 
-export const HARNESS_STACK_LABEL = "Works with Claude, ChatGPT, Codex, Cursor, Grok, OpenClaw and Hermes";
+export const HARNESS_STACK_LABEL = "Works with Claude, ChatGPT, Codex, Cursor, Antigravity, Grok, OpenClaw and Hermes";
 
 export function HarnessStack() {
   return (
     <div className="harness-stack" role="img" aria-label={HARNESS_STACK_LABEL} title={HARNESS_STACK_LABEL}>
       {MARKS.map((mark) => (
         <span key={mark.id} className="harness-stack-mark">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={mark.d} fill={mark.color ?? "currentColor"} /></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={mark.d} fill={mark.color ?? "currentColor"} fillRule={mark.evenOdd ? "evenodd" : undefined} /></svg>
         </span>
       ))}
     </div>
