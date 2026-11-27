@@ -1176,6 +1176,7 @@ export default defineSchema({
   communityFounderBriefSettings: defineTable({
     communityId: v.id("communities"),
     enabled: v.boolean(),
+    emailEnabled: v.optional(v.boolean()),
     localHour: v.number(),
     timeZone: v.string(),
     nextDueAt: v.number(),

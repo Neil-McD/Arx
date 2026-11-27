@@ -126,6 +126,157 @@ describe("founder brief writing", () => {
     expect(long.sections[0].items).toHaveLength(5);
     expect(long.sections[0].items[0].length).toBeLessThanOrEqual(260);
   });
+
+  it("strips zero-signal empty bullets and empty sections from model briefs while keeping real signal", () => {
+    const parsed = parseBrief(JSON.stringify({
+      headline: "11 stage moves ready",
+      sections: [
+        {
+          title: "Needs your attention",
+          items: [
+            "No pending join requests or unanswered posts.",
+            "11 members are ready to advance on the Board.",
+          ],
+        },
+        {
+          title: "Coming up",
+          items: ["No upcoming events listed."],
+        },
+      ],
+      next_step: "Advance Rashid, Ray, and Thomas to Graduated.",
+    }));
+    expect(parsed).toEqual({
+      headline: "11 stage moves ready",
+      sections: [
+        {
+          title: "Needs your attention",
+          items: ["11 members are ready to advance on the Board."],
+        },
+      ],
+      nextStep: "Advance Rashid, Ray, and Thomas to Graduated.",
+    });
+  });
+
+  it("includes upcoming weekly events up to 7 days out so the brief matches Home's Next up rail", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.parse("2026-11-27T17:00:00.000Z");
+    const f = await fixture(t, nowMs);
+    const nextWeekCallMs = nowMs + 6 * DAY;
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityEvents", {
+        communityId: f.communityId,
+        createdByUserId: f.ownerId,
+        title: "Group Call",
+        startsAt: nextWeekCallMs,
+        timezone: "America/New_York",
+        locationType: "online",
+        visibility: "members",
+        status: "live",
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      } as any);
+    });
+    const read = await t.query(internalRefs.communityFounderBrief.readFounderBriefSnapshotInternal, {
+      communityId: f.communityId,
+      windowStartMs: nowMs - DAY,
+      nowMs,
+    });
+    expect(read.snapshot.upcomingEvents.map((e: any) => e.title)).toEqual(["Group Call"]);
+  });
+
+  it("surfaces a fresh Chief of Staff morning brief on owner Home only, never to members or stale", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const asMember = t.withIdentity({ subject: "brief-Ana" });
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityFounderBriefs", {
+        communityId: f.communityId,
+        ownerUserId: f.ownerId,
+        briefDate: "2026-11-27",
+        status: "sent",
+        windowStartMs: nowMs - DAY,
+        windowEndMs: nowMs - HOUR_MS,
+        leaseExpiresAt: nowMs - HOUR_MS,
+        attempts: 1,
+        writer: "model",
+        sentAt: nowMs - 2 * HOUR_MS,
+        delivery: {
+          threadId: "thread-1",
+          markdown: "**11 stage moves ready**",
+          communityLifecycleGeneration: 0,
+          writer: "model",
+          emailPayload: {
+            headline: "11 stage moves ready",
+            sections: [
+              { title: "Needs your attention", items: ["No pending join requests.", "11 members ready to advance."] },
+            ],
+            nextStep: "Advance Rashid and 10 more.",
+          },
+        },
+        createdAt: nowMs - 2 * HOUR_MS,
+        updatedAt: nowMs - 2 * HOUR_MS,
+      } as any);
+    });
+
+    const ownerHome = await asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, {
+      communityId: f.communityId,
+    });
+    expect(ownerHome?.founderBrief).toMatchObject({
+      headline: "11 stage moves ready",
+      sections: [{ title: "Needs your attention", items: ["11 members ready to advance."] }],
+      nextStep: "Advance Rashid and 10 more.",
+      briefDate: "2026-11-27",
+    });
+
+    // Members never receive the founder brief on Home.
+    const memberHome = await asMember.query(api.communityFounderBrief.getCommunityMemberHomeSnapshot, {
+      communityId: f.communityId,
+    });
+    expect(memberHome?.founderBrief).toBeUndefined();
+
+    // Stale briefs (> 36h) drop off Home cleanly.
+    await t.run(async (ctx) => {
+      const briefRow = (await ctx.db.query("communityFounderBriefs").first())!;
+      await ctx.db.patch(briefRow._id, { sentAt: nowMs - 40 * HOUR_MS });
+    });
+    const staleOwnerHome = await asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, {
+      communityId: f.communityId,
+    });
+    expect(staleOwnerHome?.founderBrief).toBeUndefined();
+  });
+
+  it("delivers morning brief to chat without email when emailEnabled is false", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityFounderBriefSettings", {
+        communityId: f.communityId,
+        enabled: true,
+        emailEnabled: false,
+        localHour: 8,
+        timeZone: "UTC",
+        nextDueAt: nowMs,
+        updatedByUserId: f.ownerId,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    });
+    expect(await t.action(internalRefs.communityFounderBrief.sendFounderBriefNowInternal, {
+      communityId: f.communityId,
+      timeZone: "UTC",
+    })).toBe("sent");
+    const { briefs, emails } = await t.run(async (ctx) => ({
+      briefs: await ctx.db.query("communityFounderBriefs").collect(),
+      emails: await ctx.db.query("emailOutbox").collect(),
+    }));
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0]?.status).toBe("sent");
+    expect(emails).toHaveLength(0);
+  });
 });
 
 async function fixture(t: ReturnType<typeof convexTest>, nowMs: number) {
@@ -204,15 +355,15 @@ describe("founder brief delivery", () => {
     const afterJoin = await asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId });
     expect(afterJoin?.joinRequestsPending).toBe(0);
     await expect(asOwner.query(api.communityFounderBrief.getFounderBriefSettings, { communityId: f.communityId }))
-      .resolves.toEqual({ enabled: false, local_hour: 8, time_zone: null });
+      .resolves.toEqual({ enabled: true, email_enabled: true, local_hour: 8, time_zone: null });
     await expect(asOwner.mutation(api.communityFounderBrief.setFounderBriefSettings, {
-      communityId: f.communityId, enabled: true, localHour: 7, timeZone: "Europe/London",
-    })).resolves.toEqual({ enabled: true, local_hour: 7, time_zone: "Europe/London" });
+      communityId: f.communityId, enabled: true, emailEnabled: false, localHour: 7, timeZone: "Europe/London",
+    })).resolves.toEqual({ enabled: true, email_enabled: false, local_hour: 7, time_zone: "Europe/London" });
     const due = await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: Date.now() + 2 * DAY });
     expect(due.map((row: any) => row.communityId)).toEqual([f.communityId]);
     await expect(asOwner.mutation(api.communityFounderBrief.setFounderBriefSettings, {
       communityId: f.communityId, enabled: false, localHour: 7, timeZone: "Europe/London",
-    })).resolves.toMatchObject({ enabled: false });
+    })).resolves.toMatchObject({ enabled: false, email_enabled: false });
     expect(await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: Date.now() + 2 * DAY })).toEqual([]);
 
     await t.run((ctx) => ctx.db.insert("users", { authSubject: "brief-stranger", createdAt: 0, updatedAt: 0 } as any));

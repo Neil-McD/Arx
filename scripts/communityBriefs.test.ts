@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import {
-  BRIEF_DELAY_MS, BRIEF_EXPIRES_MS, BRIEF_MIN_GAP_MS, BRIEF_WRITE_OPERATION,
-  nextBriefAtMs, parseBriefWriteCall, renderBriefDocument, visibleBrief,
+  BRIEF_DELAY_MS, BRIEF_EXPIRES_MS, BRIEF_MIN_GAP_COS_MS, BRIEF_MIN_GAP_GUIDE_MS, BRIEF_MIN_GAP_MS, BRIEF_WRITE_OPERATION,
+  briefMinGapMsForTier, nextBriefAtMs, parseBriefWriteCall, renderBriefDocument, visibleBrief,
 } from "../shared/communityBriefs";
 
 const shown = new Set(["post:a1", "reply:b2", "post:c3"]);
@@ -47,10 +47,16 @@ test("a reader sees nothing once any post the brief drew on is gone, or once the
   expect(visibleBrief(null, 2_000, () => true)).toBeNull();
 });
 
-test("a brief is due an hour after new activity, never sooner than three hours after the last", () => {
-  const now = 10 * BRIEF_MIN_GAP_MS;
+test("a brief is due an hour after new activity, respecting tiered minimum gaps (4h COS, 12h Guide)", () => {
+  expect(BRIEF_MIN_GAP_COS_MS).toBe(4 * 60 * 60_000);
+  expect(BRIEF_MIN_GAP_GUIDE_MS).toBe(12 * 60 * 60_000);
+  expect(briefMinGapMsForTier(true)).toBe(BRIEF_MIN_GAP_COS_MS);
+  expect(briefMinGapMsForTier(false)).toBe(BRIEF_MIN_GAP_GUIDE_MS);
+
+  const now = 20 * BRIEF_MIN_GAP_GUIDE_MS;
   expect(nextBriefAtMs(now, null)).toBe(now + BRIEF_DELAY_MS);
   expect(nextBriefAtMs(now, now - 10 * 60_000)).toBe(now - 10 * 60_000 + BRIEF_MIN_GAP_MS);
+  expect(nextBriefAtMs(now, now - 10 * 60_000, BRIEF_MIN_GAP_GUIDE_MS)).toBe(now - 10 * 60_000 + BRIEF_MIN_GAP_GUIDE_MS);
   expect(nextBriefAtMs(now, now - 5 * BRIEF_MIN_GAP_MS)).toBe(now + BRIEF_DELAY_MS);
 });
 

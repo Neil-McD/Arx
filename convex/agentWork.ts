@@ -12,7 +12,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { nextMemoryReviewAtMs } from "../shared/communityMemory";
-import { nextBriefAtMs } from "../shared/communityBriefs";
+import { briefMinGapMsForTier, nextBriefAtMs } from "../shared/communityBriefs";
 import { REPLY_DRAFT_WAIT_MS } from "../shared/communityReplyDrafts";
 import { communityScopeKey, dueWork, parseScopeKey, type AgentWorkKind, type ScopeKey } from "./communityNotesStore";
 import { communityTimeZone, guideSeatedInPod, scheduleAgentWork } from "./communityMemory";
@@ -20,7 +20,7 @@ import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communit
 import { founderProviderRequests } from "./founderInferenceUsage";
 import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
 import { communityAgentIsOn } from "./communityApps";
-import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import { communityHasProactiveAgentTier, resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 
 const internalRefs = internal as any;
 const LEASE_MS = 15 * 60_000;
@@ -115,10 +115,15 @@ export const completeAgentWorkInternal = internalMutation({
       // Posts written while the review ran, or left over from a busy window,
       // wait for the next one: a backlog soon, new posts at the quiet hour.
       const pending = args.backlog ? Math.max(1, work.pending) : Math.max(0, work.pending - args.claimedPending);
-      // A brief written while more happened is due again once its gap has passed.
+      // A brief written while more happened is due again once its tier gap has passed.
       const dueAt = args.backlog ? args.nowMs + BACKLOG_NEXT_MS
         : pending <= 0 ? undefined
-          : work.kind === "brief" ? nextBriefAtMs(args.nowMs, args.nowMs)
+          : work.kind === "brief"
+            ? nextBriefAtMs(
+                args.nowMs,
+                args.nowMs,
+                briefMinGapMsForTier(await communityHasProactiveAgentTier(ctx, work.communityId, args.nowMs)),
+              )
             // Posts written while a draft was made: look again when they are a day old.
             : work.kind === "reply_draft" ? args.nowMs + REPLY_DRAFT_WAIT_MS
             : nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId));
