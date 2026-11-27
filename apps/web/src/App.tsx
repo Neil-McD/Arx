@@ -480,7 +480,7 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     isCommunityChatActive:
       activePage === "community" &&
-      (activeView === "home" || shellVariant !== "mobile") &&
+      activeView === "home" &&
       communityTab === "chat",
     resumeEpoch: appActivity.resumeEpoch,
     session,

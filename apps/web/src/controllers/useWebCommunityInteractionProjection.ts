@@ -301,8 +301,8 @@ export function useWebCommunityInteractionProjection<
   const [roots, setRoots] = useState<CommunityInteractionRootBundle[]>([]);
   const [activityEvents, setActivityEvents] = useState<CommunityActivityEvent[]>([]);
   const [nextBeforeCreatedAt, setNextBeforeCreatedAt] = useState<number | null>(null);
-  const [subscriptionRecoveryNonce, setSubscriptionRecoveryNonce] = useState(0);
   const liveSubscriptionHealthyRef = useRef(false);
+  const reconnectLiveSubscriptionRef = useRef<(() => void) | null>(null);
   const lastResumeEpochRef = useRef(resumeEpoch);
   const [isLoadingOlderRoots, setIsLoadingOlderRoots] = useState(false);
   const [rootChangeReason, setRootChangeReason] =
@@ -541,7 +541,7 @@ export function useWebCommunityInteractionProjection<
     lastResumeEpochRef.current = resumeEpoch;
     if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) return;
     if (!liveSubscriptionHealthyRef.current) {
-      setSubscriptionRecoveryNonce((current) => current + 1);
+      reconnectLiveSubscriptionRef.current?.();
     }
   }, [activeCommunityId, canonicalSessionUserId, isCommunityChatActive, resumeEpoch]);
 
@@ -549,136 +549,149 @@ export function useWebCommunityInteractionProjection<
     // The feed is live only while a channel is on screen; elsewhere (Home,
     // Events, Knowledge, Members...) it does not hold a subscription. What was
     // shown stays cached, so coming back draws at once while it reconnects.
-    if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) {
-      liveSubscriptionHealthyRef.current = false;
-      return;
-    }
-    const hasCurrentRoots = rootsRef.current.some((bundle) =>
-      rootMatchesChannel(bundle, activeCommunityId, activeChannelId)
-    );
-    // Coming back to a channel shown before: if a full window arrived while
-    // away, the cached older posts may not join up with it, so the first
-    // answer replaces them rather than leaving a gap.
-    let firstUpdate = true;
-    if (!hasCurrentRoots) {
-      setIsLoadingRoots(true);
-    }
-    setError(null);
+    if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) return;
     let cancelled = false;
+    let attemptId = 0;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
     let unsubscribePinnedRoot: (() => void) | null = null;
-    setPinnedRootError(null);
-    void (async () => {
-      try {
-        const usableSession = await ensureSession(sessionRef.current);
-        if (cancelled) return;
-        if (!usableSession) {
-          liveSubscriptionHealthyRef.current = false;
-          setIsLoadingRoots(false);
-          return;
-        }
-        liveClient = createCloudCommunityChatLiveClient({
-          session: usableSession,
-          ensureSession,
-        });
-        unsubscribe = subscribeCloudCommunityInteractionRoots({
-          liveClient,
-          communityId: activeCommunityId,
-          channelId: activeChannelId,
-          limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
-          onUpdate: (incomingRoots) => {
-            if (
-              cancelled ||
-              activeCommunityIdRef.current !== activeCommunityId ||
-              activeChannelIdRef.current !== activeChannelId
-            ) return;
-            liveSubscriptionHealthyRef.current = true;
-            const hadLoadedRoots = rootsRef.current.some(
-              (bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId),
-            );
-            setRootChangeReason(hadLoadedRoots ? "newer" : "initial");
-            const replaceCached = firstUpdate && hasCurrentRoots
-              && incomingRoots.length >= COMMUNITY_INTERACTION_ROOT_LIMIT;
-            firstUpdate = false;
-            // The older pages are gone, so loading older posts continues from
-            // just below this window, leaving nothing out.
-            if (replaceCached) setNextBeforeCreatedAt(oldestRootCreatedAtMs(incomingRoots));
-            setRoots((current) =>
-              applyLiveRootWindow(
-                replaceCached ? [] : current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
-                incomingRoots,
-                COMMUNITY_INTERACTION_ROOT_LIMIT,
-              ),
-            );
-            setIsLoadingRoots(false);
-            setError(null);
-          },
-          onError: (subscriptionError) => {
-            if (
-              cancelled ||
-              activeCommunityIdRef.current !== activeCommunityId ||
-              activeChannelIdRef.current !== activeChannelId
-            ) return;
+    const teardown = () => {
+      unsubscribe?.();
+      unsubscribe = null;
+      unsubscribePinnedRoot?.();
+      unsubscribePinnedRoot = null;
+      liveClient?.close();
+      liveClient = null;
+    };
+    const connect = () => {
+      teardown();
+      const currentAttemptId = ++attemptId;
+      const isStale = () => cancelled || currentAttemptId !== attemptId;
+      const hasCurrentRoots = rootsRef.current.some((bundle) =>
+        rootMatchesChannel(bundle, activeCommunityId, activeChannelId)
+      );
+      // Coming back to a channel shown before: if a full window arrived while
+      // away, the cached older posts may not join up with it, so the first
+      // answer replaces them rather than leaving a gap.
+      let firstUpdate = true;
+      if (!hasCurrentRoots) {
+        setIsLoadingRoots(true);
+      }
+      setError(null);
+      setPinnedRootError(null);
+      void (async () => {
+        try {
+          const usableSession = await ensureSession(sessionRef.current);
+          if (isStale()) return;
+          if (!usableSession) {
             liveSubscriptionHealthyRef.current = false;
-            setError(formatProjectionError(subscriptionError));
-            if (communityProjectionAccessLost(subscriptionError)) {
-              ++rootsRequestIdRef.current;
-              setRoots([]); setSelectedRoot(null); setRepliesByRootId({}); setPinnedRoot(null); setSidecar({ kind: "context" });
-            }
             setIsLoadingRoots(false);
-          },
-        });
-        unsubscribePinnedRoot = subscribeCloudCommunityChannelPinnedRoot({
-          liveClient,
-          communityId: activeCommunityId,
-          channelId: activeChannelId,
-          onUpdate: (nextPinnedRoot) => {
-            if (
-              cancelled ||
-              activeCommunityIdRef.current !== activeCommunityId ||
-              activeChannelIdRef.current !== activeChannelId
-            ) return;
-            lastSubscribedPinnedRootRef.current = nextPinnedRoot;
-            const boundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
-            if (pinMutationBoundaryRef.current === boundary) {
+            return;
+          }
+          const nextLiveClient = createCloudCommunityChatLiveClient({
+            session: usableSession,
+            ensureSession,
+          });
+          liveClient = nextLiveClient;
+          unsubscribe = subscribeCloudCommunityInteractionRoots({
+            liveClient: nextLiveClient,
+            communityId: activeCommunityId,
+            channelId: activeChannelId,
+            limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
+            onUpdate: (incomingRoots) => {
+              if (
+                isStale() ||
+                activeCommunityIdRef.current !== activeCommunityId ||
+                activeChannelIdRef.current !== activeChannelId
+              ) return;
+              liveSubscriptionHealthyRef.current = true;
+              const hadLoadedRoots = rootsRef.current.some(
+                (bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId),
+              );
+              setRootChangeReason(hadLoadedRoots ? "newer" : "initial");
+              const replaceCached = firstUpdate && hasCurrentRoots
+                && incomingRoots.length >= COMMUNITY_INTERACTION_ROOT_LIMIT;
+              firstUpdate = false;
+              // The older pages are gone, so loading older posts continues from
+              // just below this window, leaving nothing out.
+              if (replaceCached) setNextBeforeCreatedAt(oldestRootCreatedAtMs(incomingRoots));
+              setRoots((current) =>
+                applyLiveRootWindow(
+                  replaceCached ? [] : current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
+                  incomingRoots,
+                  COMMUNITY_INTERACTION_ROOT_LIMIT,
+                ),
+              );
+              setIsLoadingRoots(false);
+              setError(null);
+            },
+            onError: (subscriptionError) => {
+              if (
+                isStale() ||
+                activeCommunityIdRef.current !== activeCommunityId ||
+                activeChannelIdRef.current !== activeChannelId
+              ) return;
+              liveSubscriptionHealthyRef.current = false;
+              setError(formatProjectionError(subscriptionError));
+              if (communityProjectionAccessLost(subscriptionError)) {
+                ++rootsRequestIdRef.current;
+                setRoots([]); setSelectedRoot(null); setRepliesByRootId({}); setPinnedRoot(null); setSidecar({ kind: "context" });
+              }
+              setIsLoadingRoots(false);
+            },
+          });
+          unsubscribePinnedRoot = subscribeCloudCommunityChannelPinnedRoot({
+            liveClient: nextLiveClient,
+            communityId: activeCommunityId,
+            channelId: activeChannelId,
+            onUpdate: (nextPinnedRoot) => {
+              if (
+                isStale() ||
+                activeCommunityIdRef.current !== activeCommunityId ||
+                activeChannelIdRef.current !== activeChannelId
+              ) return;
+              lastSubscribedPinnedRootRef.current = nextPinnedRoot;
+              const boundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
+              if (pinMutationBoundaryRef.current === boundary) {
+                setPinnedRootError(null);
+                return;
+              }
+              setPinnedRoot(nextPinnedRoot);
               setPinnedRootError(null);
-              return;
-            }
-            setPinnedRoot(nextPinnedRoot);
-            setPinnedRootError(null);
-          },
-          onError: (subscriptionError) => {
-            if (
-              cancelled ||
-              activeCommunityIdRef.current !== activeCommunityId ||
-              activeChannelIdRef.current !== activeChannelId
-            ) return;
-            const boundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
-            if (pinMutationBoundaryRef.current === boundary) return;
+            },
+            onError: (subscriptionError) => {
+              if (
+                isStale() ||
+                activeCommunityIdRef.current !== activeCommunityId ||
+                activeChannelIdRef.current !== activeChannelId
+              ) return;
+              const boundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
+              if (pinMutationBoundaryRef.current === boundary) return;
+              setPinnedRoot(null);
+              setPinnedRootError(formatPinnedRootError(subscriptionError));
+            },
+          });
+        } catch (subscriptionError) {
+          if (!isStale()) {
+            liveSubscriptionHealthyRef.current = false;
+            lastSubscribedPinnedRootRef.current = null;
             setPinnedRoot(null);
             setPinnedRootError(formatPinnedRootError(subscriptionError));
-          },
-        });
-      } catch (subscriptionError) {
-        if (!cancelled) {
-          liveSubscriptionHealthyRef.current = false;
-          lastSubscribedPinnedRootRef.current = null;
-          setPinnedRoot(null);
-          setPinnedRootError(formatPinnedRootError(subscriptionError));
-          setError(formatProjectionError(subscriptionError));
-          setIsLoadingRoots(false);
+            setError(formatProjectionError(subscriptionError));
+            setIsLoadingRoots(false);
+          }
         }
-      }
-    })();
+      })();
+    };
+    reconnectLiveSubscriptionRef.current = connect;
+    connect();
     return () => {
       cancelled = true;
+      reconnectLiveSubscriptionRef.current = null;
       liveSubscriptionHealthyRef.current = false;
-      unsubscribe?.();
-      unsubscribePinnedRoot?.();
-      liveClient?.close();
+      teardown();
     };
-  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive, subscriptionRecoveryNonce]);
+  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive]);
 
   useEffect(() => {
     if (
