@@ -1325,8 +1325,9 @@
   max-width: 62ch;
 }
 
-/* Glowing spark avatar for the community guide in threads and non-kit feeds,
-   matching the channel feed's .av.guide treatment. */
+/* Spark avatar for the community guide in threads and non-kit feeds,
+   matching the channel feed's .av.guide treatment exactly (outlined spark,
+   soft translucent violet circle, crisp inset ring). */
 :root[data-design="v1"] .community-interaction-guide-avatar {
   flex: none;
   width: 36px;
@@ -1335,13 +1336,24 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 30% 25%, rgba(167, 139, 250, 0.28), rgba(167, 139, 250, 0.08));
-  border: 1px solid rgba(167, 139, 250, 0.34);
+  background: rgba(167, 139, 250, 0.12);
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.28);
   color: var(--accent-agent, #c4b5fd);
 }
+:root[data-design="v1"][data-theme="light"] .community-interaction-guide-avatar {
+  background: rgba(109, 74, 232, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(109, 74, 232, 0.24);
+  color: #5b38d6;
+}
 :root[data-design="v1"] .community-interaction-guide-avatar svg {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Between the post and its replies: the reply count, centred, on a hairline

@@ -1,6 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
+import { Icon } from "../apps/web/src/v1/kit";
 
 const root = new URL("../", import.meta.url);
 const kitCss = readFileSync(new URL("apps/web/src/v1/kit.module.css", root), "utf8");
@@ -49,4 +52,13 @@ test("the design lab is reachable only on design v1 builds", () => {
   const main = readFileSync(new URL("apps/web/src/main.tsx", root), "utf8");
   expect(main).toMatch(/document\.documentElement\.dataset\.design === "v1" && window\.location\.pathname === "\/design-lab"/);
   expect(main).toMatch(/React\.lazy\(\(\) => (?:resilientImport\(\(\) => )?import\("\.\/v1\/DesignLab"\)/);
+});
+
+test("kit Icon renders outlined SVG attributes by default even outside KitApp wrappers (e.g. thread drawer)", () => {
+  const markup = renderToStaticMarkup(createElement(Icon, { name: "spark" }));
+  expect(markup).toContain('fill="none"');
+  expect(markup).toContain('stroke="currentColor"');
+  expect(markup).toContain('stroke-width="1.5"');
+  expect(markup).toContain('stroke-linecap="round"');
+  expect(markup).toContain('stroke-linejoin="round"');
 });
