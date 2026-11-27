@@ -2522,40 +2522,75 @@ async function buildCoachSettingsView(
         }
         if (!pp) return;
 
-        let latestActivityAtMs = latestActivityByMember.get(memberKey);
-        if (latestActivityAtMs === undefined) {
-          const [lastChannelAt, lastAgentAt, latestLesson, journeyCard] = await Promise.all([
-            readLatestMemberChannelActivityAt(ctx, communityId, entry.userId),
-            readLastUserAgentMessageAt(ctx, communityId, entry.userId),
-            ctx.db
-              .query("communityLessonProgress")
-              .withIndex("by_community_user_completedAt", (q: any) =>
-                q.eq("communityId", communityId).eq("userId", entry.userId),
-              )
-              .order("desc")
-              .first(),
-            ctx.db
-              .query("communityMemberJourneyCards")
-              .withIndex("by_community_user", (q: any) =>
-                q.eq("communityId", communityId).eq("userId", entry.userId),
-              )
-              .unique(),
-          ]);
-          const best = Math.max(
-            lastChannelAt ?? 0,
-            lastAgentAt ?? 0,
-            Number(latestLesson?.completedAt ?? 0),
-            typeof journeyCard?.lastAppActivityAt === "number" ? journeyCard.lastAppActivityAt : 0,
-          );
-          latestActivityAtMs = best > 0 ? best : null;
+        const renewedAt =
+          typeof sub.currentPeriodStartAt === "number" && Number.isFinite(sub.currentPeriodStartAt)
+            ? sub.currentPeriodStartAt
+            : null;
+        if (renewedAt === null || renewedAt <= entry.sentAt) return;
+
+        // Verify qualifying re-engagement occurred strictly in (entry.sentAt, renewedAt]
+        // so post-renewal activity never falsely credits an earlier renewal.
+        const [windowRoot, windowReply, windowLesson, journeyCard] = await Promise.all([
+          ctx.db
+            .query("communityInteractionRoots")
+            .withIndex("by_community_actorUser_createdAt", (q: any) =>
+              q
+                .eq("communityId", communityId)
+                .eq("actorUserId", entry.userId)
+                .gt("createdAt", entry.sentAt)
+                .lte("createdAt", renewedAt),
+            )
+            .filter((q: any) => q.eq(q.field("status"), "live"))
+            .first(),
+          ctx.db
+            .query("communityInteractionReplies")
+            .withIndex("by_community_actorUser_createdAt", (q: any) =>
+              q
+                .eq("communityId", communityId)
+                .eq("actorUserId", entry.userId)
+                .gt("createdAt", entry.sentAt)
+                .lte("createdAt", renewedAt),
+            )
+            .filter((q: any) => q.eq(q.field("status"), "live"))
+            .first(),
+          ctx.db
+            .query("communityLessonProgress")
+            .withIndex("by_community_user_completedAt", (q: any) =>
+              q
+                .eq("communityId", communityId)
+                .eq("userId", entry.userId)
+                .gt("completedAt", entry.sentAt)
+                .lte("completedAt", renewedAt),
+            )
+            .first(),
+          ctx.db
+            .query("communityMemberJourneyCards")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", communityId).eq("userId", entry.userId),
+            )
+            .unique(),
+        ]);
+
+        const activityTimestampsMs: number[] = [];
+        if (windowRoot?.createdAt) activityTimestampsMs.push(Number(windowRoot.createdAt));
+        if (windowReply?.createdAt) activityTimestampsMs.push(Number(windowReply.createdAt));
+        if (windowLesson?.completedAt) activityTimestampsMs.push(Number(windowLesson.completedAt));
+        if (typeof journeyCard?.lastAppActivityAt === "number") {
+          activityTimestampsMs.push(journeyCard.lastAppActivityAt);
+        }
+        for (const ms of journeyCard?.completedMilestones ?? []) {
+          if (typeof ms?.completedAt === "number") activityTimestampsMs.push(ms.completedAt);
+        }
+        for (const out of journeyCard?.outcomes ?? []) {
+          if (typeof out?.at === "number") activityTimestampsMs.push(out.at);
         }
 
         const verdict = evaluateVerifiedSavedMember({
           earliestAtRiskSentAtMs: entry.sentAt,
-          latestActivityAtMs,
+          activityTimestampsMs,
           subscription: {
             status: sub.status,
-            currentPeriodStartAt: sub.currentPeriodStartAt,
+            currentPeriodStartAt: renewedAt,
             riskAccessState: sub.riskAccessState,
             activeMrrBaseUnits: monthlyMrrForPricePoint(pp),
             currency: pp.currency,

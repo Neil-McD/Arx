@@ -789,9 +789,17 @@ export const getCommunityMemberRecord = query({
     const sortedSubs = [...subscriptionRows].sort((a: any, b: any) => b.updatedAt - a.updatedAt);
     const subscription = sortedSubs.find((row: any) => row.status !== "ended") ?? sortedSubs[0] ?? null;
 
+    const auditPricePointIds = audit
+      .filter((row: any) => row.eventType === "community_subscription_synced" && row.status === "succeeded")
+      .map((row: any) => {
+        const meta = row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
+        return typeof meta.pricePointId === "string" ? meta.pricePointId.trim() : "";
+      })
+      .filter(Boolean);
     const subPricePointIds = [...new Set(
       [
         ...sortedSubs.map((row: any) => row.pricePointId),
+        ...auditPricePointIds,
         membership?.pricePointId,
       ].filter(Boolean).map(String),
     )];
@@ -820,10 +828,20 @@ export const getCommunityMemberRecord = query({
       .filter((row: any) => row.eventType === "community_subscription_synced" && row.status === "succeeded")
       .map((row: any) => {
         const meta = row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
+        const auditPointId = typeof meta.pricePointId === "string" ? meta.pricePointId.trim() : "";
+        const auditPoint = auditPointId ? pointMap.get(auditPointId) ?? null : null;
         return {
           subscriptionStatus: String(meta.subscriptionStatus ?? meta.communitySubscriptionStatus ?? ""),
           currentPeriodStartAt:
             typeof meta.currentPeriodStartAt === "number" ? meta.currentPeriodStartAt : null,
+          pricePoint: auditPoint
+            ? {
+                amountBaseUnits: auditPoint.amountBaseUnits,
+                currency: auditPoint.currency,
+                currencyDecimals: auditPoint.currencyDecimals,
+                billingPeriod: auditPoint.billingPeriod,
+              }
+            : null,
           createdAt: Number(row.createdAt ?? 0),
         };
       });
@@ -914,10 +932,17 @@ export const getCommunityMemberRecord = query({
     const activeSubPoint = subscription?.pricePointId
       ? pointMap.get(String(subscription.pricePointId)) ?? null
       : null;
+    const candidateActivityTimestamps: Array<number | null | undefined> = [
+      typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : null,
+      participation?.lastParticipationAtMs ?? null,
+      lastAppAt > 0 ? lastAppAt : null,
+      ...((journeyCard?.completedMilestones ?? []).map((m: any) => Number(m?.completedAt ?? 0)).filter((n: number) => n > 0)),
+      ...((journeyCard?.outcomes ?? []).map((o: any) => Number(o?.at ?? 0)).filter((n: number) => n > 0)),
+    ];
     const verifiedSave = membership
       ? evaluateVerifiedSavedMember({
           earliestAtRiskSentAtMs,
-          latestActivityAtMs: bestLastActiveAt > 0 ? bestLastActiveAt : null,
+          activityTimestampsMs: candidateActivityTimestamps,
           subscription: subscription && activeSubPoint
             ? {
                 status: subscription.status,

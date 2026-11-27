@@ -6,6 +6,7 @@ import schema from "./schema";
 import {
   aggregateStageMrr,
   computeMemberRevenueSummary,
+  countCalendarBillingPeriods,
   evaluateVerifiedSavedMember,
   formatCompactMrr,
   monthlyMrrForPricePoint,
@@ -57,6 +58,50 @@ describe("Slice 2 — Realized LTV Ledger, Stage MRR, and Verified Saved Revenue
       currency: "USD",
       mixed_currency: false,
     });
+
+    // Exact calendar billing periods: Jan 1, 2025 -> Jan 1, 2026 monthly = 13 periods (never 14).
+    const jan2025 = Date.UTC(2025, 0, 1, 12, 0);
+    const jan2026 = Date.UTC(2026, 0, 1, 12, 0);
+    expect(countCalendarBillingPeriods(jan2025, jan2026, "monthly")).toBe(13);
+    const fullYear = computeMemberRevenueSummary({
+      membership: { state: "active", createdAt: jan2025, activatedAt: jan2025 },
+      subscriptions: [
+        {
+          status: "active",
+          pricePoint: { amountBaseUnits: 4900, currency: "usd", currencyDecimals: 2, billingPeriod: "monthly" },
+          createdAt: jan2025,
+          currentPeriodStartAt: jan2026,
+        },
+      ],
+      nowMs: jan2026 + DAY_MS,
+    });
+    expect(fullYear.billing_cycles_paid).toBe(13);
+    expect(fullYear.realized_ltv_base_units).toBe(13 * 4900);
+
+    // Mid-subscription upgrade preserves historical prices from audit events (3x $49 + 1x $99 = $246, not 4x $99).
+    const p49 = { amountBaseUnits: 4900, currency: "usd", currencyDecimals: 2, billingPeriod: "monthly" };
+    const p99 = { amountBaseUnits: 9900, currency: "usd", currencyDecimals: 2, billingPeriod: "monthly" };
+    const upgraded = computeMemberRevenueSummary({
+      membership: { state: "active", createdAt: nowMs - 95 * DAY_MS, activatedAt: nowMs - 95 * DAY_MS },
+      subscriptions: [
+        {
+          status: "active",
+          pricePoint: p99,
+          createdAt: nowMs - 95 * DAY_MS,
+          currentPeriodStartAt: nowMs - 5 * DAY_MS,
+        },
+      ],
+      subscriptionAuditEvents: [
+        { subscriptionStatus: "active", currentPeriodStartAt: nowMs - 95 * DAY_MS, pricePoint: p49, createdAt: nowMs - 95 * DAY_MS },
+        { subscriptionStatus: "active", currentPeriodStartAt: nowMs - 65 * DAY_MS, pricePoint: p49, createdAt: nowMs - 65 * DAY_MS },
+        { subscriptionStatus: "active", currentPeriodStartAt: nowMs - 35 * DAY_MS, pricePoint: p49, createdAt: nowMs - 35 * DAY_MS },
+        { subscriptionStatus: "active", currentPeriodStartAt: nowMs - 5 * DAY_MS, pricePoint: p99, createdAt: nowMs - 5 * DAY_MS },
+      ],
+      nowMs,
+    });
+    expect(upgraded.billing_cycles_paid).toBe(4);
+    expect(upgraded.realized_ltv_base_units).toBe(3 * 4900 + 9900);
+    expect(upgraded.active_mrr_base_units).toBe(9900);
 
     // Refunded or disputed subscription contributes $0 LTV and $0 MRR (never inflated).
     const refunded = computeMemberRevenueSummary({
@@ -147,7 +192,22 @@ describe("Slice 2 — Realized LTV Ledger, Stage MRR, and Verified Saved Revenue
       }),
     ).toEqual({ saved: false });
 
-    // All 3 proofs satisfied -> VERIFIED SAVE!
+    // Renewed while still inactive, then returned AFTER renewal (Jan 1 check-in -> Jan 2 renewal -> Jan 3 activity) -> NOT saved.
+    expect(
+      evaluateVerifiedSavedMember({
+        earliestAtRiskSentAtMs: sentAt,
+        activityTimestampsMs: [nowMs - 2 * DAY_MS],
+        subscription: {
+          status: "active",
+          currentPeriodStartAt: nowMs - 5 * DAY_MS,
+          activeMrrBaseUnits: 4900,
+          currency: "USD",
+          currencyDecimals: 2,
+        },
+      }),
+    ).toEqual({ saved: false });
+
+    // All 3 proofs satisfied in strict order (check-in -> re-engagement -> renewal) -> VERIFIED SAVE!
     expect(
       evaluateVerifiedSavedMember({
         earliestAtRiskSentAtMs: sentAt,
@@ -310,7 +370,7 @@ describe("Slice 2 — Realized LTV Ledger, Stage MRR, and Verified Saved Revenue
     });
     expect(record?.revenue).toMatchObject({
       active_mrr_base_units: 4900,
-      realized_ltv_base_units: 4 * 4900,
+      realized_ltv_base_units: 3 * 4900,
       months_retained: 3,
       currency: "USD",
     });
