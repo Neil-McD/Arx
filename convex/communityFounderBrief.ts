@@ -420,9 +420,9 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
   const nextStep = snapshot.unanswered[0]
     ? `Reply to ${snapshot.unanswered[0].author} in #${snapshot.unanswered[0].channel}.`
     : cos && (cos.proactiveGuide.coachDraftsWaiting > 0 || cos.proactiveGuide.replyDraftsWaiting > 0)
-      ? `Review your guide's waiting drafts on Home.`
+      ? `Review your guide's waiting drafts below.`
       : cos && cos.journeyPulse && cos.journeyPulse.readyToAdvanceCount > 0
-        ? `Review ${plural(cos.journeyPulse.readyToAdvanceCount, "stage move")} ready on Home.`
+        ? `Approve ${plural(cos.journeyPulse.readyToAdvanceCount, "stage move")} ready below.`
         : cos && cos.quietPayingMembers.names[0]
           ? `Check in with paying member ${cos.quietPayingMembers.names[0]}, who has been quiet for 2+ weeks.`
           : cos && cos.stalledLearners[0]
@@ -439,8 +439,9 @@ export const FOUNDER_BRIEF_PROMPT = [
   "You are this community's AI chief of staff writing the founder's morning brief.",
   "Write like a sharp chief of staff: short, specific, warm, high-signal, zero filler.",
   "Use only facts in the snapshot. Never invent people, numbers or events, and never quote or speculate about members' private chats or private pod messages.",
-  "HARD RULE — NEVER REPORT ZEROS OR ABSENT ITEMS: never write sentences like 'No pending join requests', 'No unanswered posts', 'No recent wins', 'No quiet paying members', 'No stalled learners', 'No reply drafts waiting', 'None were sent', or 'No upcoming events'. If a category has nothing real to report, omit it completely.",
+  "HARD RULE — NEVER REPORT ZEROS OR ABSENT ITEMS: never write sentences OR trailing clauses like 'No pending join requests', 'No unanswered posts', 'No recent wins', 'No quiet paying members', 'No stalled learners', 'No reply drafts waiting', 'None were sent', or 'No upcoming events'. If a category has nothing real to report, omit it completely.",
   "HARD RULE — PLAIN FOUNDER LANGUAGE ONLY: never use internal jargon like 'coach draft', 'in the window', or 'seats'. Say 'check-in draft', 'over the last 24 hours', and 'members'.",
+  "The founder reads this brief directly on Home. Never tell them to 'Open Home' or 'Go to Home' — speak directly to the actions right below (e.g., 'Approve the waiting stage moves below' or 'Review Josh's check-in draft').",
   "Lead with what needs the founder (join requests, waiting check-in or reply drafts, ready Member Board stage moves, unanswered posts), then what the guide handled, then people signals (recent wins, Member Board needs-attention highlights, quiet paying members at churn risk, stalled learners, rising contributors, new and quiet newcomers), then activity/pods and upcoming events (only when present).",
   "Name people. Event start times are already formatted in the founder's local time (e.g. \"Sat 7:00 AM\"); include them naturally without raw UTC timestamps.",
   "End with one concrete next step the founder can act on right away (or ask you to run right here in chat).",
@@ -450,8 +451,45 @@ export const FOUNDER_BRIEF_PROMPT = [
 const ZERO_SIGNAL_BRIEF_ITEM_PATTERN =
   /^(?:no\s+(?:pending\s+join\s+requests|unanswered\s+(?:posts|questions)|recent\s+(?:member\s+)?wins|quiet\s+paying\s+members|stalled\s+(?:course\s+)?learners|reply\s+drafts|check-?in\s+drafts|coach\s+drafts|upcoming\s+events|new\s+members|activity)|none\s+(?:were\s+sent|waiting)|zero\s+(?:pending|new|unanswered|upcoming|waiting))/i;
 
+const TRAILING_ZERO_CLAUSE_PATTERNS: RegExp[] = [
+  /[;,]?\s*(?:and\s+)?none\s+were\s+sent(?:\s+(?:in\s+the\s+window|over\s+the\s+last\s+24\s+hours|today|recently))?(?=[;,.]|$)/gi,
+  /[;,]?\s*(?:and\s+)?no\s+(?:reply\s+drafts|check-?in\s+drafts|coach\s+drafts|pending\s+join\s+requests|unanswered\s+(?:posts|questions)|upcoming\s+events)(?:\s+(?:are\s+)?waiting)?(?=[;,.]|$)/gi,
+];
+
 export function isZeroSignalBriefItem(item: string): boolean {
   return ZERO_SIGNAL_BRIEF_ITEM_PATTERN.test(item.trim());
+}
+
+export function cleanBriefLine(text: string): string {
+  let out = String(text ?? "").trim();
+  if (!out || isZeroSignalBriefItem(out)) return "";
+  for (const pattern of TRAILING_ZERO_CLAUSE_PATTERNS) {
+    out = out.replace(pattern, "");
+  }
+  out = out
+    .replace(/\bcoach drafts\b/gi, (match) => (match[0] === "C" ? "Check-in drafts" : "check-in drafts"))
+    .replace(/\bcoach draft\b/gi, (match) => (match[0] === "C" ? "Check-in draft" : "check-in draft"))
+    .replace(/\bin the window\b/gi, "in the last 24 hours")
+    .replace(/\s*[;,]\s*([.?!])$/g, "$1")
+    .replace(/\s*[;,]\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!/[a-z0-9]/i.test(out) || isZeroSignalBriefItem(out)) return "";
+  if (!/[.?!]$/.test(out) && /[.?!]$/.test(text.trim())) {
+    out += ".";
+  }
+  return out;
+}
+
+export function cleanBriefNextStep(text: string | null | undefined): string | null {
+  const cleaned = cleanBriefLine(String(text ?? ""));
+  if (!cleaned) return null;
+  const withoutOpenHome = cleaned.replace(
+    /^(?:open|go\s+to|head\s+to|check)\s+home\s+(?:and|to)\s+/i,
+    "",
+  );
+  if (!withoutOpenHome) return cleaned;
+  return withoutOpenHome.charAt(0).toUpperCase() + withoutOpenHome.slice(1);
 }
 
 // Parses and bounds the model's brief; null when it isn't usable.
@@ -464,11 +502,14 @@ export function parseBrief(raw: string): FounderBrief | null {
   } catch {
     return null;
   }
-  const headline = clip(value?.headline, 120);
+  const headline = clip(cleanBriefLine(String(value?.headline ?? "")), 120);
   const rawSections = (Array.isArray(value?.sections) ? value.sections : [])
     .map((section: any) => ({
       title: clip(section?.title, 40),
-      items: (Array.isArray(section?.items) ? section.items : []).map((item: unknown) => clip(item, 260)).filter(Boolean).slice(0, 5),
+      items: (Array.isArray(section?.items) ? section.items : [])
+        .map((item: unknown) => clip(cleanBriefLine(String(item ?? "")), 260))
+        .filter(Boolean)
+        .slice(0, 5),
     }))
     .filter((section: any) => section.title && section.items.length)
     .slice(0, 5);
@@ -480,7 +521,7 @@ export function parseBrief(raw: string): FounderBrief | null {
     .filter((section: { title: string; items: string[] }) => section.items.length > 0);
   const sections = filteredSections.length > 0 ? filteredSections : rawSections;
   if (!headline || !sections.length) return null;
-  return { headline, sections, nextStep: clip(value?.next_step, 200) || null };
+  return { headline, sections, nextStep: clip(cleanBriefNextStep(value?.next_step), 200) || null };
 }
 
 export function briefMarkdown(brief: FounderBrief): string {
@@ -655,12 +696,12 @@ async function readFreshHomeFounderBrief(
   const sentAtMs = Number(latest.sentAt ?? latest.updatedAt ?? 0);
   if (!Number.isFinite(sentAtMs) || nowMs - sentAtMs > HOME_FOUNDER_BRIEF_FRESH_MS) return null;
   const payload = latest.delivery?.emailPayload;
-  const headline = clip(payload?.headline, 140);
+  const headline = clip(cleanBriefLine(String(payload?.headline ?? "")), 140);
   const sections = (Array.isArray(payload?.sections) ? payload.sections : [])
     .map((section: any) => ({
       title: clip(section?.title, 40),
       items: (Array.isArray(section?.items) ? section.items : [])
-        .map((item: unknown) => clip(item, 260))
+        .map((item: unknown) => clip(cleanBriefLine(String(item ?? "")), 260))
         .filter((item: string) => Boolean(item) && !isZeroSignalBriefItem(item))
         .slice(0, 5),
     }))
@@ -670,7 +711,7 @@ async function readFreshHomeFounderBrief(
   return {
     headline,
     sections,
-    nextStep: clip(payload?.nextStep, 200) || null,
+    nextStep: clip(cleanBriefNextStep(payload?.nextStep), 200) || null,
     briefDate: String(latest.briefDate ?? ""),
     sentAt: new Date(sentAtMs).toISOString(),
   };

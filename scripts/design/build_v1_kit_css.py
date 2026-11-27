@@ -193,7 +193,12 @@ css += """
 .app.part.rail-part{height:auto;min-height:100%;overflow:visible}
 .app.part>.rail{width:auto;flex:1;border-left:0}
 .app.part .scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.app.part .scroll>.home{padding-bottom:24px}
+.app.part .scroll>.home{padding-bottom:44px}
+.app.part.on-v-home .eyebrow{margin-top:20px}
+.app.part.on-v-home .dock{position:relative;padding-top:10px;background:var(--surface-raised,var(--panel,var(--bg)))}
+.app.part.on-v-home .dock::before{content:"";position:absolute;left:0;right:0;top:-28px;height:28px;pointer-events:none;background:linear-gradient(180deg,transparent,var(--surface-raised,var(--panel,var(--bg))))}
+.app.part.on-v-home .link{color:var(--accent,var(--blue-ink));font-weight:500}
+.app.part.on-v-home .link:hover{color:var(--ink)}
 /* A part that flows inside the app's own scrolling box (a channel's feed):
    it sits at the bottom of the box, as the newest message should. */
 .app.part.flow-part{height:auto;margin-top:auto;overflow:visible;display:block;flex:none}
@@ -800,17 +805,23 @@ css += """
    (.hbrief), then one list of what needs this person (KitNeedsYou): a row
    each, the first three shown and the rest stacked behind "N more". */
 .app .hbrief{margin-top:18px;max-width:640px}
-.app .hbrief p{margin:0;font-size:16px;line-height:1.6;color:var(--ink)}
-.app .hbrief-founder .hbrief-head{font-weight:500;letter-spacing:-.01em}
-.app .hbrief-list,.app .hbrief-sec ul{margin:10px 0 0;padding-left:18px;display:grid;gap:5px;font-size:14.5px;line-height:1.5;color:var(--ink2)}
+.app .hbrief.hbrief-founder{max-width:none;width:100%;box-sizing:border-box;border:1px solid var(--line2);border-radius:12px;background:var(--s1);padding:16px 18px 13px}
+.app .hbrief p{margin:0;font-size:15.5px;line-height:1.58;color:var(--ink)}
+.app .hbrief-founder .hbrief-head{font-size:15.5px;font-weight:600;letter-spacing:-.012em;line-height:1.4}
+.app .hbrief-list,.app .hbrief-sec ul{margin:10px 0 0;padding-left:18px;display:grid;gap:6px;font-size:14px;line-height:1.5;color:var(--ink2)}
 .app .hbrief-sections{margin-top:12px;display:grid;gap:12px}
 .app .hbrief-sec h4{margin:0;font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:.01em}
 .app .hbrief-sec ul{margin-top:4px}
-.app .hbrief .hbrief-next{margin-top:10px;font-size:14px;line-height:1.5;color:var(--ink2)}
+.app .hbrief .hbrief-next{margin-top:12px;font-size:14px;line-height:1.5;color:var(--ink2)}
 .app .hbrief .hbrief-next strong{font-weight:600;color:var(--ink)}
-.app .hbrief>span{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:8px;font-size:12.5px;color:var(--ink3)}
+.app .hbrief>span{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:10px;font-size:12.5px;color:var(--ink3)}
 .app .hbrief em{font-style:normal}
-.app .hbrief button{color:inherit;cursor:pointer}.app .hbrief button:hover{color:var(--ink)}
+.app .hbrief>span button{color:var(--accent,var(--blue-ink));font-weight:500;cursor:pointer}.app .hbrief>span button:hover{color:var(--ink)}
+.app .hbrief-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:14px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink3)}
+.app .hbrief-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
+.app .hbrief-actions button{color:var(--accent,var(--blue-ink));font-weight:500;padding:2px 4px;margin:-2px -4px;border-radius:5px;cursor:pointer;transition:color .15s var(--ease),background .15s var(--ease)}
+.app .hbrief-actions button:hover{color:var(--ink);background:var(--s2)}
+.app .hbrief-actions button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .app .hnone{margin:16px 0 0;font-size:15px;color:var(--ink2)}
 .app.on-t-on .hbrief,.app.on-t-on .hnone{display:none}
 .app .nyou{margin-top:28px;width:100%}

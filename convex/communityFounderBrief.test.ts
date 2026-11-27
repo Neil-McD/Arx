@@ -212,9 +212,16 @@ describe("founder brief writing", () => {
           emailPayload: {
             headline: "11 stage moves ready",
             sections: [
-              { title: "Needs your attention", items: ["No pending join requests.", "11 members ready to advance."] },
+              {
+                title: "Needs your attention",
+                items: [
+                  "No pending join requests.",
+                  "11 members ready to advance.",
+                  "One coach draft is waiting; none were sent in the window, and no reply drafts are waiting.",
+                ],
+              },
             ],
-            nextStep: "Advance Rashid and 10 more.",
+            nextStep: "Open Home and advance Rashid and 10 more.",
           },
         },
         createdAt: nowMs - 2 * HOUR_MS,
@@ -227,7 +234,15 @@ describe("founder brief writing", () => {
     });
     expect(ownerHome?.founderBrief).toMatchObject({
       headline: "11 stage moves ready",
-      sections: [{ title: "Needs your attention", items: ["11 members ready to advance."] }],
+      sections: [
+        {
+          title: "Needs your attention",
+          items: [
+            "11 members ready to advance.",
+            "One check-in draft is waiting.",
+          ],
+        },
+      ],
       nextStep: "Advance Rashid and 10 more.",
       briefDate: "2026-11-27",
     });

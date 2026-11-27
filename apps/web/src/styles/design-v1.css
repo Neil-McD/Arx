@@ -2383,15 +2383,58 @@
   width: 100%;
 }
 
-:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-rail {
-  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  gap: 14px;
+:root[data-design="v1"] .community-dm-panel.is-kit .community-dm-kit-rail {
+  padding: 0;
+  gap: 0;
+}
+
+:root[data-design="v1"] .community-dm-kit-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 16px 24px 14px;
+  border-bottom: 1px solid var(--surface-raised-edge, var(--line));
+}
+
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-head {
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
 }
 
 :root[data-design="v1"] .community-dm-kit-thread {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding: 16px 24px 20px;
+}
+
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-thread {
+  padding: 14px 16px 18px;
+}
+
+:root[data-design="v1"] .community-dm-kit-composer {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 24px 20px;
+  background: var(--surface-raised, var(--panel));
+}
+
+:root[data-design="v1"] .community-dm-kit-composer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -18px;
+  height: 18px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--surface-raised, var(--panel)));
+}
+
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-composer {
+  padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 :root[data-design="v1"] .community-dm-kit-thread .community-dm-panel-message {
@@ -4449,7 +4492,11 @@
   flex-direction: column;
   gap: 18px;
   min-height: 0;
+  padding: 20px 24px 24px;
   overflow-y: auto;
+}
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-profile {
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
 :root[data-design="v1"] .community-dm-kit-profile-back {
   align-self: flex-start;

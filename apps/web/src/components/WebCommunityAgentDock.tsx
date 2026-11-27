@@ -1164,33 +1164,33 @@ function WebCommunityAgentDock(props, ref) {
     <section className={`community-agent-dock-panel has-home-rail is-kit-home${kitTalking || conversationNeedsYou ? " is-guide-talking" : ""}`} aria-label={presentation.title}>
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
-          {/* In the conversation the top row stays put and is the way back to Home. */}
+          {/* Keep the top header pinned across both Home brief and conversation views. */}
           {/* While the guide is answering or waiting on you, the conversation stays open: the arrow waits too. */}
-          {kitTalking || conversationNeedsYou ? (
-            <Top
-              titleView={0}
-              title={
+          <Top
+            titleView={0}
+            title={
+              kitTalking || conversationNeedsYou ? (
                 <button type="button" className="kit-home-back" onClick={closeTalk} disabled={conversationNeedsYou} aria-label="Back to Home" title={conversationNeedsYou ? "Your guide is still on this" : "Back to Home"}>
                   <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />Home
                 </button>
-              }
-              actions={
-                props.onOpenSoulAndMemory ? (
-                  <button
-                    type="button"
-                    className="kit-home-back"
-                    onClick={props.onOpenSoulAndMemory}
-                    title="View or edit your guide's Soul and Memory"
-                  >
-                    Soul &amp; Memory
-                  </button>
-                ) : null
-              }
-            />
-          ) : null}
-          {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
+              ) : (
+                "Home"
+              )
+            }
+            actions={
+              (kitTalking || conversationNeedsYou) && props.onOpenSoulAndMemory ? (
+                <button
+                  type="button"
+                  className="kit-home-back"
+                  onClick={props.onOpenSoulAndMemory}
+                  title="View or edit your guide's Soul and Memory"
+                >
+                  Soul &amp; Memory
+                </button>
+              ) : null
+            }
+          />
           <Scroll ref={scrollRef}>
-            {kitTalking || conversationNeedsYou ? null : <Top title="Home" titleView={0} />}
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}
