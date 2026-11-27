@@ -272,6 +272,21 @@ export function offersConversation(args: { agentOn: boolean; talking: boolean; h
   return args.agentOn && !args.talking && args.hasConversation && args.drawn;
 }
 
+export function summarizeBatchStageMoveOutcome(args: {
+  movedCount: number;
+  staleCount: number;
+  failedCount: number;
+}): string | null {
+  if (args.failedCount <= 0) return null;
+  if (args.movedCount > 0) {
+    return `Moved ${args.movedCount}, but ${args.failedCount} couldn't be updated. Try again.`;
+  }
+  if (args.staleCount > 0) {
+    return `${args.staleCount} already up to date, but ${args.failedCount} couldn't be updated. Try again.`;
+  }
+  return "Couldn't move them right now. Try again.";
+}
+
 // Below 1024px Home has no right-hand column, so the glanceable "Today"
 // panels (Next Event, Community Brain, Who's here) flow cleanly under Home's
 // brief and action rows, stepping aside the moment you enter a guide chat.
@@ -463,6 +478,42 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       return "Couldn't move them right now. Try again.";
     }
   };
+  const approveAllStageProposals = async (proposals: CloudJourneyStageAdvanceProposal[]): Promise<string | null> => {
+    const session = await props.ensureSession(props.session).catch(() => null);
+    if (!session) return "You're signed out. Sign in and try again.";
+    const resolvedIds = new Set<string>();
+    let movedCount = 0;
+    let staleCount = 0;
+    let failedCount = 0;
+    const CHUNK = 5;
+    for (let start = 0; start < proposals.length; start += CHUNK) {
+      const chunk = proposals.slice(start, start + CHUNK);
+      await Promise.all(
+        chunk.map(async (proposal) => {
+          try {
+            const result = await approveCloudJourneyStageAdvance({
+              session,
+              communityId: props.communityId,
+              membershipId: proposal.membership_id,
+              expectedFromStageKey: proposal.from_stage_key,
+              targetStageKey: proposal.to_stage_key,
+            });
+            resolvedIds.add(proposal.membership_id);
+            if (result?.status === "moved") movedCount += 1;
+            else staleCount += 1;
+          } catch {
+            failedCount += 1;
+          }
+        }),
+      );
+    }
+    if (resolvedIds.size > 0) {
+      setStageProposals((current) =>
+        (current ?? []).filter((item) => !resolvedIds.has(item.membership_id)),
+      );
+    }
+    return summarizeBatchStageMoveOutcome({ movedCount, staleCount, failedCount });
+  };
   const dismissStageProposal = (proposal: CloudJourneyStageAdvanceProposal) => {
     setStageProposals((current) =>
       (current ?? []).filter((item) => item.membership_id !== proposal.membership_id),
@@ -493,15 +544,21 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const hasLoadedJoinReview = isHost && props.joinReview != null && props.joinReview.loaded !== false;
   const joinReview = hasLoadedJoinReview && props.joinReview!.requests.length > 0 ? props.joinReview! : null;
   const joinCount = !isHost ? 0 : hasLoadedJoinReview ? props.joinReview!.requests.length : snapshot?.joinRequestsPending ?? 0;
+  // On Chief of Staff communities, proactive check-ins, reply drafts, and the
+  // Morning Brief replace the legacy generic "noticed" reminders so Home stays
+  // quiet and never duplicates signals. Free & Guide keep noticed reminders.
+  const effectiveNoticed = snapshot?.proactiveAgentActive
+    ? []
+    : noticedWithoutDrafted(noticed ?? [], drafts ?? [], coachDrafts ?? []);
   const things = isHost
-    ? hostThingsFor(noticedWithoutDrafted(noticed ?? [], drafts ?? [], coachDrafts ?? []), { agentOn, actions: props, onNotNow: notNow })
+    ? hostThingsFor(effectiveNoticed, { agentOn, actions: props, onNotNow: notNow })
     : memberThingsFor(steps ?? [], props);
   const tagThings = tagThingsFor(shownTags, (channelSlug, rootId) => {
     setHeldTags(null);
     props.onOpenTag?.(channelSlug, rootId);
   });
   const suggestionsCount = isHost && agentOn
-    ? (drafts?.length ?? 0) + (coachDrafts?.length ?? 0) + (stageProposals?.length ?? 0)
+    ? (drafts?.length ?? 0) + ((coachDrafts?.length ?? 0) > 0 ? 1 : 0) + ((stageProposals?.length ?? 0) > 0 ? 1 : 0)
     : 0;
   const needs = homeThingsCount({ joinRequests: joinCount, things: things.length + tagThings.length + suggestionsCount });
   // The page draws as one piece once its parts have answered, so the list is
@@ -608,6 +665,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
               onSkipCoach={skipCoach}
               stageProposals={stageProposals ?? []}
               onApproveStageProposal={approveStageProposal}
+              onApproveAllStageProposals={approveAllStageProposals}
               onDismissStageProposal={dismissStageProposal}
               openRow={openCoachRow}
             />

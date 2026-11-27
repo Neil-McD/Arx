@@ -861,6 +861,17 @@ css += """
 .app .gerr{margin:8px 0 0;font-size:12.5px;color:var(--bad)}
 .app .gacts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
 .app .gacts small{margin-left:auto;font-size:12px;color:var(--ink3)}
+.app .gbatch-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:6px 0 10px;border-bottom:1px solid var(--line)}
+.app .gbatch-head small{font-size:12px;color:var(--ink3)}
+.app .gbatch-list{display:flex;flex-direction:column}
+.app .gbatch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
+.app .gbatch-row+.gbatch-row,.app .gbatch-coach+.gbatch-coach{border-top:1px solid var(--line)}
+.app .gbatch-row-btn{width:100%;text-align:left;cursor:pointer}
+.app .gbatch-row-text{min-width:0;display:block}
+.app .gbatch-row-text b{display:block;font-size:13.5px;font-weight:550;color:var(--ink);line-height:1.3}
+.app .gbatch-row-text span{display:block;font-size:12.5px;color:var(--ink2);margin-top:1px;overflow-wrap:anywhere}
+.app .gbatch-row-acts{display:flex;gap:6px;flex:none}
+.app .gbatch-coach-body{padding:0 0 10px}
 :where(:root[data-layout="phone"]) .app .gacts small{margin-left:0;flex-basis:100%}
 /* The guide's question (KitGuideAsks), above the box where you type: what it
    would do, in full, then Yes, No and for posts Always allow. After the

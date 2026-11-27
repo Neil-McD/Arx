@@ -249,8 +249,8 @@ test("what the guide suggests is its own group: a row per draft, opened by the h
   expect(html).not.toContain("View more");
   expect(renderToStaticMarkup(React.createElement(GuideSuggests, { drafts: [], onPost: async () => null, onSkip: () => {} }))).toBe("");
 
-  // Multiple suggestions stack into a tidy drawer showing the top card + "View more (N)".
-  const stackedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+  // Up to 3 crisp rows show uncollapsed; a 4th item stacks behind "View more (N)".
+  const threeRowsHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
     drafts: [draft],
     coachDrafts: [{
       id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_newcomer",
@@ -264,14 +264,40 @@ test("what the guide suggests is its own group: a row per draft, opened by the h
     onPost: async () => null,
     onSkip: () => {},
   }));
-  expect(stackedHtml).toContain("A reply to Maya&#x27;s question is ready");
-  expect(stackedHtml).not.toContain("Check in with Josh Universe");
-  expect(stackedHtml).not.toContain("Move Rashid to Graduated");
-  expect(stackedHtml).toContain("View more (2)");
+  expect(threeRowsHtml).toContain("Move Rashid to Graduated");
+  expect(threeRowsHtml).toContain("A reply to Maya&#x27;s question is ready");
+  expect(threeRowsHtml).toContain("Check in with Josh Universe");
+  expect(threeRowsHtml).not.toContain("View more");
 
-  // Opening a non-first row from outside (e.g. landing preview) automatically expands the drawer.
+  // 4+ rows show the top 3 and stack the rest behind "View more (N)".
+  const stackedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    drafts: [draft, { ...draft, id: "d2", author: "Elena" }],
+    coachDrafts: [{
+      id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_newcomer",
+      reason_label: "Quiet newcomer", signal_summary: "Quiet for 25 days", text: "Hey Josh!", created_at: "2026-11-25T10:00:00.000Z",
+    }],
+    stageProposals: [{
+      membership_id: "m1", user_id: "u1", member_name: "Rashid", member_handle: "rashid",
+      from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated",
+      to_stage_goal: "Mentor others", completed_labels: ["3+ posts or replies"],
+    }],
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  expect(stackedHtml).toContain("Move Rashid to Graduated");
+  expect(stackedHtml).toContain("A reply to Maya&#x27;s question is ready");
+  expect(stackedHtml).toContain("A reply to Elena&#x27;s question is ready");
+  expect(stackedHtml).not.toContain("Check in with Josh Universe");
+  expect(stackedHtml).toContain("View more (1)");
+
+  // Opening a stacked row from outside automatically expands the drawer.
   const openedStackedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
-    drafts: [draft],
+    drafts: [draft, { ...draft, id: "d2", author: "Elena" }],
+    stageProposals: [{
+      membership_id: "m1", user_id: "u1", member_name: "Rashid", member_handle: "rashid",
+      from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated",
+      to_stage_goal: "Mentor others", completed_labels: ["3+ posts or replies"],
+    }],
     coachDrafts: [{
       id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_newcomer",
       reason_label: "Quiet newcomer", signal_summary: "Quiet for 25 days", text: "Hey Josh!", created_at: "2026-11-25T10:00:00.000Z",
@@ -282,6 +308,60 @@ test("what the guide suggests is its own group: a row per draft, opened by the h
   }));
   expect(openedStackedHtml).toContain("Check in with Josh Universe");
   expect(openedStackedHtml).toContain("Show less");
+});
+
+test("multiple ready stage moves and check-in drafts collapse into single grouped batch rows", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { GuideSuggests, stageBatchTitle, stageBatchDetail, coachBatchTitle, coachBatchDetail } = await import("../apps/web/src/v1/KitGuideSuggests");
+  const proposals = [
+    { membership_id: "m1", user_id: "u1", member_name: "Rashid", member_handle: "rashid", from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated", to_stage_goal: null, completed_labels: ["3+ posts"] },
+    { membership_id: "m2", user_id: "u2", member_name: "Ray Lopez", member_handle: "ray", from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated", to_stage_goal: null, completed_labels: ["3+ posts"] },
+    { membership_id: "m3", user_id: "u3", member_name: "Thomas Thomison", member_handle: "thomas", from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated", to_stage_goal: null, completed_labels: ["3+ posts"] },
+    { membership_id: "m4", user_id: "u4", member_name: "Maya", member_handle: "maya", from_stage_key: "active", from_stage_name: "Active", to_stage_key: "graduated", to_stage_name: "Graduated", to_stage_goal: null, completed_labels: ["3+ posts"] },
+  ];
+  expect(stageBatchTitle(proposals)).toBe("4 members ready to advance");
+  expect(stageBatchDetail(proposals)).toBe("Rashid, Ray Lopez, Thomas Thomison and 1 more → Graduated.");
+
+  const coachDrafts = [
+    { id: "c1", member_name: "Josh Universe", member_handle: "josh", reason: "quiet_member" as const, reason_label: "Quiet member", signal_summary: "Quiet for 25 days", text: "Hey Josh!", created_at: "2026-11-25T10:00:00.000Z" },
+    { id: "c2", member_name: "Elena", member_handle: "elena", reason: "quiet_newcomer" as const, reason_label: "Quiet newcomer", signal_summary: "Joined 4 days ago", text: "Welcome Elena!", created_at: "2026-11-25T10:00:00.000Z" },
+  ];
+  expect(coachBatchTitle(coachDrafts)).toBe("2 member check-ins ready");
+  expect(coachBatchDetail(coachDrafts)).toBe("Josh Universe and Elena.");
+
+  const html = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    label: "Needs you",
+    drafts: [],
+    stageProposals: proposals,
+    coachDrafts,
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  // 4 stage moves + 2 check-ins collapse cleanly into 2 grouped rows (no View more).
+  expect(html).toContain("<i>2</i>");
+  expect(html).toContain("4 members ready to advance");
+  expect(html).toContain("2 member check-ins ready");
+  expect(html).not.toContain("View more");
+
+  // Opening a specific check-in from a profile deep link opens the grouped batch directly to that draft.
+  const deepLinkedHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
+    label: "Needs you",
+    drafts: [],
+    coachDrafts,
+    openRow: "coach:c2",
+    onPost: async () => null,
+    onSkip: () => {},
+  }));
+  expect(deepLinkedHtml).toContain("Welcome Elena!");
+
+  const { summarizeBatchStageMoveOutcome } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 3, staleCount: 1, failedCount: 0 })).toBeNull();
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 2, staleCount: 1, failedCount: 1 }))
+    .toBe("Moved 2, but 1 couldn't be updated. Try again.");
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 0, staleCount: 2, failedCount: 1 }))
+    .toBe("2 already up to date, but 1 couldn't be updated. Try again.");
+  expect(summarizeBatchStageMoveOutcome({ movedCount: 0, staleCount: 0, failedCount: 2 }))
+    .toBe("Couldn't move them right now. Try again.");
 });
 
 test("a question or member signal the guide drafted for shows once, not also as a duplicate legacy reminder", async () => {
@@ -345,7 +425,9 @@ test("unified host Needs you in guide style prioritizes tags and join requests a
   expect(unifiedHtml).toContain("Needs you");
   expect(unifiedHtml).toContain("<i>3</i>");
   expect(unifiedHtml).toContain("Maya tagged you in #General");
-  expect(unifiedHtml).toContain("View more (2)");
+  expect(unifiedHtml).toContain("2 people asked to join");
+  expect(unifiedHtml).toContain("Check in with Josh Universe");
+  expect(unifiedHtml).not.toContain("View more");
   // With only coach drafts, the unified list still renders under Needs you with exact count.
   const draftsOnlyHtml = renderToStaticMarkup(React.createElement(GuideSuggests, {
     label: "Needs you",

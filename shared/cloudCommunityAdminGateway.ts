@@ -1203,6 +1203,7 @@ export type CloudCommunityHomeSnapshot = {
   joinRequestsPending: number;
   upcomingEvents: Array<{ title: string; startsAt: string }>;
   founderBrief?: CloudHomeFounderBrief | null;
+  proactiveAgentActive?: boolean;
 };
 
 function count(value: unknown): number {
@@ -1275,6 +1276,7 @@ export function normalizeCommunityHomeSnapshot(payload: unknown): CloudCommunity
             sentAt: String(record.founderBrief.sentAt ?? ""),
           }
         : null,
+    proactiveAgentActive: record.proactiveAgentActive === true,
   };
 }
 
