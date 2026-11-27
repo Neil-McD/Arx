@@ -403,7 +403,9 @@ The older versions are transport compatibility only; all receive the same
 five-tool product contract.
 
 The protected resource document at
-`/.well-known/oauth-protected-resource` returns:
+`/.well-known/oauth-protected-resource`, and the same document at the
+path-suffixed address `/.well-known/oauth-protected-resource/runtime/mcp`
+(RFC 9728's form, which some AI apps check first), returns:
 
 ```text
 resource: <canonical public URL ending in /runtime/mcp>
@@ -428,10 +430,19 @@ closed. After the door, the person is the one the door verified: server-side
 reads take them explicitly (`verifiedAtDoor`, trusted-actor lookups), since
 there is no Convex session identity behind an MCP request.
 
-`/.well-known/oauth-authorization-server` is a compatibility projection of
-the configured upstream authorization server. It advertises
-`registration_endpoint` only when `ARX_AUTH_REGISTRATION_URL` is explicitly
-configured; Polynet never invents a registration URL.
+`/.well-known/oauth-authorization-server` passes on the upstream
+authorization server's own live metadata (Nov 27): Convex reads
+`<ARX_AUTH_JWT_ISSUER>/.well-known/oauth-authorization-server` with a 2.5s
+timeout, keeps it for ten minutes, and serves it unchanged only if it is a
+plain object for the same issuer with `authorization_endpoint` and
+`token_endpoint` (`shared/mcpAuthServerMetadata.ts`). Everything in it then
+comes from WorkOS/AuthKit as published, including `registration_endpoint` and
+`client_id_metadata_document_supported` (CIMD), whatever
+`ARX_AUTH_REGISTRATION_URL` says. If the live metadata can't be read or
+doesn't match, the route falls back to Polynet's own compatibility projection
+of the configured upstream server, which advertises `registration_endpoint`
+only when `ARX_AUTH_REGISTRATION_URL` is explicitly configured; that
+fallback never invents a registration URL.
 
 The public web origin routes these paths to the Convex HTTP runtime before the
 SPA fallback:
@@ -439,6 +450,7 @@ SPA fallback:
 ```text
 /runtime/mcp
 /.well-known/oauth-protected-resource
+/.well-known/oauth-protected-resource/runtime/mcp
 /.well-known/oauth-authorization-server
 ```
 
