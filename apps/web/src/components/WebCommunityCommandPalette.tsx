@@ -82,7 +82,10 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
       if (!community) return;
       const changed = shell.onSelectActiveCommunity(community);
       const slug = String(community.slug ?? "").trim();
-      if (changed && slug) shell.onOpenCommunityHome(slug);
+      if (changed && slug) {
+        if (shell.showMobileShell) shell.onOpenCommunityHome(slug);
+        else shell.onOpenCommunityChat(slug);
+      }
     },
   }), [shell]);
 

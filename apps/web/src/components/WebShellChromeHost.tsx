@@ -84,11 +84,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
         communityShell={props.communityShell}
         settingsSidebar={props.settingsSidebar}
         current={{ kind: "community", pane: props.communityShell.communitySettingsPane ?? "community" }}
-        onBack={() => {
-          const slug = String(props.communityShell.activeCommunity?.slug ?? "").trim();
-          if (slug) props.communityShell.onOpenCommunityHome(slug);
-          else props.desktopHeader.onBackToCommunity();
-        }}
+        onBack={props.desktopHeader.onBackToCommunity}
       />
     ) : (
     <WebCommunityNavSurface

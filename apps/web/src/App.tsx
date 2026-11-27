@@ -482,6 +482,7 @@ export default function App() {
       activePage === "community" &&
       activeView === "home" &&
       communityTab === "chat",
+    resumeEpoch: appActivity.resumeEpoch,
     session,
   });
   const {

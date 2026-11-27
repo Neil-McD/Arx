@@ -6,6 +6,7 @@ import {
   buildCommunityTabPath,
   deriveWebDestinationFromAppRoute,
   deriveWebDestinationFromPath,
+  normalizeAppRouteForShellVariant,
   parseAppRouteFromPathname,
   readPublicRouteFromLocation,
   resolveInitialAppShellVariant,
@@ -278,6 +279,20 @@ describe("canonical web destinations", () => {
       kind: "community_events",
       slug: "polynet",
     })).toBe(true);
+  });
+
+  it("normalizes phone-only /browse routes to General chat on desktop while keeping community_home on mobile", () => {
+    const browseRoute = parseAppRouteFromPathname("/c/polynet/browse");
+    expect(browseRoute).not.toBeNull();
+
+    const desktopNormalized = normalizeAppRouteForShellVariant(browseRoute!, "standard");
+    expect(desktopNormalized.view).toBe("home");
+    expect(desktopNormalized.communityTab).toBe("chat");
+    expect(buildAppRoutePath(desktopNormalized)).toBe("/c/polynet/chat");
+
+    const mobileNormalized = normalizeAppRouteForShellVariant(browseRoute!, "mobile");
+    expect(mobileNormalized.view).toBe("community_home");
+    expect(buildAppRoutePath(mobileNormalized)).toBe("/c/polynet/browse");
   });
 
 });
