@@ -54,6 +54,11 @@ export function Icon(props: { name: IconName; extra?: string }) {
     <svg
       className={cx("ic", props.extra)}
       viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
       // Constant paths from the mock's icon set; no outside input.
       dangerouslySetInnerHTML={{ __html: ICON_PATHS[props.name] }}
