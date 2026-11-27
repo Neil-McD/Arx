@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityManager, resolvePublicUserId } from "./communityCore";
+import { readMemberParticipationSignals } from "./communityMemberJourney";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
@@ -711,9 +712,7 @@ export const getCommunityMemberRecord = query({
       coachDrafts,
       podPaymentRows,
       attributionRow,
-      latestChannelRoot,
-      latestChannelReply,
-      latestLesson,
+      participation,
     ] = await Promise.all([
       ctx.db.get(subjectId) as Promise<{ displayName?: string; handle?: string } | null>,
       resolveUserProfileDisplayProjection(ctx, subjectId),
@@ -783,31 +782,7 @@ export const getCommunityMemberRecord = query({
             .first()
         : Promise.resolve(null),
       membership
-        ? ctx.db
-            .query("communityInteractionRoots")
-            .withIndex("by_community_actorUser_createdAt", (q) =>
-              q.eq("communityId", args.communityId).eq("actorUserId", subjectId),
-            )
-            .order("desc")
-            .first()
-        : Promise.resolve(null),
-      membership
-        ? ctx.db
-            .query("communityInteractionReplies")
-            .withIndex("by_community_actorUser_createdAt", (q) =>
-              q.eq("communityId", args.communityId).eq("actorUserId", subjectId),
-            )
-            .order("desc")
-            .first()
-        : Promise.resolve(null),
-      membership
-        ? ctx.db
-            .query("communityLessonProgress")
-            .withIndex("by_community_user_completedAt", (q) =>
-              q.eq("communityId", args.communityId).eq("userId", subjectId),
-            )
-            .order("desc")
-            .first()
+        ? readMemberParticipationSignals(ctx, args.communityId, subjectId)
         : Promise.resolve(null),
     ]);
 
@@ -904,9 +879,7 @@ export const getCommunityMemberRecord = query({
         : 0;
     const bestLastActiveAt = Math.max(
       typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0,
-      latestChannelRoot?.status === "live" ? Number(latestChannelRoot.createdAt ?? 0) : 0,
-      latestChannelReply?.status === "live" ? Number(latestChannelReply.createdAt ?? 0) : 0,
-      Number(latestLesson?.completedAt ?? 0),
+      participation?.lastParticipationAtMs ?? 0,
       lastAppAt,
     );
 

@@ -111,7 +111,7 @@ async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
   };
 }
 
-async function readMemberParticipationSignals(
+export async function readMemberParticipationSignals(
   ctx: any,
   communityId: any,
   userId: any,
