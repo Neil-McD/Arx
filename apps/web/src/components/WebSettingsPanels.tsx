@@ -16,6 +16,7 @@ import {
   type WebEmailPreferencesSectionProps,
 } from "./WebEmailPreferencesSection";
 import { WebPolynetMcpAccountSection } from "./WebPolynetMcpAccountSection";
+import { WebPersonalGuideSettingsSection } from "./WebPersonalGuideSettingsSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 import { WebArchivedCommunityList } from "./WebArchivedCommunityList";
 import { SettingsPageHead, SettingsSaveStatus } from "./SettingsRows";
@@ -153,6 +154,8 @@ function WebSettingsPanelBody(
           ) : null}
         </>
       );
+    case "guide":
+      return <WebPersonalGuideSettingsSection session={props.account.session} />;
     case "appearance":
       return (
         <WebAppearanceSettingsSection

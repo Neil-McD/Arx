@@ -17,6 +17,7 @@ import type { WebCommunityShellProps, WebSettingsSidebarProps } from "./webShell
 const PERSONAL: Array<{ page: SettingsPage; icon: ReactNode }> = [
   { page: "profile", icon: <User size={16} strokeWidth={1.7} /> },
   { page: "account", icon: <Lock size={16} strokeWidth={1.7} /> },
+  { page: "guide", icon: <Sparkles size={16} strokeWidth={1.7} /> },
   { page: "appearance", icon: <Sun size={16} strokeWidth={1.7} /> },
 ];
 

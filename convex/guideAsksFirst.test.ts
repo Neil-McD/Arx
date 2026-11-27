@@ -132,7 +132,7 @@ test("always allow: posted, the next post goes straight through, and switching i
   expect(await w.answer("member", question.id, "always")).toMatchObject({ status: "done" });
   expect((await w.rows()).always).toEqual([expect.objectContaining({ userId: w.ids.member, communityId: w.ids.communityId, kind: "post" })]);
   expect(await w.t.withIdentity({ subject: "member-subject" }).query(api.communityGuideQuestions.getGuideAlwaysAllowed, { communityId: w.ids.communityId }))
-    .toEqual({ post: true, message: false });
+    .toEqual({ post: true, message: false, post_global: false, message_global: false });
 
   const straight = await w.guide("member", "run-2")("polynet_write", { path: GENERAL, mode: "append",
     content: { root_id: String(w.ids.otherPost), text: "I'm in, see you there." }, idempotency_key: "reply-b" });

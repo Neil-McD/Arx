@@ -1173,6 +1173,17 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community_key", ["communityId", "key"]),
+  userGuideSettings: defineTable({
+    userId: v.id("users"),
+    soulMd: v.optional(v.string()),
+    soulUpdatedAt: v.optional(v.number()),
+    allowPostWithoutAsking: v.optional(v.boolean()),
+    allowMessageWithoutAsking: v.optional(v.boolean()),
+    coachMuted: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   communityFounderBriefSettings: defineTable({
     communityId: v.id("communities"),
     enabled: v.boolean(),

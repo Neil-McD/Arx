@@ -81,26 +81,7 @@ export function CommunityFounderBriefSection(props: {
   };
 
   if (props.planTier === "guide") {
-    return (
-      <SettingsGroup label="Morning brief">
-        <SettingsRow
-          label="Daily founder brief"
-          help="Included on Chief of Staff ($100/month with 20,000 AI credits included). Each morning on Home, in your guide chat, and optionally by email: what needs you, what your guide handled, and key member signals."
-        >
-          {props.onUpgradeToChiefOfStaff ? (
-            <SettingsButton
-              variant="primary"
-              disabled={props.isUpgradingPlan}
-              onClick={props.onUpgradeToChiefOfStaff}
-            >
-              {props.isUpgradingPlan ? "Upgrading…" : "Upgrade to Chief of Staff"}
-            </SettingsButton>
-          ) : (
-            <span className="settings-v1-value">Chief of Staff</span>
-          )}
-        </SettingsRow>
-      </SettingsGroup>
-    );
+    return null;
   }
 
   const emailEnabled = settings ? settings.email_enabled : true;

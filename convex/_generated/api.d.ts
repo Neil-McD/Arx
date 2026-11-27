@@ -136,6 +136,7 @@ import type * as communityResourceEvidence from "../communityResourceEvidence.js
 import type * as communityResourceEvidenceCore from "../communityResourceEvidenceCore.js";
 import type * as communityResourceShared from "../communityResourceShared.js";
 import type * as communityResources from "../communityResources.js";
+import type * as communityRetentionAnalytics from "../communityRetentionAnalytics.js";
 import type * as communitySearchDocs from "../communitySearchDocs.js";
 import type * as communitySemanticMembers from "../communitySemanticMembers.js";
 import type * as communitySites from "../communitySites.js";
@@ -244,6 +245,7 @@ import type * as stripeSubscriptionCancellation from "../stripeSubscriptionCance
 import type * as threadAttachmentsCore from "../threadAttachmentsCore.js";
 import type * as threadWorkingStateCore from "../threadWorkingStateCore.js";
 import type * as threads from "../threads.js";
+import type * as userGuideSettings from "../userGuideSettings.js";
 import type * as userProfileProjection from "../userProfileProjection.js";
 import type * as voiceProviderCostAccounting from "../voiceProviderCostAccounting.js";
 import type * as webResearchTools from "../webResearchTools.js";
@@ -385,6 +387,7 @@ declare const fullApi: ApiFromModules<{
   communityResourceEvidenceCore: typeof communityResourceEvidenceCore;
   communityResourceShared: typeof communityResourceShared;
   communityResources: typeof communityResources;
+  communityRetentionAnalytics: typeof communityRetentionAnalytics;
   communitySearchDocs: typeof communitySearchDocs;
   communitySemanticMembers: typeof communitySemanticMembers;
   communitySites: typeof communitySites;
@@ -493,6 +496,7 @@ declare const fullApi: ApiFromModules<{
   threadAttachmentsCore: typeof threadAttachmentsCore;
   threadWorkingStateCore: typeof threadWorkingStateCore;
   threads: typeof threads;
+  userGuideSettings: typeof userGuideSettings;
   userProfileProjection: typeof userProfileProjection;
   voiceProviderCostAccounting: typeof voiceProviderCostAccounting;
   webResearchTools: typeof webResearchTools;
