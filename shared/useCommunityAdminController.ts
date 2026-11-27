@@ -21,6 +21,7 @@ import { countCloudCommunityMembershipRows } from "./cloudCommunityMembershipGat
 import {
   banCloudCommunityMember,
   fetchCloudCommunityAnalyticsSnapshot,
+  fetchCloudCommunityRetentionAnalytics,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
 } from "./cloudCommunityAdminGateway";
@@ -269,15 +270,26 @@ export function useCommunityAdminController<
     current.setCommunityAnalyticsError(null);
 
     try {
-      const snapshot = await fetchCloudCommunityAnalyticsSnapshot({
-        session: usableSession,
-        communityId,
-        range,
-      });
+      const [snapshot, retentionResult] = await Promise.all([
+        fetchCloudCommunityAnalyticsSnapshot({
+          session: usableSession,
+          communityId,
+          range,
+        }),
+        fetchCloudCommunityRetentionAnalytics({
+          session: usableSession,
+          communityId,
+          range,
+        }).catch(() => null),
+      ]);
 
       if (communityAnalyticsLoadSeqRef.current !== seq) return;
 
-      current.setCommunityAnalyticsSummary(snapshot?.summary ?? emptyAnalyticsSummary());
+      const baseSummary = snapshot?.summary ?? emptyAnalyticsSummary();
+      current.setCommunityAnalyticsSummary({
+        ...baseSummary,
+        retention: retentionResult,
+      });
       current.setCommunityAnalyticsSeries(snapshot?.series ?? emptyAnalyticsMetricSeries());
     } catch (error) {
       if (communityAnalyticsLoadSeqRef.current !== seq) return;

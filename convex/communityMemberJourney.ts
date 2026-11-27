@@ -79,7 +79,7 @@ const statusOverrideValidator = v.union(
   v.literal("auto"),
 );
 
-async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
+export async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
   stages: JourneyStageDefinition[];
   autoAdvanceEnabled: boolean;
 }> {
@@ -166,6 +166,102 @@ export async function readMemberParticipationSignals(
     participationCount: postsCount + lessonsDoneCount,
     lastParticipationAtMs: bestAt > 0 ? bestAt : null,
   };
+}
+
+export async function readMemberFirstPostSignalsForAnalytics(
+  ctx: any,
+  communityId: any,
+  userIds: readonly any[],
+): Promise<Map<string, { postsCount: number; firstPostAtMs: number | null }>> {
+  const byUser = new Map<string, { postsCount: number; firstPostAtMs: number | null }>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const [roots, replies] = await Promise.all([
+        ctx.db
+          .query("communityInteractionRoots")
+          .withIndex("by_community_actorUser_createdAt", (q: any) =>
+            q.eq("communityId", communityId).eq("actorUserId", userId),
+          )
+          .order("asc")
+          .filter((q: any) => q.eq(q.field("status"), "live"))
+          .take(3),
+        ctx.db
+          .query("communityInteractionReplies")
+          .withIndex("by_community_actorUser_createdAt", (q: any) =>
+            q.eq("communityId", communityId).eq("actorUserId", userId),
+          )
+          .order("asc")
+          .filter((q: any) => q.eq(q.field("status"), "live"))
+          .take(3),
+      ]);
+      const postsCount = roots.length + replies.length;
+      const rootFirst =
+        roots[0] && typeof roots[0].createdAt === "number" && Number.isFinite(roots[0].createdAt)
+          ? roots[0].createdAt
+          : null;
+      const replyFirst =
+        replies[0] && typeof replies[0].createdAt === "number" && Number.isFinite(replies[0].createdAt)
+          ? replies[0].createdAt
+          : null;
+      let firstPostAtMs: number | null = null;
+      if (rootFirst !== null && replyFirst !== null) firstPostAtMs = Math.min(rootFirst, replyFirst);
+      else firstPostAtMs = rootFirst ?? replyFirst;
+      byUser.set(String(userId), { postsCount, firstPostAtMs });
+    }),
+  );
+  return byUser;
+}
+
+export async function readMemberActivityTimestampsInWindow(
+  ctx: any,
+  args: { communityId: any; userId: any; afterMs: number; throughMs: number },
+): Promise<number[]> {
+  if (args.throughMs <= args.afterMs) return [];
+  const [rootHit, replyHit, lessonHit] = await Promise.all([
+    ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("actorUserId", args.userId)
+          .gt("createdAt", args.afterMs)
+          .lte("createdAt", args.throughMs),
+      )
+      .filter((q: any) => q.eq(q.field("status"), "live"))
+      .first(),
+    ctx.db
+      .query("communityInteractionReplies")
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("actorUserId", args.userId)
+          .gt("createdAt", args.afterMs)
+          .lte("createdAt", args.throughMs),
+      )
+      .filter((q: any) => q.eq(q.field("status"), "live"))
+      .first(),
+    ctx.db
+      .query("communityLessonProgress")
+      .withIndex("by_community_user_completedAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("userId", args.userId)
+          .gt("completedAt", args.afterMs)
+          .lte("completedAt", args.throughMs),
+      )
+      .first(),
+  ]);
+  const hits: number[] = [];
+  if (typeof rootHit?.createdAt === "number" && Number.isFinite(rootHit.createdAt)) {
+    hits.push(rootHit.createdAt);
+  }
+  if (typeof replyHit?.createdAt === "number" && Number.isFinite(replyHit.createdAt)) {
+    hits.push(replyHit.createdAt);
+  }
+  if (typeof lessonHit?.completedAt === "number" && Number.isFinite(lessonHit.completedAt)) {
+    hits.push(lessonHit.completedAt);
+  }
+  return hits;
 }
 
 async function resolveDerivedStageKeyForMember(
