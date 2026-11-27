@@ -18,7 +18,8 @@ const ChiefScene = lazy(() => import("./ChiefScene").then((module) => ({ default
 const BoardScene = lazy(() => import("./BoardScene").then((module) => ({ default: module.BoardScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
 import { buildPolynetMcpSetupForOrigin } from "../../../../../shared/polynetMcpSetup";
-import { KitAiHarnessLogos } from "../../v1/KitAiHarnessLogos";
+import { Copy } from "lucide-react";
+import { HarnessStack } from "./HarnessStack";
 
 type JoinProps = { onJoin: () => void };
 
@@ -532,8 +533,8 @@ function CopySetupPrompt() {
     }
   };
   return (
-    <button type="button" className="cta-quiet" onClick={() => { void copy(); }} aria-live="polite">
-      {copied ? "Copied. Paste it into your AI" : "Copy setup prompt"}
+    <button type="button" className="cta-setup" onClick={() => { void copy(); }} aria-live="polite">
+      <Copy size={14} aria-hidden="true" />{copied ? "Copied. Paste it into your AI" : "Copy setup prompt"}
     </button>
   );
 }
@@ -562,7 +563,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
               <button className="cta" type="button" onClick={trackStart("hero", onJoin)}>Start a community</button>
               <CopySetupPrompt />
             </div>
-            <KitAiHarnessLogos compact />
+            <HarnessStack />
             <p className="microcopy">{LANDING_OFFER_LINE}</p>
           </div>
           {/* The product sits inside the hero, so the night sky runs down behind it. */}

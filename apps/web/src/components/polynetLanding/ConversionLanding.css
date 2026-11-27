@@ -1035,19 +1035,19 @@
   .pn-landing .bsc *::-webkit-scrollbar, .pn-landing .rp *::-webkit-scrollbar { display: none; }
 }
 
-/* Under the hero's buttons: the AIs the setup prompt works with, small and
-   quiet, in one row (KitAiHarnessLogos, whose app styles the site doesn't load). */
-.pn-landing .hero-text .ai-harness-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin: 18px auto 0; max-width: 560px; }
-.pn-landing .hero-text .ai-harness-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12.5px; opacity: .8; }
-.pn-landing .hero-text .ai-harness-icon { display: inline-grid; place-items: center; width: 14px; height: 14px; }
-.pn-landing .hero-text .ai-harness-icon svg { width: 14px; height: 14px; }
-.pn-landing button.cta-quiet { padding: 0; border: 0; background: none; font-family: inherit; cursor: pointer; }
-@media (max-width: 900px) {
-  /* Phones: the same row, tighter, so the seven fit on one line. */
-  .pn-landing .hero-text .ai-harness-strip { flex-wrap: nowrap; gap: 0 7px; max-width: 100%; }
-  .pn-landing .hero-text .ai-harness-chip { gap: 3px; font-size: 10px; letter-spacing: -.01em; white-space: nowrap; }
-  .pn-landing .hero-text .ai-harness-icon, .pn-landing .hero-text .ai-harness-icon svg { width: 10px; height: 10px; }
+/* The hero's second button: a small card, quieter than Start a community. */
+.pn-landing .cta-setup {
+  display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px;
+  border: 1px solid var(--line-strong); border-radius: 9px; background: rgba(255, 255, 255, .03);
+  color: var(--text); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
 }
-@media (max-width: 400px) {
-  .pn-landing .hero-text .ai-harness-strip { flex-wrap: wrap; gap: 4px 8px; }
+.pn-landing .cta-setup:hover { border-color: var(--muted); background: rgba(255, 255, 255, .06); }
+.pn-landing .cta-setup svg { color: var(--muted); }
+/* Under the buttons: the AIs it works with, their marks overlapped in a stack. */
+.pn-landing .harness-stack { display: flex; justify-content: center; margin-top: 14px; }
+.pn-landing .harness-stack-mark {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; margin-left: -7px;
+  border: 2px solid var(--bg); border-radius: 50%; background: #1b1c20; color: #eef0f4;
 }
+.pn-landing .harness-stack-mark:first-child { margin-left: 0; }
+.pn-landing .harness-stack-mark svg { width: 13px; height: 13px; }
