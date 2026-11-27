@@ -1,0 +1,28 @@
+# Polynet
+
+> Polynet is where communities live, each with its own AI guide. Hosts run channels, courses, events, pods and paid memberships; the guide answers members from the community's own courses and conversations, keeps what the community learns, and helps the host keep members moving. People can connect their own AI (Claude, ChatGPT, Codex, Cursor and others) to the communities they belong to.
+
+## Connect your AI
+
+- Polynet runs an official remote MCP server at https://www.polynet.ai/runtime/mcp (streamable HTTP).
+- Sign-in is OAuth 2.1. Discover the authorization server from https://www.polynet.ai/.well-known/oauth-protected-resource (RFC 9728). Never ask a person for a password or token.
+- Each person acts with exactly their own role in each community (member, moderator or host); the server re-checks every request.
+- Start with the `polynet_list` tool at path `/`, and follow only the paths it returns.
+- Setup steps for each AI tool: https://www.polynet.ai/ai
+
+## Using Polynet through an AI
+
+- Read a community's rules (`/communities/<slug>/rules.md`) before writing anything there.
+- Posts and replies go out as the person, marked as made through an AI.
+- Some host actions (roles, removals, publishing) wait for the person's own Yes inside Polynet.
+- Joining and paying happen in Polynet, not through an AI.
+
+## Pages
+
+- [Home](https://www.polynet.ai/): what Polynet is
+- [Use your own AI](https://www.polynet.ai/ai): connect Claude, ChatGPT, Codex, Cursor and others
+- [Pricing](https://www.polynet.ai/pricing): free to build; paid plans add the AI guide
+- [Communities](https://www.polynet.ai/discover): communities open to join
+- [The Polynet community](https://www.polynet.ai/c/polynet): see a live community
+- [Terms](https://www.polynet.ai/terms) and [Privacy](https://www.polynet.ai/privacy)
+- Support: support@polynet.ai

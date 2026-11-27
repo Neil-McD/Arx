@@ -10,6 +10,7 @@ import {
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
 import { toolArgumentProblems } from "../shared/toolArgumentCheck.ts";
 import { internal } from "./_generated/api";
+import { acceptLiveAuthServerMetadata, authServerMetadataUrl } from "../shared/mcpAuthServerMetadata";
 import { actionTool, actionToolDefinition, actionToolsFor, translateActionTool, type ActionToolRole } from "../shared/actionTools";
 import {
   POLYNET_CANONICAL_TOOL_NAMES,
@@ -693,13 +694,32 @@ export async function handleMcpPost(args: {
   return jsonRpcErrorResponse(req, jsonResponse, id, -32601, "Method not found.");
 }
 
+// WorkOS AuthKit's live sign-in settings, kept for ten minutes. Read with a
+// short timeout; any failure means Polynet's own copy is published instead.
+const LIVE_AUTH_METADATA_TTL_MS = 10 * 60_000;
+let liveAuthMetadataCache: { issuer: string; at: number; value: Record<string, unknown> } | null = null;
+async function readLiveAuthServerMetadata(issuer: string): Promise<Record<string, unknown> | null> {
+  const now = Date.now();
+  if (liveAuthMetadataCache && liveAuthMetadataCache.issuer === issuer && now - liveAuthMetadataCache.at < LIVE_AUTH_METADATA_TTL_MS) {
+    return liveAuthMetadataCache.value;
+  }
+  try {
+    const response = await fetch(authServerMetadataUrl(issuer), { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(2500) });
+    if (!response.ok) return null;
+    const accepted = acceptLiveAuthServerMetadata(await response.json(), issuer);
+    if (accepted) liveAuthMetadataCache = { issuer, at: now, value: accepted };
+    return accepted;
+  } catch {
+    return null;
+  }
+}
+
 export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): void {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
 
-  http.route({
-    path: "/.well-known/oauth-protected-resource",
-    method: "GET",
-    handler: httpAction(async (_ctx, req) => {
+  // Where to sign in for the MCP address: at the general address and at the
+  // one some AI apps look up first (with the MCP path on the end).
+  const protectedResourceHandler = httpAction(async (_ctx, req) => {
       const authMetadata = resolveMcpAuthMetadata(req);
       if (!authMetadata.ok) {
         return jsonResponse(req, 503, {
@@ -713,8 +733,10 @@ export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): vo
         bearer_methods_supported: ["header"],
         scopes_supported: authMetadata.scopesSupported,
       });
-    }),
   });
+  for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/runtime/mcp"]) {
+    http.route({ path, method: "GET", handler: protectedResourceHandler });
+  }
 
   http.route({
     path: "/.well-known/oauth-authorization-server",
@@ -727,6 +749,10 @@ export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): vo
           error_description: authMetadata.message,
         });
       }
+      // AuthKit's own live settings, as they are; Polynet's basic copy if they
+      // can't be read (shared/mcpAuthServerMetadata.ts).
+      const live = await readLiveAuthServerMetadata(authMetadata.issuer);
+      if (live) return jsonResponse(req, 200, live);
       return jsonResponse(req, 200, {
         issuer: authMetadata.issuer,
         authorization_endpoint: authMetadata.authorizationEndpoint,
