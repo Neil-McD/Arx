@@ -268,14 +268,18 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   quiet newcomers, stalled course learners, and quiet members before an event,
   enforces interruption-budget caps and quiet hours, runs a silence-by-default
   judge on consented self facts only, queues drafts in "Your guide suggests" by
-  default or auto-sends per reason into the member's private Agent thread, and
-  honors per-member opt-out on `communityMemberSettings.coachMuted`); `communityChiefOfStaff` (Founder Chief of Staff signals, slice 3 of `proactive-community-agent-v0.md`: waiting approvals, proactive guide outcomes, stalled course learners, quiet paying members, rising contributors, and pod health counts — fed into both the daily Founder Brief and owner/admin `builder/analytics.json`, never exposing private member chats or private pod message text); `communityGuidePictures` (the pictures a person attached in their talk, found again from the guide's run so a post or reply can carry them: only this person's, this talk's, images within the limits, copied into files of the post's own); `communityGuideQuestions` (tables
+  default or auto-sends routine check-ins when the owner picks automatic posture
+  in Settings → Guide (`CommunityMemberCoachSettingsSection`), and honors both
+  per-community opt-out (`communityMemberSettings.coachMuted`) and global opt-out
+  (`userGuideSettings.coachMuted`); the free Weekly community digest toggle
+  lives under Community → General (`CommunityWeeklyDigestGroup`); `communityChiefOfStaff` (Founder Chief of Staff signals, slice 3 of `proactive-community-agent-v0.md`: waiting approvals, proactive guide outcomes, stalled course learners, quiet paying members, rising contributors, and pod health counts — fed into both the daily Founder Brief and owner/admin `builder/analytics.json`, never exposing private member chats or private pod message text); `communityGuidePictures` (the pictures a person attached in their talk, found again from the guide's run so a post or reply can carry them: only this person's, this talk's, images within the limits, copied into files of the post's own); `communityGuideQuestions` (tables
   `communityGuideQuestions`, `communityGuideAlwaysAllowed`: what the guide
   asks a person before doing something for them in their private talk. The
   executor saves a channel write or a removal instead of running it and
   answers `waiting_for_person`; `KitGuideAsks` shows it above the box where
   they type; `answerGuideQuestion` runs the same call as them on yes.
-  "Always allow posts" is per person per community); `shared/actionTools.ts`
+  "Always allow posts" and "Always allow messages" can be set per community or
+  globally across all communities in `userGuideSettings`); `userGuideSettings` (table `userGuideSettings`, Settings → You → Guide, `/settings/guide`, `WebPersonalGuideSettingsSection`: account-wide Personal Guide defaults — default Personal Soul inherited across communities unless overridden per community, global "without asking" post/message permissions, and global proactive check-in pause that also pauses builder check-ins; per-community Memory in `memberMemories` stays strictly isolated per community); `shared/actionTools.ts`
   (one named tool per action, generated from the one list and translated
   into the calls the executor already runs: a person's own AI is shown theirs
   over the MCP, `mcpActionTools` deciding which, and the guide's private talk

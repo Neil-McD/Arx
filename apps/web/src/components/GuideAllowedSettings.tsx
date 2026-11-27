@@ -18,7 +18,12 @@ export const GUIDE_ALLOWED_MESSAGE_HELP = "Off, your guide shows you the reply a
 export function GuideAllowedSettings(props: { communityId: string; session: unknown }) {
   const agentOn = useCommunityAgentOn();
   const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
-  const { data } = useLiveQuery<{ post: boolean; message?: boolean }>(props.session, "communityGuideQuestions:getGuideAlwaysAllowed",
+  const { data } = useLiveQuery<{
+    post: boolean;
+    message?: boolean;
+    post_global?: boolean;
+    message_global?: boolean;
+  }>(props.session, "communityGuideQuestions:getGuideAlwaysAllowed",
     subject && agentOn ? { authSubject: subject, communityId: props.communityId } : null);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -31,12 +36,39 @@ export function GuideAllowedSettings(props: { communityId: string; session: unkn
   };
   return (
     <SettingsGroup label="What your guide does for you">
-      <SettingsRow label={GUIDE_ALLOWED_POST_LABEL}
-        help={failed ? <span className="settings-v1-error">That didn't save. Try again.</span> : GUIDE_ALLOWED_POST_HELP}>
-        <SettingsSwitch label={GUIDE_ALLOWED_POST_LABEL} checked={data?.post === true} disabled={saving || data === undefined} onChange={(on) => void change(on)} />
+      <SettingsRow
+        label={GUIDE_ALLOWED_POST_LABEL}
+        help={
+          failed ? (
+            <span className="settings-v1-error">That didn't save. Try again.</span>
+          ) : data?.post_global ? (
+            "Enabled across all communities in Settings → Guide."
+          ) : (
+            GUIDE_ALLOWED_POST_HELP
+          )
+        }
+      >
+        <SettingsSwitch
+          label={GUIDE_ALLOWED_POST_LABEL}
+          checked={data?.post === true}
+          disabled={saving || data === undefined || data?.post_global === true}
+          onChange={(on) => void change(on)}
+        />
       </SettingsRow>
-      <SettingsRow label={GUIDE_ALLOWED_MESSAGE_LABEL} help={GUIDE_ALLOWED_MESSAGE_HELP}>
-        <SettingsSwitch label={GUIDE_ALLOWED_MESSAGE_LABEL} checked={data?.message === true} disabled={saving || data === undefined} onChange={(on) => void change(on, "message")} />
+      <SettingsRow
+        label={GUIDE_ALLOWED_MESSAGE_LABEL}
+        help={
+          data?.message_global
+            ? "Enabled across all communities in Settings → Guide."
+            : GUIDE_ALLOWED_MESSAGE_HELP
+        }
+      >
+        <SettingsSwitch
+          label={GUIDE_ALLOWED_MESSAGE_LABEL}
+          checked={data?.message === true}
+          disabled={saving || data === undefined || data?.message_global === true}
+          onChange={(on) => void change(on, "message")}
+        />
       </SettingsRow>
     </SettingsGroup>
   );

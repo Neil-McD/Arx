@@ -21,13 +21,10 @@ import type { WebCommunityAiAgentSection as WebCommunityAiAgentSectionType } fro
 import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import { platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import {
-  getMyBuilderHeartbeatPreference,
   getMyMemberCoachPreference,
-  setMyBuilderHeartbeatPreference,
   setMyMemberCoachPreference,
 } from "../../../../shared/cloudCommunityMemberCoachGateway";
 import type {
-  BuilderHeartbeatPreferenceView,
   MemberCoachPreferenceView,
 } from "../../../../shared/communityMemberCoachTypes";
 
@@ -42,6 +39,9 @@ const CommunityFounderBriefSection = lazy(() =>
 );
 const CommunityMemberCoachSettingsSection = lazy(() =>
   import("./CommunityMemberCoachSettingsSection").then((m) => ({ default: m.CommunityMemberCoachSettingsSection })),
+);
+const CommunityWeeklyDigestGroup = lazy(() =>
+  import("./CommunityMemberCoachSettingsSection").then((m) => ({ default: m.CommunityWeeklyDigestGroup })),
 );
 const GuideSoulMemoryCards = lazy(() =>
   import("./GuideSoulMemoryCards").then((m) => ({ default: m.GuideSoulMemoryCards })),
@@ -87,108 +87,23 @@ function MemberCoachPreferenceRow(props: {
   return (
     <SettingsRow
       label="Pause guide check-ins"
-      help={error ? <span className="settings-v1-error" role="alert">{error}</span>
-        : "Stop the community guide from starting private check-in messages with you."}
-    >
-      <SettingsSwitch label="Pause guide check-ins" checked={Boolean(pref?.coach_muted)} disabled={!pref || saving}
-        onChange={(checked) => void toggle(checked)} />
-    </SettingsRow>
-  );
-}
-
-function BuilderHeartbeatPreferenceSection(props: {
-  communityId: string;
-  session: unknown;
-  ensureSession: (session: any) => Promise<any | null>;
-  planTier?: "guide" | "chief_of_staff" | null;
-  isUpgradingPlan?: boolean;
-  onUpgradeToChiefOfStaff?: () => void;
-}) {
-  const [pref, setPref] = useState<BuilderHeartbeatPreferenceView | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    setPref(null);
-    setError(null);
-    void (async () => {
-      try {
-        const session = await props.ensureSession(props.session);
-        const loaded = session
-          ? await getMyBuilderHeartbeatPreference({ session, communityId: props.communityId })
-          : null;
-        if (!cancelled) setPref(loaded);
-      } catch {
-        if (!cancelled) setError("Couldn't load personal check-in preference.");
+      help={
+        error ? (
+          <span className="settings-v1-error" role="alert">{error}</span>
+        ) : pref?.global_coach_muted ? (
+          "Paused across all communities in Settings → Guide."
+        ) : (
+          "Stop the community guide from starting private check-in messages with you."
+        )
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [props.communityId]);
-  const toggle = async (checked: boolean) => {
-    if (saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const session = await props.ensureSession(props.session);
-      if (!session) throw new Error("not_signed_in");
-      setPref(
-        await setMyBuilderHeartbeatPreference({
-          session,
-          communityId: props.communityId,
-          enabled: checked,
-        }),
-      );
-    } catch {
-      setError("That didn't save. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-  if (pref && !pref.eligible) return null;
-  if (props.planTier === "guide") {
-    return (
-      <SettingsGroup label="Personal check-ins">
-        <SettingsRow
-          label="Check in on my private goals & commitments"
-          help="Included on Chief of Staff ($100/month with $20 AI included). Your guide follows up privately on commitments you share here."
-        >
-          {props.onUpgradeToChiefOfStaff ? (
-            <SettingsButton
-              variant="primary"
-              disabled={props.isUpgradingPlan}
-              onClick={props.onUpgradeToChiefOfStaff}
-            >
-              {props.isUpgradingPlan ? "Upgrading…" : "Upgrade to Chief of Staff"}
-            </SettingsButton>
-          ) : (
-            <span className="settings-v1-value">Chief of Staff</span>
-          )}
-        </SettingsRow>
-      </SettingsGroup>
-    );
-  }
-  return (
-    <SettingsGroup label="Personal check-ins">
-      <SettingsRow
-        label="Check in on my private goals & commitments"
-        help={
-          error ? (
-            <span className="settings-v1-error" role="alert">{error}</span>
-          ) : (
-            "Your guide follows up privately in your Agent thread on commitments you share here — separate from the daily brief, strictly private to you, and pauses automatically if you go quiet."
-          )
-        }
-      >
-        <SettingsSwitch
-          label="Check in on my private goals & commitments"
-          checked={pref ? pref.enabled : true}
-          disabled={!pref || saving}
-          onChange={(checked) => void toggle(checked)}
-        />
-      </SettingsRow>
-    </SettingsGroup>
+    >
+      <SettingsSwitch
+        label="Pause guide check-ins"
+        checked={Boolean(pref?.coach_muted)}
+        disabled={!pref || saving || Boolean(pref.global_coach_muted)}
+        onChange={(checked) => void toggle(checked)}
+      />
+    </SettingsRow>
   );
 }
 import { discoverListingGap } from "../../../../shared/communityDiscoverListing";
@@ -322,7 +237,14 @@ function CommunityGeneralSettingsV1({
   isOwner,
   state,
   actions,
-}: SharedSettingsProps & { activeCommunity: ActiveCommunity; isOwner: boolean }) {
+  session,
+  ensureSession,
+}: SharedSettingsProps & {
+  activeCommunity: ActiveCommunity;
+  isOwner: boolean;
+  session: unknown;
+  ensureSession: (session: any) => Promise<any | null>;
+}) {
   // Listed but not showing yet: what Discover still needs (shown under the switch).
   const discoverGap = discoverListingGap({
     listed: state.communitySettingsVisibility === "published",
@@ -438,6 +360,15 @@ function CommunityGeneralSettingsV1({
             />
           </SettingsRow>
         </SettingsGroup>
+      ) : null}
+      {isOwner ? (
+        <Suspense fallback={null}>
+          <CommunityWeeklyDigestGroup
+            communityId={activeCommunity.id}
+            session={session}
+            ensureSession={ensureSession}
+          />
+        </Suspense>
       ) : null}
       {isOwner ? (
         <SettingsGroup label="Danger zone" tone="danger">
@@ -816,7 +747,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               </div>
             ) : null}
             {selectedSettingsPane === "community" && !state.isLoadingCommunitySettings && state.isCommunitySettingsReady ? (
-              <CommunityGeneralSettingsV1 activeCommunity={resolvedActiveCommunity} isOwner={isOwnerSettingsLayer} state={state} actions={actions} />
+              <CommunityGeneralSettingsV1
+                activeCommunity={resolvedActiveCommunity}
+                isOwner={isOwnerSettingsLayer}
+                state={state}
+                actions={actions}
+                session={props.session}
+                ensureSession={props.ensureSession}
+              />
             ) : null}
             {isFormPane && selectedSettingsPane !== "community" &&
             !state.isLoadingCommunitySettings &&
@@ -863,49 +801,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 <WebCommunityAiAgentSection {...aiAgentProps} embedded />
               </Suspense>
             ) : null}
-            {/* What the guide does for this person without asking: theirs alone. */}
-            {selectedSettingsPane === "agent" ? (
-              <Suspense fallback={null}>
-                <GuideSoulMemoryCards
-                  mode="personal"
-                  communityId={resolvedActiveCommunity.id}
-                  session={props.session}
-                  ensureSession={props.ensureSession}
-                />
-              </Suspense>
-            ) : null}
-            {selectedSettingsPane === "agent" ? (
-              <BuilderHeartbeatPreferenceSection
-                communityId={resolvedActiveCommunity.id}
-                session={props.session}
-                ensureSession={props.ensureSession}
-                planTier={aiAgentProps.agentPlan?.community?.plan_tier ?? null}
-                isUpgradingPlan={aiAgentProps.agentPlan?.isActing}
-                onUpgradeToChiefOfStaff={
-                  aiAgentProps.agentPlan?.community?.plan_tier === "guide" &&
-                  aiAgentProps.agentPlan?.switchTier
-                    ? () =>
-                        void aiAgentProps.agentPlan?.switchTier?.(
-                          resolvedActiveCommunity.id,
-                          "chief_of_staff",
-                        )
-                    : undefined
-                }
-              />
-            ) : null}
-            {selectedSettingsPane === "agent" ? (
-              <GuideAllowedSettings communityId={resolvedActiveCommunity.id} session={props.session} />
-            ) : null}
-            {/* House rules for members' own AIs: free or paid, whether or not the guide is on. */}
-            {selectedSettingsPane === "agent" ? (
-              <Suspense fallback={null}>
-                <WebCommunityAiRulesEditor
-                  communityId={resolvedActiveCommunity.id}
-                  session={props.session}
-                  ensureSession={props.ensureSession}
-                />
-              </Suspense>
-            ) : null}
             {selectedSettingsPane === "agent" && isOwnerSettingsLayer ? (
               <Suspense fallback={null}>
                 <GuideSoulMemoryCards
@@ -947,6 +842,16 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                           )
                       : undefined
                   }
+                />
+              </Suspense>
+            ) : null}
+            {/* House rules for members' own AIs: free or paid, collapsed by default. */}
+            {selectedSettingsPane === "agent" ? (
+              <Suspense fallback={null}>
+                <WebCommunityAiRulesEditor
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
                 />
               </Suspense>
             ) : null}

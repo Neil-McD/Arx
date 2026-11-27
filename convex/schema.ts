@@ -1173,6 +1173,17 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community_key", ["communityId", "key"]),
+  userGuideSettings: defineTable({
+    userId: v.id("users"),
+    soulMd: v.optional(v.string()),
+    soulUpdatedAt: v.optional(v.number()),
+    allowPostWithoutAsking: v.optional(v.boolean()),
+    allowMessageWithoutAsking: v.optional(v.boolean()),
+    coachMuted: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   communityFounderBriefSettings: defineTable({
     communityId: v.id("communities"),
     enabled: v.boolean(),
@@ -2421,7 +2432,9 @@ export default defineSchema({
     // What the guide may do without asking: post as them, or reply in their direct messages.
     kind: v.union(v.literal("post"), v.literal("message")),
     createdAt: v.number(),
-  }).index("by_community_user_kind", ["communityId", "userId", "kind"]),
+  })
+    .index("by_community_user_kind", ["communityId", "userId", "kind"])
+    .index("by_user_kind", ["userId", "kind"]),
 
   // One review, as its record: what it read, what it changed and why, and
   // what it cost. Builders read these and can undo one.

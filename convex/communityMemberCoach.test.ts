@@ -475,6 +475,7 @@ test("owner approval delivers check-in atomically into member's private Agent th
   expect(await asMaya.query(api.communityMemberCoach.getMyMemberCoachPreference, { communityId: w.communityId })).toEqual({
     coach_muted: true,
     community_muted: false,
+    global_coach_muted: false,
   });
 
   // Hidden from Home AND refused if send is attempted anyway.

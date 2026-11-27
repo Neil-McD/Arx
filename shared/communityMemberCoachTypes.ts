@@ -122,6 +122,7 @@ export type MemberCoachSettingsView = {
 export type MemberCoachPreferenceView = {
   coach_muted: boolean;
   community_muted: boolean;
+  global_coach_muted?: boolean;
 };
 
 export type BuilderHeartbeatPreferenceView = {

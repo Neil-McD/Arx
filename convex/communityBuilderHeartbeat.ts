@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { readUserGlobalGuideSettings } from "./userGuideSettings";
 import { communityAgentIsOn } from "./communityApps";
 import { readActiveCommunityAllowanceState } from "./communityAllowanceGuardrails";
 import { founderPlanTierHasProactiveAgent } from "../shared/founderPlan";
@@ -95,15 +96,18 @@ async function readBuilderMutedState(
   communityId: Id<"communities">,
   userId: Id<"users">,
 ): Promise<{ muted: boolean; builderCoachMuted: boolean }> {
-  const row = await ctx.db
-    .query("communityMemberSettings")
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", communityId).eq("userId", userId),
-    )
-    .first();
+  const [row, globalPrefs] = await Promise.all([
+    ctx.db
+      .query("communityMemberSettings")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", communityId).eq("userId", userId),
+      )
+      .first(),
+    readUserGlobalGuideSettings(ctx, userId),
+  ]);
   return {
     muted: Boolean(row?.muted),
-    builderCoachMuted: Boolean(row?.builderCoachMuted),
+    builderCoachMuted: Boolean(row?.builderCoachMuted || globalPrefs?.coachMuted),
   };
 }
 
@@ -887,24 +891,21 @@ export const setMyBuilderHeartbeatPreference = mutation({
         builderCoachMuted,
         updatedAt: nowMs,
       });
-      return {
-        eligible: true,
-        enabled: args.enabled,
-        community_muted: Boolean(existing.muted),
-      };
+    } else {
+      await ctx.db.insert("communityMemberSettings", {
+        communityId: args.communityId,
+        userId,
+        muted: false,
+        builderCoachMuted,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
     }
-    await ctx.db.insert("communityMemberSettings", {
-      communityId: args.communityId,
-      userId,
-      muted: false,
-      builderCoachMuted,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
+    const state = await readBuilderMutedState(ctx, args.communityId, userId);
     return {
       eligible: true,
-      enabled: args.enabled,
-      community_muted: false,
+      enabled: !state.builderCoachMuted,
+      community_muted: state.muted,
     };
   },
 });

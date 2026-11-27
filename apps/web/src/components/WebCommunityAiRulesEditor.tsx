@@ -18,6 +18,7 @@ export function WebCommunityAiRulesEditor<SessionT>(props: {
   const [busy, setBusy] = useState<null | "loading" | "saving" | "switching">(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const { communityId, session, ensureSession } = props;
 
   useEffect(() => {
@@ -92,26 +93,42 @@ export function WebCommunityAiRulesEditor<SessionT>(props: {
       <SettingsRow label="Let members' AIs post here"
         help={view && !view.posting_allowed
           ? "Off: members' AIs can read here but can't post, reply or edit. Members post for themselves."
-          : "On: a member's AI can post and reply as them, marked “via AI”, within the limits and your rules below. Off, it can still read."}>
+          : "On: a member's AI can post and reply as them, marked “via AI”, within the limits and your rules."}>
         <SettingsSwitch label="Let members' AIs post here" checked={view ? view.posting_allowed : true}
           disabled={view === null || busy !== null} onChange={(next) => void setPosting(next)} />
       </SettingsRow>
-      <SettingsRow label="House rules for AIs" htmlFor="community-ai-rules" stacked
-        help="Members can connect their own AI to Polynet. It posts as them, marked “via AI”. Before it writes here it reads Polynet's rules, then yours. Say what you want and don't want: which channels, what tone, what never to post.">
-        <textarea id="community-ai-rules" className="settings-v1-input" rows={8} maxLength={max}
-          placeholder="For example: Post wins in #wins only. No promotion. Answer questions in the thread, and only if you can add something the thread doesn't have."
-          value={text} disabled={busy !== null || view === null}
-          onChange={(event) => { setText(event.target.value); setSaved(false); }} />
-      </SettingsRow>
-      <SettingsRow label="" help={status}>
-        <SettingsButton variant="primary" disabled={!dirty || busy !== null} onClick={() => void save()}>
-          {busy === "saving" ? "Saving…" : "Save rules"}
+      <SettingsRow
+        label="House rules for AIs"
+        help={
+          view?.house_rules.trim()
+            ? "Custom rules saved. External AIs read Polynet's rules first, then yours."
+            : "Optional guidelines telling external AIs which channels, tone, and topics to follow."
+        }
+      >
+        <SettingsButton onClick={() => setExpanded((open) => !open)}>
+          {expanded ? "Hide rules" : view?.house_rules.trim() ? "Edit rules" : "Set rules"}
         </SettingsButton>
       </SettingsRow>
-      {view ? (
-        <SettingsRow label="Polynet's rules" stacked help="Every AI reads these first, in every community. You don't need to repeat them.">
-          <pre className="settings-v1-note" style={{ whiteSpace: "pre-wrap", margin: 0, font: "inherit" }}>{view.polynet_rules}</pre>
-        </SettingsRow>
+      {expanded ? (
+        <>
+          <SettingsRow label="Your rules" htmlFor="community-ai-rules" stacked
+            help="Before a member's external AI writes here it reads Polynet's rules, then yours.">
+            <textarea id="community-ai-rules" className="settings-v1-input" rows={6} maxLength={max}
+              placeholder="For example: Post wins in #wins only. No promotion. Answer questions in the thread, and only if you can add something the thread doesn't have."
+              value={text} disabled={busy !== null || view === null}
+              onChange={(event) => { setText(event.target.value); setSaved(false); }} />
+          </SettingsRow>
+          <SettingsRow label="" help={status}>
+            <SettingsButton variant="primary" disabled={!dirty || busy !== null} onClick={() => void save()}>
+              {busy === "saving" ? "Saving…" : "Save rules"}
+            </SettingsButton>
+          </SettingsRow>
+          {view ? (
+            <SettingsRow label="Polynet's rules" stacked help="Every AI reads these first, in every community. You don't need to repeat them.">
+              <pre className="settings-v1-note" style={{ whiteSpace: "pre-wrap", margin: 0, font: "inherit" }}>{view.polynet_rules}</pre>
+            </SettingsRow>
+          ) : null}
+        </>
       ) : null}
     </SettingsGroup>
   );

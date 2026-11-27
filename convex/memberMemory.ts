@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireCommunityChatAccess, resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import { readUserGlobalGuideSettings } from "./userGuideSettings";
 import {
   AGENT_SOUL_MAX_CHARS,
   DEFAULT_PERSONAL_SOUL_MD,
@@ -47,11 +48,31 @@ export const readMemberMemoryInternal = internalQuery({
 export const readMemberSoulInternal = internalQuery({
   args: { communityId: v.id("communities"), userId: v.id("users") },
   handler: async (ctx, args) => {
-    const current = await row(ctx, args.communityId, args.userId);
-    const custom = cleanAgentSoulText(current?.soulMd);
+    const [current, globalPrefs] = await Promise.all([
+      row(ctx, args.communityId, args.userId),
+      readUserGlobalGuideSettings(ctx, args.userId),
+    ]);
+    const communityCustom = cleanAgentSoulText(current?.soulMd);
+    const globalCustom = cleanAgentSoulText(globalPrefs?.soulMd);
+    if (communityCustom) {
+      return {
+        body: communityCustom,
+        isDefault: false,
+        updatedAt: current?.soulUpdatedAt ?? null,
+        updatedBy: current?.soulUpdatedBy ?? null,
+      };
+    }
+    if (globalCustom) {
+      return {
+        body: globalCustom,
+        isDefault: false,
+        updatedAt: globalPrefs?.soulUpdatedAt ?? null,
+        updatedBy: "member" as const,
+      };
+    }
     return {
-      body: custom || DEFAULT_PERSONAL_SOUL_MD,
-      isDefault: !custom,
+      body: DEFAULT_PERSONAL_SOUL_MD,
+      isDefault: true,
       updatedAt: current?.soulUpdatedAt ?? null,
       updatedBy: current?.soulUpdatedBy ?? null,
     };
@@ -195,14 +216,21 @@ export const updateMemberSoulInternal = internalMutation({
   },
 });
 
-function buildMemberSoulMemoryView(current: any) {
+function buildMemberSoulMemoryView(current: any, globalPrefs?: { soulMd?: string; soulUpdatedAt?: number } | null) {
   const entries: PersonalMemoryEntry[] = current?.entries ?? [];
-  const customSoul = cleanAgentSoulText(current?.soulMd);
+  const communityCustom = cleanAgentSoulText(current?.soulMd);
+  const globalCustom = cleanAgentSoulText(globalPrefs?.soulMd);
+  const effectiveSoul = communityCustom || globalCustom || DEFAULT_PERSONAL_SOUL_MD;
+  const usingCommunityOverride = Boolean(communityCustom);
   return {
-    soul_md: customSoul || DEFAULT_PERSONAL_SOUL_MD,
-    soul_is_default: !customSoul,
-    soul_updated_at: current?.soulUpdatedAt ?? null,
-    soul_updated_by: current?.soulUpdatedBy ?? null,
+    soul_md: effectiveSoul,
+    soul_is_default: !usingCommunityOverride,
+    soul_updated_at: usingCommunityOverride
+      ? (current?.soulUpdatedAt ?? null)
+      : (globalCustom ? (globalPrefs?.soulUpdatedAt ?? null) : (current?.soulUpdatedAt ?? null)),
+    soul_updated_by: usingCommunityOverride
+      ? (current?.soulUpdatedBy ?? null)
+      : (globalCustom ? "member" : (current?.soulUpdatedBy ?? null)),
     soul_max_chars: AGENT_SOUL_MAX_CHARS,
     entries: entries.map((entry) => ({
       text: entry.text,
@@ -225,8 +253,11 @@ export const getMyGuideSoulAndMemory = query({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const current = await row(ctx, args.communityId, userId);
-    return buildMemberSoulMemoryView(current);
+    const [current, globalPrefs] = await Promise.all([
+      row(ctx, args.communityId, userId),
+      readUserGlobalGuideSettings(ctx, userId),
+    ]);
+    return buildMemberSoulMemoryView(current, globalPrefs);
   },
 });
 
@@ -254,7 +285,11 @@ export const saveMyGuideSoul = mutation({
           updatedAt: nowMs,
         });
       }
-      return buildMemberSoulMemoryView(await row(ctx, args.communityId, userId));
+      const [updated, globalPrefs] = await Promise.all([
+        row(ctx, args.communityId, userId),
+        readUserGlobalGuideSettings(ctx, userId),
+      ]);
+      return buildMemberSoulMemoryView(updated, globalPrefs);
     }
     const validated = validateAgentSoulWrite(args.soulMd);
     if (!validated.ok) throw new Error(validated.code);
@@ -276,7 +311,11 @@ export const saveMyGuideSoul = mutation({
         updatedAt: nowMs,
       });
     }
-    return buildMemberSoulMemoryView(await row(ctx, args.communityId, userId));
+    const [updated, globalPrefs] = await Promise.all([
+      row(ctx, args.communityId, userId),
+      readUserGlobalGuideSettings(ctx, userId),
+    ]);
+    return buildMemberSoulMemoryView(updated, globalPrefs);
   },
 });
 
@@ -373,6 +412,10 @@ export const saveMyGuideMemory = mutation({
         updatedAt: nowMs,
       });
     }
-    return buildMemberSoulMemoryView(await row(ctx, args.communityId, userId));
+    const [updated, globalPrefs] = await Promise.all([
+      row(ctx, args.communityId, userId),
+      readUserGlobalGuideSettings(ctx, userId),
+    ]);
+    return buildMemberSoulMemoryView(updated, globalPrefs);
   },
 });

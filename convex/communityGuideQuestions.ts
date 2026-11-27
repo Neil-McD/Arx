@@ -11,6 +11,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveCommunityChannelActor } from "./communityChannelAccess";
 import { communityMembershipRowIsActive } from "./communityCore";
 import { resolveAuthorizedCommunityChannel } from "./communityChannelCore";
+import { readUserGlobalGuideSettings } from "./userGuideSettings";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { GUIDE_ASK_ALWAYS_ALLOWABLE, type GuideAsk } from "../shared/operationCatalog";
 import {
@@ -51,8 +52,17 @@ async function view(ctx: any, row: any): Promise<GuideQuestionView> {
 
 export const isAlwaysAllowedInternal = internalQuery({
   args: { communityId: v.id("communities"), userId: v.id("users"), kind: v.union(v.literal("post"), v.literal("message")) },
-  handler: async (ctx, args) => Boolean(await ctx.db.query("communityGuideAlwaysAllowed")
-    .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("kind", args.kind)).first()),
+  handler: async (ctx, args) => {
+    const [communityAllow, globalPrefs] = await Promise.all([
+      ctx.db.query("communityGuideAlwaysAllowed")
+        .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("kind", args.kind)).first(),
+      readUserGlobalGuideSettings(ctx, args.userId),
+    ]);
+    if (communityAllow) return true;
+    return args.kind === "post"
+      ? globalPrefs?.allowPostWithoutAsking === true
+      : globalPrefs?.allowMessageWithoutAsking === true;
+  },
 });
 
 // Who wrote each post and how it starts, for a question about removing them.
@@ -367,9 +377,19 @@ export const getGuideAlwaysAllowed = query({
   args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
-    const rows = await ctx.db.query("communityGuideAlwaysAllowed")
-      .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).take(10);
-    return { post: rows.some((row) => row.kind === "post"), message: rows.some((row) => row.kind === "message") };
+    const [rows, globalPrefs] = await Promise.all([
+      ctx.db.query("communityGuideAlwaysAllowed")
+        .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).take(10),
+      readUserGlobalGuideSettings(ctx, userId),
+    ]);
+    const postGlobal = globalPrefs?.allowPostWithoutAsking === true;
+    const messageGlobal = globalPrefs?.allowMessageWithoutAsking === true;
+    return {
+      post: rows.some((row) => row.kind === "post") || postGlobal,
+      message: rows.some((row) => row.kind === "message") || messageGlobal,
+      post_global: postGlobal,
+      message_global: messageGlobal,
+    };
   },
 });
 

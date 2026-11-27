@@ -28,6 +28,7 @@ import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { ensureChiefOfStaffFounderBriefEnrolled } from "./communityFounderBrief";
+import { readUserGlobalGuideSettings } from "./userGuideSettings";
 import { runDueBuilderHeartbeatsForAction } from "./communityBuilderHeartbeat";
 import {
   readActiveCommunityAllowanceState,
@@ -149,14 +150,19 @@ async function readMemberMutedState(
   ctx: any,
   communityId: Id<"communities">,
   userId: Id<"users">,
-): Promise<{ muted: boolean; coachMuted: boolean }> {
-  const row = await ctx.db
-    .query("communityMemberSettings")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId))
-    .first();
+): Promise<{ muted: boolean; coachMuted: boolean; globalCoachMuted: boolean }> {
+  const [row, globalPrefs] = await Promise.all([
+    ctx.db
+      .query("communityMemberSettings")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId))
+      .first(),
+    readUserGlobalGuideSettings(ctx, userId),
+  ]);
+  const globalCoachMuted = globalPrefs?.coachMuted === true;
   return {
     muted: Boolean(row?.muted),
-    coachMuted: Boolean(row?.coachMuted),
+    coachMuted: Boolean(row?.coachMuted || globalCoachMuted),
+    globalCoachMuted,
   };
 }
 
@@ -2634,7 +2640,7 @@ async function buildCoachSettingsView(
     enabled: row ? Boolean(row.enabled) : true,
     auto_reasons: normalizeMemberCoachReasons(row?.autoReasons ?? []),
     auto_reply_enabled: Boolean(row?.autoReplyEnabled),
-    thread_followup_enabled: row?.threadFollowupEnabled !== false,
+    thread_followup_enabled: true,
     weekly_digest_enabled: row?.weeklyDigestEnabled !== false,
     sent_this_week: sentWeek.length,
     waiting_count: waiting.filter((item: any) => nowMs - item.createdAt <= MEMBER_COACH_DRAFT_MAX_AGE_MS).length,
@@ -2780,6 +2786,7 @@ export const getMyMemberCoachPreference = query({
     return {
       coach_muted: state.coachMuted,
       community_muted: state.muted,
+      global_coach_muted: state.globalCoachMuted,
     };
   },
 });
@@ -2803,16 +2810,21 @@ export const setMyMemberCoachPreference = mutation({
         coachMuted: args.coachMuted,
         updatedAt: nowMs,
       });
-      return { coach_muted: args.coachMuted, community_muted: Boolean(existing.muted) };
+    } else {
+      await ctx.db.insert("communityMemberSettings", {
+        communityId: args.communityId,
+        userId,
+        muted: false,
+        coachMuted: args.coachMuted,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
     }
-    await ctx.db.insert("communityMemberSettings", {
-      communityId: args.communityId,
-      userId,
-      muted: false,
-      coachMuted: args.coachMuted,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { coach_muted: args.coachMuted, community_muted: false };
+    const state = await readMemberMutedState(ctx, args.communityId, userId);
+    return {
+      coach_muted: state.coachMuted,
+      community_muted: state.muted,
+      global_coach_muted: state.globalCoachMuted,
+    };
   },
 });

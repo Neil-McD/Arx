@@ -1,5 +1,5 @@
-// Owner-only Settings -> Guide controls for Proactive Member Coach
-// (docs/specs/proactive-community-agent-v0.md, slice 1). Loaded on demand for
+// Owner-only Settings -> Guide controls for AI credits & Chief of Staff
+// automation (docs/specs/proactive-community-agent-v0.md). Loaded on demand for
 // community owners only so members never download it.
 import { useEffect, useState } from "react";
 import { formatAllowanceResetDate } from "../../../../shared/allowanceGuardrails";
@@ -7,7 +7,6 @@ import { formatAiCredits } from "../../../../shared/agentRoiSummary";
 import { formatCompactMrr } from "../../../../shared/memberRevenueLedger";
 import {
   MEMBER_COACH_REASONS,
-  MEMBER_COACH_REASON_LABELS,
   type MemberCoachReason,
   type MemberCoachSettingsView,
 } from "../../../../shared/communityMemberCoachTypes";
@@ -26,6 +25,103 @@ import {
 } from "../../../../shared/founderUsageBoosts";
 import type { FounderPlanTier } from "../../../../shared/founderPlan";
 import { SettingsButton, SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
+
+// Routine check-in reasons sent automatically when the founder picks
+// "Send routine check-ins automatically". Under "Review on Home first",
+// routine check-ins wait on Home while private member commitment follow-ups
+// stay private and automatic so members' private goals are never exposed.
+const ROUTINE_AUTO_REASONS: MemberCoachReason[] = [...MEMBER_COACH_REASONS];
+const REVIEW_FIRST_AUTO_REASONS: MemberCoachReason[] = ["commitment_followup"];
+
+export type MemberCheckInPosture = "review" | "auto";
+
+export function deriveMemberCheckInPosture(
+  autoReasons: readonly MemberCoachReason[],
+): MemberCheckInPosture {
+  const nonPrivateAuto = autoReasons.filter((reason) => reason !== "commitment_followup");
+  return nonPrivateAuto.length > 0 ? "auto" : "review";
+}
+
+export function CommunityWeeklyDigestGroup(props: {
+  communityId: string;
+  session: unknown;
+  ensureSession: (session: any) => Promise<any | null>;
+}) {
+  const [settings, setSettings] = useState<MemberCoachSettingsView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSettings(null);
+    setError(null);
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        const loaded = session
+          ? await getCloudMemberCoachSettings({ session, communityId: props.communityId })
+          : null;
+        if (!cancelled) setSettings(loaded);
+      } catch {
+        if (!cancelled) setError("Couldn't load weekly digest setting.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.communityId]);
+
+  const weeklyDigestEnabled = settings ? settings.weekly_digest_enabled : true;
+
+  const toggleDigest = async (checked: boolean) => {
+    if (saving || !settings) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) throw new Error("not_signed_in");
+      setSettings(
+        await setCloudMemberCoachSettings({
+          session,
+          communityId: props.communityId,
+          enabled: settings.enabled,
+          autoReasons: settings.auto_reasons,
+          autoReplyEnabled: Boolean(settings.auto_reply_enabled),
+          threadFollowupEnabled: settings.thread_followup_enabled,
+          weeklyDigestEnabled: checked,
+        }),
+      );
+    } catch {
+      setError("That didn't save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingsGroup label="Community emails">
+      <SettingsRow
+        label="Weekly community digest"
+        help={
+          error ? (
+            <span className="settings-v1-error" role="alert">{error}</span>
+          ) : weeklyDigestEnabled ? (
+            "Sends a weekly highlights email (new posts, lessons, and activity) so quiet members stay in the loop and return. Quiet weeks are skipped automatically. Free — uses 0 AI credits."
+          ) : (
+            "Weekly community digest emails are paused for this community."
+          )
+        }
+      >
+        <SettingsSwitch
+          label="Weekly community digest"
+          checked={weeklyDigestEnabled}
+          disabled={!settings || saving}
+          onChange={(checked) => void toggleDigest(checked)}
+        />
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
 
 export function CommunityMemberCoachSettingsSection(props: {
   communityId: string;
@@ -98,7 +194,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           scheduleRefresh(6_000);
         }
       } catch {
-        if (!cancelled) setError("Couldn't load member check-in settings.");
+        if (!cancelled) setError("Couldn't load guide credit & automation settings.");
       }
     })();
     return () => {
@@ -108,11 +204,8 @@ export function CommunityMemberCoachSettingsSection(props: {
   }, [props.communityId, props.planTier]);
 
   const save = async (next: {
-    enabled: boolean;
     autoReasons: MemberCoachReason[];
     autoReplyEnabled: boolean;
-    threadFollowupEnabled: boolean;
-    weeklyDigestEnabled: boolean;
     usageBoostCapCents?: number;
   }) => {
     if (saving) return;
@@ -125,11 +218,12 @@ export function CommunityMemberCoachSettingsSection(props: {
         await setCloudMemberCoachSettings({
           session,
           communityId: props.communityId,
-          enabled: next.enabled,
+          // Always on for Chief of Staff; active-thread follow-ups always on.
+          enabled: true,
           autoReasons: next.autoReasons,
           autoReplyEnabled: next.autoReplyEnabled,
-          threadFollowupEnabled: next.threadFollowupEnabled,
-          weeklyDigestEnabled: next.weeklyDigestEnabled,
+          threadFollowupEnabled: true,
+          weeklyDigestEnabled: settings ? settings.weekly_digest_enabled : true,
           ...(next.usageBoostCapCents !== undefined
             ? { usageBoostCapCents: next.usageBoostCapCents }
             : {}),
@@ -168,38 +262,17 @@ export function CommunityMemberCoachSettingsSection(props: {
     }
   };
 
-  const enabled = settings ? settings.enabled : true;
-  const autoReasons = settings?.auto_reasons ?? [];
+  const autoReasons = settings?.auto_reasons ?? REVIEW_FIRST_AUTO_REASONS;
+  const checkInPosture: MemberCheckInPosture = deriveMemberCheckInPosture(autoReasons);
   const autoReplyEnabled = Boolean(settings?.auto_reply_enabled);
-  const threadFollowupEnabled = settings ? settings.thread_followup_enabled : true;
-  const weeklyDigestEnabled = settings ? settings.weekly_digest_enabled : true;
-  const toggleAutoReason = (reason: MemberCoachReason, checked: boolean) => {
-    const next = checked
-      ? [...new Set<MemberCoachReason>([...autoReasons, reason])]
-      : autoReasons.filter((item) => item !== reason);
-    void save({ enabled, autoReasons: next, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled });
-  };
-
   const statusNote = settings && settings.sent_this_week > 0
     ? ` ${settings.sent_this_week} sent this week.`
     : "";
-  const heartbeat = settings?.heartbeat;
   const impact = settings?.impact;
   const effectivePlanTier: FounderPlanTier | null =
     props.planTier ?? impact?.plan_tier ?? null;
   const isGuideTier = effectivePlanTier === "guide";
   const includedLabel = formatAiCredits(impact?.included_allowance_micros ?? impact?.allowance_micros ?? 20_000_000);
-  const tierLabel =
-    heartbeat?.community_tier === "paused"
-      ? "Paused · 0 credits until new activity"
-      : heartbeat?.community_tier === "cooling"
-        ? "Cooling · daily rhythm"
-        : heartbeat?.community_tier === "warm"
-          ? "Warm · 6-hour rhythm"
-          : "Active · 2-hour rhythm";
-  const countsSummary = heartbeat?.counts
-    ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up (0 credits)`
-    : "Updates automatically on the next heartbeat scan.";
   const resetLabel = formatAllowanceResetDate(impact?.cycle_end_at);
   const paidBoostMicros = impact?.paid_boost_micros ?? 0;
   const includedMicros = impact?.included_allowance_micros ?? impact?.allowance_micros ?? 0;
@@ -212,10 +285,10 @@ export function CommunityMemberCoachSettingsSection(props: {
   const spendSummary = impact
     ? isGuideTier
       ? `${formatAiCredits(impact.total_micros, { unit: false })}${impact.spend_truncated ? "+" : ""} of ${formatAiCredits(impact.allowance_micros)} used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""}.`
-      : `${formatAiCredits(impact.total_micros, { unit: false })}${impact.spend_truncated ? "+" : ""} of ${formatAiCredits(impact.allowance_micros)}${allowanceBreakdown} used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatAiCredits(impact.live_chat_micros, { unit: false })} · Heartbeats ${formatAiCredits(impact.proactive_micros, { unit: false })} · Briefs ${formatAiCredits(impact.brief_micros, { unit: false })}.`
+      : `${formatAiCredits(impact.total_micros, { unit: false })}${impact.spend_truncated ? "+" : ""} of ${formatAiCredits(impact.allowance_micros)}${allowanceBreakdown} used (${impact.percent_used}%)${resetLabel ? ` · Resets ${resetLabel}` : ""} · Live chats ${formatAiCredits(impact.live_chat_micros, { unit: false })} · Check-ins ${formatAiCredits(impact.proactive_micros, { unit: false })} · Briefs ${formatAiCredits(impact.brief_micros, { unit: false })}.`
     : null;
   const reserveNote = !isGuideTier && impact?.background_ai_paused
-    ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining credits for live chats, @mentions, and your Daily Brief."
+    ? "Background check-ins and reply drafts are paused at 90% to reserve remaining credits for live chats, @mentions, and your Morning Brief."
     : null;
   const savedMembers90d = !isGuideTier && impact ? Number(impact.verified_saved_members_90d ?? 0) : 0;
   const savedMrrLabel =
@@ -236,7 +309,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           ? impact.reengagement_truncated
             ? `${impact.reengaged_30d} of ${impact.contacted_30d} sampled members checked in came back in the last 30 days.`
             : `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
-          : "No proactive check-ins sent in the last 30 days yet.",
+          : null,
         savedRevenueSummary,
       ]
         .filter(Boolean)
@@ -249,19 +322,16 @@ export function CommunityMemberCoachSettingsSection(props: {
         ? " is-warn"
         : "";
 
+  // On Guide tier, show only the monthly credits meter (no duplicate upgrade prompt).
+  if (isGuideTier && (!impact || !spendSummary)) {
+    return null;
+  }
+
   return (
-    <SettingsGroup label={isGuideTier ? "Guide credits & automation" : "Chief of Staff & credits"}>
-      {!isGuideTier && settings ? (
-        <SettingsRow
-          label="Heartbeat cadence"
-          help={`${tierLabel}. ${countsSummary}`}
-        >
-          <span className="settings-v1-value">{heartbeat?.community_tier === "paused" ? "Paused" : "Live"}</span>
-        </SettingsRow>
-      ) : null}
+    <SettingsGroup label={isGuideTier ? "Monthly AI credits" : "Chief of Staff & credits"}>
       {impact && spendSummary ? (
         <SettingsRow
-          label="Monthly AI credits & impact"
+          label={isGuideTier ? "Credits used this cycle" : "Monthly AI credits & impact"}
           help={
             <div className="guide-allowance-meter">
               <div
@@ -305,11 +375,8 @@ export function CommunityMemberCoachSettingsSection(props: {
             disabled={!settings || saving}
             onChange={(event) =>
               void save({
-                enabled,
                 autoReasons,
                 autoReplyEnabled,
-                threadFollowupEnabled,
-                weeklyDigestEnabled,
                 usageBoostCapCents: Number(event.target.value),
               })
             }
@@ -343,65 +410,43 @@ export function CommunityMemberCoachSettingsSection(props: {
           </SettingsButton>
         </SettingsRow>
       ) : null}
-      <SettingsRow
-        label="Weekly community digest (0 credits)"
-        help={
-          weeklyDigestEnabled
-            ? "Sends a zero-credit weekly highlights email (new posts, lessons, and activity) so quiet and handed-off members stay in the loop and return. Quiet weeks are skipped automatically."
-            : "Weekly community digest emails are paused for this community."
-        }
-      >
-        <SettingsSwitch
-          label="Weekly community digest (0 credits)"
-          checked={weeklyDigestEnabled}
-          disabled={!settings || saving}
-          onChange={(checked) =>
-            void save({ enabled, autoReasons, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled: checked })
-          }
-        />
-      </SettingsRow>
-      <SettingsRow
-        label="Follow up in active threads"
-        help={
-          threadFollowupEnabled
-            ? "Once your guide replies in a thread, members can keep talking to it for up to 2 hours (up to 4 follow-ups) without tagging it again. Stays silent on wrap-ups or replies aimed at other members."
-            : "Members must tag your guide or reply directly to its message for every follow-up in a thread."
-        }
-      >
-        <SettingsSwitch
-          label="Follow up in active threads"
-          checked={threadFollowupEnabled}
-          disabled={!settings || saving}
-          onChange={(checked) =>
-            void save({ enabled, autoReasons, autoReplyEnabled, threadFollowupEnabled: checked, weeklyDigestEnabled })
-          }
-        />
-      </SettingsRow>
-      {isGuideTier ? (
-        <SettingsRow
-          label="Proactive member check-ins & auto-replies"
-          help="Included on Chief of Staff ($100/month with 20,000 AI credits included). Unlocks proactive member check-ins, unanswered-question auto-replies, Daily Briefs, personal builder check-ins, and optional $30 boosts (+20,000 credits)."
-        >
-          {props.onUpgradeToChiefOfStaff ? (
-            <SettingsButton
-              variant="primary"
-              disabled={props.isUpgradingPlan}
-              onClick={props.onUpgradeToChiefOfStaff}
-            >
-              {props.isUpgradingPlan ? "Upgrading…" : "Upgrade to Chief of Staff"}
-            </SettingsButton>
-          ) : (
-            <span className="settings-v1-value">Chief of Staff</span>
-          )}
-        </SettingsRow>
-      ) : (
+      {!isGuideTier ? (
         <>
+          <SettingsRow
+            label="Member check-ins"
+            htmlFor="member-checkin-posture"
+            help={
+              error ? (
+                <span className="settings-v1-error" role="alert">{error}</span>
+              ) : checkInPosture === "auto" ? (
+                `Always on — sends Day-0 welcomes, quiet newcomer check-ins, course nudges, Board coaching, and event nudges automatically during daytime hours (max 2 per member per week, never during active chats).${statusNote}`
+              ) : (
+                `Always on — prepares drafts on Home for your one-click OK before messaging members. Private member goal follow-ups stay private and automatic.${statusNote}`
+              )
+            }
+          >
+            <SettingsSelect
+              id="member-checkin-posture"
+              value={checkInPosture}
+              disabled={!settings || saving}
+              onChange={(event) => {
+                const nextPosture = event.target.value as MemberCheckInPosture;
+                void save({
+                  autoReasons: nextPosture === "auto" ? ROUTINE_AUTO_REASONS : REVIEW_FIRST_AUTO_REASONS,
+                  autoReplyEnabled,
+                });
+              }}
+            >
+              <option value="review">Review on Home first</option>
+              <option value="auto">Send routine check-ins automatically</option>
+            </SettingsSelect>
+          </SettingsRow>
           <SettingsRow
             label="Auto-reply to unanswered questions"
             help={
               autoReplyEnabled
                 ? "Cited replies from lessons and community or pod notes post automatically during daytime hours (up to 3 per day community-wide, 1 per pod)."
-                : 'Drafts wait in "Your guide suggests" on Home until you post them. Turn on to post cited replies automatically during daytime hours.'
+                : "Drafts wait on Home until you post them. Turn on to post cited replies automatically during daytime hours."
             }
           >
             <SettingsSwitch
@@ -409,62 +454,12 @@ export function CommunityMemberCoachSettingsSection(props: {
               checked={autoReplyEnabled}
               disabled={!settings || saving}
               onChange={(checked) =>
-                void save({ enabled, autoReasons, autoReplyEnabled: checked, threadFollowupEnabled, weeklyDigestEnabled })
+                void save({ autoReasons, autoReplyEnabled: checked })
               }
             />
           </SettingsRow>
-          <SettingsRow
-            label="Prepare member check-ins"
-            help={
-              error ? (
-                <span className="settings-v1-error" role="alert">{error}</span>
-              ) : (
-                `Your guide welcomes new members and spots quiet newcomers, stalled learners, and quiet members before an event, putting private drafts in "Your guide suggests" on Home. At most 2 messages per member per week, 48 hours apart, never during quiet hours or active chats.${statusNote}`
-              )
-            }
-          >
-            <SettingsSwitch
-              label="Prepare member check-ins"
-              checked={enabled}
-              disabled={!settings || saving}
-              onChange={(checked) =>
-                void save({ enabled: checked, autoReasons, autoReplyEnabled, threadFollowupEnabled, weeklyDigestEnabled })
-              }
-            />
-          </SettingsRow>
-          {enabled ? (
-            <>
-              {MEMBER_COACH_REASONS.map((reason) => {
-                const copy = MEMBER_COACH_REASON_LABELS[reason];
-                const isAuto = autoReasons.includes(reason);
-                const modeHelp = copy.privateAutoOnly
-                  ? isAuto
-                    ? "Sends directly to their private thread during daytime hours."
-                    : "Off — enable to let your guide follow up privately on goals members share."
-                  : isAuto
-                    ? reason === "member_onboarding"
-                      ? "Sends right away when someone joins live, or during daytime hours for approved joins."
-                      : "Sends automatically during daytime hours."
-                    : "Waits for your approval on Home first.";
-                return (
-                  <SettingsRow
-                    key={reason}
-                    label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
-                    help={`${copy.description} ${modeHelp}`}
-                  >
-                    <SettingsSwitch
-                      label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
-                      checked={isAuto}
-                      disabled={!settings || saving}
-                      onChange={(checked) => toggleAutoReason(reason, checked)}
-                    />
-                  </SettingsRow>
-                );
-              })}
-            </>
-          ) : null}
         </>
-      )}
+      ) : null}
     </SettingsGroup>
   );
 }
