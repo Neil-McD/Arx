@@ -15,7 +15,8 @@ import {
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import {
-  readCommunityPostSignalsForAnalytics,
+  readMemberActivityTimestampsInWindow,
+  readMemberFirstPostSignalsForAnalytics,
   readStagesForCommunity,
 } from "./communityMemberJourney";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
@@ -35,7 +36,7 @@ import {
 } from "../shared/retentionAnalytics";
 
 const DAY_MS = 24 * 60 * 60_000;
-const MAX_RETENTION_MEMBERS = 400;
+const MAX_RETENTION_MEMBERS = 200;
 const MAX_AUX_ROWS = 1_000;
 
 export const getCommunityRetentionAnalytics = query({
@@ -79,7 +80,6 @@ export const getCommunityRetentionAnalytics = query({
       goalFacts,
       communityDeliveries,
       auditRows,
-      postSignalsByUser,
       hasProactiveAgent,
     ] = await Promise.all([
       ctx.db
@@ -132,7 +132,6 @@ export const getCommunityRetentionAnalytics = query({
         .withIndex("by_community_createdAt", (q) => q.eq("communityId", args.communityId))
         .order("desc")
         .take(800),
-      readCommunityPostSignalsForAnalytics(ctx, args.communityId),
       communityHasProactiveAgentTier(ctx, args.communityId, nowMs),
     ]);
 
@@ -140,6 +139,31 @@ export const getCommunityRetentionAnalytics = query({
     const nonOwnerMemberships = rawMemberships.filter((row) => String(row.userId) !== ownerKey);
     const isCapped = nonOwnerMemberships.length > MAX_RETENTION_MEMBERS;
     const memberships = nonOwnerMemberships.slice(0, MAX_RETENTION_MEMBERS);
+    const sampledUserIds = memberships.map((m) => m.userId);
+
+    // Per-member indexed reads for historical post signals and canonical first lesson completions,
+    // so large communities never lose older posts or overwrite first-lesson timestamps with later ones.
+    const [postSignalsByUser, firstLessonByUserEntries] = await Promise.all([
+      readMemberFirstPostSignalsForAnalytics(ctx, args.communityId, sampledUserIds),
+      Promise.all(
+        sampledUserIds.map(async (userId) => {
+          const earliest = await ctx.db
+            .query("communityLessonProgress")
+            .withIndex("by_community_user_completedAt", (q) =>
+              q.eq("communityId", args.communityId).eq("userId", userId),
+            )
+            .order("asc")
+            .first();
+          return [
+            String(userId),
+            typeof earliest?.completedAt === "number" && Number.isFinite(earliest.completedAt)
+              ? earliest.completedAt
+              : null,
+          ] as const;
+        }),
+      ),
+    ]);
+    const firstLessonAtByUser = new Map<string, number | null>(firstLessonByUserEntries);
 
     // Load referenced price points (deduplicated) for accurate historical LTV.
     const pricePointIds = new Set<string>();
@@ -293,128 +317,171 @@ export const getCommunityRetentionAnalytics = query({
       })),
     );
 
-    const memberInputs: RetentionMemberInput[] = memberships.map((membership) => {
-      const userKey = String(membership.userId);
-      const card = cardByUser.get(userKey) ?? null;
-      const posts = postSignalsByUser.get(userKey) ?? {
-        postsCount: 0,
-        firstPostAtMs: null,
-        latestPostAtMs: null,
-      };
-      const courses = courseByUser.get(userKey) ?? {
-        lessonsDoneCount: 0,
-        firstLessonAtMs: null,
-        latestLessonAtMs: null,
-      };
-      const goalAt = goalByUser.get(userKey) ?? null;
-      const presence = presenceByUser.get(userKey) ?? null;
-      const presenceSeenAt =
-        presence && (presence.activeUntil != null || presence.lastSeenAt > presence.createdAt)
-          ? Number(presence.lastSeenAt)
-          : null;
-      const lastAppActivityAtMs =
-        typeof card?.lastAppActivityAt === "number" && Number.isFinite(card.lastAppActivityAt)
-          ? card.lastAppActivityAt
-          : null;
-      const completedMilestones = Array.isArray(card?.completedMilestones)
-        ? card.completedMilestones.map((m: any) => ({
-            key: String(m.key),
-            completedAt: Number(m.completedAt ?? 0),
-            source: typeof m.source === "string" ? m.source : undefined,
-          }))
-        : [];
+    const memberInputs: RetentionMemberInput[] = await Promise.all(
+      memberships.map(async (membership) => {
+        const userKey = String(membership.userId);
+        const card = cardByUser.get(userKey) ?? null;
+        const posts = postSignalsByUser.get(userKey) ?? {
+          postsCount: 0,
+          firstPostAtMs: null,
+        };
+        const courses = courseByUser.get(userKey) ?? {
+          lessonsDoneCount: 0,
+          firstLessonAtMs: null,
+          latestLessonAtMs: null,
+        };
+        const canonicalFirstLessonAtMs = firstLessonAtByUser.get(userKey) ?? null;
+        const lessonsDoneCount = Math.max(
+          courses.lessonsDoneCount,
+          canonicalFirstLessonAtMs !== null ? 1 : 0,
+        );
+        const firstLessonAtMs = canonicalFirstLessonAtMs ?? courses.firstLessonAtMs;
+        const goalAt = goalByUser.get(userKey) ?? null;
+        const presence = presenceByUser.get(userKey) ?? null;
+        const presenceSeenAt =
+          presence && (presence.activeUntil != null || presence.lastSeenAt > presence.createdAt)
+            ? Number(presence.lastSeenAt)
+            : null;
+        const lastAppActivityAtMs =
+          typeof card?.lastAppActivityAt === "number" && Number.isFinite(card.lastAppActivityAt)
+            ? card.lastAppActivityAt
+            : null;
+        const completedMilestones = Array.isArray(card?.completedMilestones)
+          ? card.completedMilestones.map((m: any) => ({
+              key: String(m.key),
+              completedAt: Number(m.completedAt ?? 0),
+              source: typeof m.source === "string" ? m.source : undefined,
+            }))
+          : [];
 
-      const userSubs = (subsByUser.get(userKey) ?? []).map((sub: any) => ({
-        status: String(sub.status ?? ""),
-        pricePoint: sub.pricePointId ? (pricePointById.get(String(sub.pricePointId)) ?? null) : null,
-        createdAt: Number(sub.createdAt ?? 0),
-        updatedAt: Number(sub.updatedAt ?? sub.createdAt ?? 0),
-        currentPeriodStartAt: sub.currentPeriodStartAt ?? null,
-        currentPeriodEndAt: sub.currentPeriodEndAt ?? null,
-        endedAt: sub.endedAt ?? null,
-        cancelAtPeriodEnd: Boolean(sub.cancelAtPeriodEnd),
-        riskAccessState: sub.riskAccessState ?? null,
-      }));
-      const userPods = (podsByUser.get(userKey) ?? []).map((pod: any) => ({
-        status: String(pod.status ?? ""),
-        amountBaseUnits: Number(pod.amountBaseUnits ?? 0),
-        currency: String(pod.currency ?? "USD"),
-        createdAt: Number(pod.createdAt ?? 0),
-        grantedAt: pod.grantedAt ?? null,
-        refundDue: Boolean(pod.refundDue),
-      }));
+        const userSubs = (subsByUser.get(userKey) ?? []).map((sub: any) => ({
+          status: String(sub.status ?? ""),
+          pricePoint: sub.pricePointId
+            ? (pricePointById.get(String(sub.pricePointId)) ?? null)
+            : null,
+          createdAt: Number(sub.createdAt ?? 0),
+          updatedAt: Number(sub.updatedAt ?? sub.createdAt ?? 0),
+          currentPeriodStartAt: sub.currentPeriodStartAt ?? null,
+          currentPeriodEndAt: sub.currentPeriodEndAt ?? null,
+          endedAt: sub.endedAt ?? null,
+          cancelAtPeriodEnd: Boolean(sub.cancelAtPeriodEnd),
+          riskAccessState: sub.riskAccessState ?? null,
+        }));
+        const userPods = (podsByUser.get(userKey) ?? []).map((pod: any) => ({
+          status: String(pod.status ?? ""),
+          amountBaseUnits: Number(pod.amountBaseUnits ?? 0),
+          currency: String(pod.currency ?? "USD"),
+          createdAt: Number(pod.createdAt ?? 0),
+          grantedAt: pod.grantedAt ?? null,
+          refundDue: Boolean(pod.refundDue),
+        }));
 
-      const revenue = computeMemberRevenueSummary({
-        membership: {
-          state: membership.state,
-          createdAt: membership.createdAt,
-          activatedAt: membership.activatedAt,
-          revokedAt: membership.revokedAt,
-          revokedReason: membership.revokedReason,
-        },
-        subscriptions: userSubs,
-        subscriptionAuditEvents: auditByUser.get(userKey) ?? [],
-        podPayments: userPods,
-        nowMs,
-      });
+        const revenue = computeMemberRevenueSummary({
+          membership: {
+            state: membership.state,
+            createdAt: membership.createdAt,
+            activatedAt: membership.activatedAt,
+            revokedAt: membership.revokedAt,
+            revokedReason: membership.revokedReason,
+          },
+          subscriptions: userSubs,
+          subscriptionAuditEvents: auditByUser.get(userKey) ?? [],
+          podPayments: userPods,
+          nowMs,
+        });
 
-      const sortedSubs = [...userSubs].sort((a, b) => b.updatedAt - a.updatedAt);
-      const primarySub = sortedSubs.find((s) => s.status !== "ended") ?? sortedSubs[0] ?? null;
-      const primarySubArg =
-        primarySub && primarySub.pricePoint
-          ? {
-              status: primarySub.status,
-              currentPeriodStartAt: primarySub.currentPeriodStartAt,
-              riskAccessState: primarySub.riskAccessState,
-              activeMrrBaseUnits: monthlyMrrForPricePoint(primarySub.pricePoint),
-              currency: primarySub.pricePoint.currency,
-              currencyDecimals: primarySub.pricePoint.currencyDecimals,
-            }
-          : null;
+        const sortedSubs = [...userSubs].sort((a, b) => b.updatedAt - a.updatedAt);
+        const primarySub = sortedSubs.find((s) => s.status !== "ended") ?? sortedSubs[0] ?? null;
+        const primarySubArg =
+          primarySub && primarySub.pricePoint
+            ? {
+                status: primarySub.status,
+                currentPeriodStartAt: primarySub.currentPeriodStartAt,
+                riskAccessState: primarySub.riskAccessState,
+                activeMrrBaseUnits: monthlyMrrForPricePoint(primarySub.pricePoint),
+                currency: primarySub.pricePoint.currency,
+                currencyDecimals: primarySub.pricePoint.currencyDecimals,
+              }
+            : null;
 
-      const activityTimestamps = [
-        presenceSeenAt,
-        posts.latestPostAtMs,
-        courses.latestLessonAtMs,
-        lastAppActivityAtMs,
-        ...completedMilestones.map((m: { completedAt: number }) => m.completedAt),
-      ];
+        const baseActivityTimestamps = [
+          presenceSeenAt,
+          posts.firstPostAtMs,
+          firstLessonAtMs,
+          courses.latestLessonAtMs,
+          lastAppActivityAtMs,
+          ...completedMilestones.map((m: { completedAt: number }) => m.completedAt),
+        ];
 
-      const verifiedSave30d = evaluateVerifiedSavedMember({
-        earliestAtRiskSentAtMs: earliestCoachSent30ByUser.get(userKey) ?? null,
-        activityTimestampsMs: activityTimestamps,
-        subscription: primarySubArg,
-        membershipRevokedReason: membership.revokedReason,
-      });
-      const verifiedSave90d = evaluateVerifiedSavedMember({
-        earliestAtRiskSentAtMs: earliestCoachSent90ByUser.get(userKey) ?? null,
-        activityTimestampsMs: activityTimestamps,
-        subscription: primarySubArg,
-        membershipRevokedReason: membership.revokedReason,
-      });
+        const sent30 = earliestCoachSent30ByUser.get(userKey) ?? null;
+        const sent90 = earliestCoachSent90ByUser.get(userKey) ?? null;
+        const renewedAt =
+          primarySubArg &&
+          typeof primarySubArg.currentPeriodStartAt === "number" &&
+          Number.isFinite(primarySubArg.currentPeriodStartAt)
+            ? primarySubArg.currentPeriodStartAt
+            : null;
 
-      const isDeAttributed =
-        Boolean(membership.attributionClickId || membership.attributionAnonymousId) ||
-        deDeliveryUsers.has(userKey);
+        // Query exact in-window activity between check-in and renewal so staying active
+        // AFTER renewal never erases a previously verified save.
+        const [inWindow30, inWindow90] = await Promise.all([
+          sent30 !== null && renewedAt !== null && renewedAt > sent30
+            ? readMemberActivityTimestampsInWindow(ctx, {
+                communityId: args.communityId,
+                userId: membership.userId,
+                afterMs: sent30,
+                throughMs: renewedAt,
+              })
+            : Promise.resolve([] as number[]),
+          sent90 !== null && renewedAt !== null && renewedAt > sent90
+            ? sent90 === sent30
+              ? Promise.resolve(null)
+              : readMemberActivityTimestampsInWindow(ctx, {
+                  communityId: args.communityId,
+                  userId: membership.userId,
+                  afterMs: sent90,
+                  throughMs: renewedAt,
+                })
+            : Promise.resolve([] as number[]),
+        ]);
+        const resolvedWindow90 = inWindow90 === null ? inWindow30 : inWindow90;
 
-      return {
-        userId: userKey,
-        joinedAtMs: Number(membership.activatedAt ?? membership.createdAt ?? nowMs),
-        isActive: communityMembershipRowIsActive(membership),
-        source: isDeAttributed ? "distribution_engineer" : "direct",
-        postsCount: posts.postsCount,
-        firstPostAtMs: posts.firstPostAtMs,
-        lessonsDoneCount: courses.lessonsDoneCount,
-        firstLessonAtMs: courses.firstLessonAtMs,
-        hasSharedGoal: goalAt !== null,
-        firstGoalAtMs: goalAt,
-        lastAppActivityAtMs,
-        completedMilestones,
-        revenue,
-        verifiedSave30d,
-        verifiedSave90d,
-      };
-    });
+        const verifiedSave30d = evaluateVerifiedSavedMember({
+          earliestAtRiskSentAtMs: sent30,
+          activityTimestampsMs: [...baseActivityTimestamps, ...inWindow30],
+          subscription: primarySubArg,
+          membershipRevokedReason: membership.revokedReason,
+        });
+        const verifiedSave90d = evaluateVerifiedSavedMember({
+          earliestAtRiskSentAtMs: sent90,
+          activityTimestampsMs: [...baseActivityTimestamps, ...resolvedWindow90],
+          subscription: primarySubArg,
+          membershipRevokedReason: membership.revokedReason,
+        });
+
+        const isDeAttributed =
+          Boolean(membership.attributionClickId || membership.attributionAnonymousId) ||
+          deDeliveryUsers.has(userKey);
+
+        return {
+          userId: userKey,
+          joinedAtMs: Number(membership.activatedAt ?? membership.createdAt ?? nowMs),
+          isActive: communityMembershipRowIsActive(membership),
+          source: isDeAttributed ? "distribution_engineer" : "direct",
+          postsCount: posts.postsCount,
+          firstPostAtMs: posts.firstPostAtMs,
+          lessonsDoneCount,
+          firstLessonAtMs,
+          hasSharedGoal: goalAt !== null,
+          firstGoalAtMs: goalAt,
+          lastAppActivityAtMs,
+          completedMilestones,
+          revenue,
+          verifiedSave30d,
+          verifiedSave90d,
+        };
+      }),
+    );
 
     const hasPaidPlans =
       resolveCommunityEntryPolicy(community) === "paid_subscription" ||

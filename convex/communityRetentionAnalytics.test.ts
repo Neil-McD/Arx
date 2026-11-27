@@ -386,4 +386,207 @@ describe("Slice 4A: getCommunityRetentionAnalytics Convex query", () => {
     expect(analytics.saved_revenue.saved_members_30d).toBe(1);
     expect(analytics.saved_revenue.saved_mrr_30d_base_units).toBe(5000);
   });
+
+  it("uses canonical first lesson completion for TTFV and retains verified save even when the member posts again after renewal", async () => {
+    const LIVE_NOW = Date.now();
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", {
+        authSubject: "owner_p2",
+        email: "owner-p2@example.com",
+        normalizedEmail: "owner-p2@example.com",
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const memberId = await ctx.db.insert("users", {
+        authSubject: "member_p2",
+        email: "member-p2@example.com",
+        normalizedEmail: "member-p2@example.com",
+        createdAt: LIVE_NOW - 35 * DAY_MS,
+        updatedAt: LIVE_NOW - 35 * DAY_MS,
+      });
+      const communityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "p2-club",
+        name: "P2 Club",
+        visibility: "published",
+        entryPolicy: "paid_subscription",
+        inferenceFundingPolicy: "managed_required",
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId,
+        slug: "general",
+        name: "General",
+        accessMode: "all_members",
+        postingPolicy: "members",
+        status: "active",
+        position: 0,
+        createdByUserId: ownerId,
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const moduleId = await ctx.db.insert("communityResourceModules", {
+        communityId,
+        name: "Course 1",
+        sortOrder: 0,
+        createdByUserId: ownerId,
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const lesson1Id = await ctx.db.insert("communityResources", {
+        communityId,
+        moduleId,
+        title: "Lesson 1",
+        type: "document",
+        bodyMd: "Hello",
+        pinned: false,
+        createdByUserId: ownerId,
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const lesson2Id = await ctx.db.insert("communityResources", {
+        communityId,
+        moduleId,
+        title: "Lesson 2",
+        type: "document",
+        bodyMd: "World",
+        pinned: false,
+        createdByUserId: ownerId,
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const pricePointId = await ctx.db.insert("communityPricePoints", {
+        communityId,
+        billingPeriod: "monthly",
+        name: "Monthly",
+        amountBaseUnits: 4900,
+        currency: "USD",
+        currencyDecimals: 2,
+        isCurrent: true,
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      await ctx.db.insert("communityJourneyConfig", {
+        communityId,
+        stages: [
+          {
+            key: "start",
+            name: "Start",
+            goal: "Complete first lesson",
+            position: 0,
+            checkpoints: [{ key: "first_lesson", label: "Completed a lesson", kind: "first_lesson" }],
+          },
+          { key: "active", name: "Active", goal: "Keep going", position: 1, checkpoints: [] },
+        ],
+        updatedByUserId: ownerId,
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const memId = await ctx.db.insert("communityMemberships", {
+        communityId,
+        userId: memberId,
+        role: "member",
+        accessSource: "paid_subscription",
+        pricePointId,
+        state: "active",
+        activatedAt: LIVE_NOW - 30 * DAY_MS,
+        createdAt: LIVE_NOW - 30 * DAY_MS,
+        updatedAt: LIVE_NOW - 2 * DAY_MS,
+      });
+      // Lesson 1 completed 1 day after join; Lesson 2 completed 20 days after join (updating course lastCompletedAt!).
+      await ctx.db.insert("communityLessonProgress", {
+        communityId,
+        userId: memberId,
+        resourceId: lesson1Id,
+        completedAt: LIVE_NOW - 29 * DAY_MS,
+      });
+      await ctx.db.insert("communityLessonProgress", {
+        communityId,
+        userId: memberId,
+        resourceId: lesson2Id,
+        completedAt: LIVE_NOW - 10 * DAY_MS,
+      });
+      await ctx.db.insert("communityCourseProgress", {
+        communityId,
+        moduleId,
+        userId: memberId,
+        doneResourceIds: [lesson1Id, lesson2Id],
+        lastResourceId: lesson2Id,
+        lastCompletedAt: LIVE_NOW - 10 * DAY_MS,
+        updatedAt: LIVE_NOW - 10 * DAY_MS,
+      });
+      await ctx.db.insert("communitySubscriptions", {
+        communityId,
+        membershipId: memId,
+        userId: memberId,
+        pricePointId,
+        source: "stripe",
+        status: "active",
+        cancelAtPeriodEnd: false,
+        currentPeriodStartAt: LIVE_NOW - 3 * DAY_MS,
+        currentPeriodEndAt: LIVE_NOW + 27 * DAY_MS,
+        createdAt: LIVE_NOW - 30 * DAY_MS,
+        updatedAt: LIVE_NOW - 3 * DAY_MS,
+      });
+      // At-risk check-in 8d ago -> member posted 5d ago (in window!) -> renewed 3d ago -> posted AGAIN 1d ago (after renewal!).
+      await ctx.db.insert("communityMemberCoachDrafts", {
+        communityId,
+        memberUserId: memberId,
+        reason: "quiet_member",
+        status: "sent",
+        signalSummary: "Quiet",
+        sentText: "Checking in!",
+        dedupeKey: "quiet_member:p2:1",
+        sentAt: LIVE_NOW - 8 * DAY_MS,
+        createdAt: LIVE_NOW - 8 * DAY_MS,
+        updatedAt: LIVE_NOW - 8 * DAY_MS,
+      });
+      await ctx.db.insert("communityInteractionRoots", {
+        communityId,
+        channelId,
+        actorType: "human",
+        actorUserId: memberId,
+        kind: "discussion",
+        contentSummary: "Back and working on lesson 2!",
+        visibilityScope: "community",
+        status: "live",
+        replyCount: 0,
+        reactionSummary: [],
+        idempotencyKey: "p2-post-1",
+        createdAt: LIVE_NOW - 5 * DAY_MS,
+        updatedAt: LIVE_NOW - 5 * DAY_MS,
+      });
+      await ctx.db.insert("communityInteractionRoots", {
+        communityId,
+        channelId,
+        actorType: "human",
+        actorUserId: memberId,
+        kind: "discussion",
+        contentSummary: "Still active after renewing!",
+        visibilityScope: "community",
+        status: "live",
+        replyCount: 0,
+        reactionSummary: [],
+        idempotencyKey: "p2-post-2",
+        createdAt: LIVE_NOW - 1 * DAY_MS,
+        updatedAt: LIVE_NOW - 1 * DAY_MS,
+      });
+      return { communityId };
+    });
+
+    const apiRefs = api as any;
+    const asOwner = t.withIdentity({ subject: "owner_p2" });
+    const analytics = await asOwner.query(
+      apiRefs.communityRetentionAnalytics.getCommunityRetentionAnalytics,
+      { authSubject: "owner_p2", communityId: fixture.communityId, range: "all" },
+    );
+
+    // Must use Lesson 1 (1 day after join), NOT Lesson 2 / course lastCompletedAt (20 days)!
+    expect(analytics.activation.median_ttfv_days).toBe(1);
+    // Must still count verified save even though the member posted again AFTER renewing!
+    expect(analytics.saved_revenue.saved_members_30d).toBe(1);
+    expect(analytics.saved_revenue.saved_mrr_30d_base_units).toBe(4900);
+  });
 });

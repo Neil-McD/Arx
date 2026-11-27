@@ -168,50 +168,100 @@ export async function readMemberParticipationSignals(
   };
 }
 
-export async function readCommunityPostSignalsForAnalytics(
+export async function readMemberFirstPostSignalsForAnalytics(
   ctx: any,
   communityId: any,
-): Promise<Map<string, { postsCount: number; firstPostAtMs: number | null; latestPostAtMs: number | null }>> {
-  const SCAN_CAP = 1_500;
-  const [roots, replies] = await Promise.all([
+  userIds: readonly any[],
+): Promise<Map<string, { postsCount: number; firstPostAtMs: number | null }>> {
+  const byUser = new Map<string, { postsCount: number; firstPostAtMs: number | null }>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const [roots, replies] = await Promise.all([
+        ctx.db
+          .query("communityInteractionRoots")
+          .withIndex("by_community_actorUser_createdAt", (q: any) =>
+            q.eq("communityId", communityId).eq("actorUserId", userId),
+          )
+          .order("asc")
+          .filter((q: any) => q.eq(q.field("status"), "live"))
+          .take(3),
+        ctx.db
+          .query("communityInteractionReplies")
+          .withIndex("by_community_actorUser_createdAt", (q: any) =>
+            q.eq("communityId", communityId).eq("actorUserId", userId),
+          )
+          .order("asc")
+          .filter((q: any) => q.eq(q.field("status"), "live"))
+          .take(3),
+      ]);
+      const postsCount = roots.length + replies.length;
+      const rootFirst =
+        roots[0] && typeof roots[0].createdAt === "number" && Number.isFinite(roots[0].createdAt)
+          ? roots[0].createdAt
+          : null;
+      const replyFirst =
+        replies[0] && typeof replies[0].createdAt === "number" && Number.isFinite(replies[0].createdAt)
+          ? replies[0].createdAt
+          : null;
+      let firstPostAtMs: number | null = null;
+      if (rootFirst !== null && replyFirst !== null) firstPostAtMs = Math.min(rootFirst, replyFirst);
+      else firstPostAtMs = rootFirst ?? replyFirst;
+      byUser.set(String(userId), { postsCount, firstPostAtMs });
+    }),
+  );
+  return byUser;
+}
+
+export async function readMemberActivityTimestampsInWindow(
+  ctx: any,
+  args: { communityId: any; userId: any; afterMs: number; throughMs: number },
+): Promise<number[]> {
+  if (args.throughMs <= args.afterMs) return [];
+  const [rootHit, replyHit, lessonHit] = await Promise.all([
     ctx.db
       .query("communityInteractionRoots")
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", communityId).eq("status", "live"),
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("actorUserId", args.userId)
+          .gt("createdAt", args.afterMs)
+          .lte("createdAt", args.throughMs),
       )
-      .order("desc")
-      .take(SCAN_CAP),
+      .filter((q: any) => q.eq(q.field("status"), "live"))
+      .first(),
     ctx.db
       .query("communityInteractionReplies")
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", communityId).eq("status", "live"),
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("actorUserId", args.userId)
+          .gt("createdAt", args.afterMs)
+          .lte("createdAt", args.throughMs),
       )
-      .order("desc")
-      .take(SCAN_CAP),
+      .filter((q: any) => q.eq(q.field("status"), "live"))
+      .first(),
+    ctx.db
+      .query("communityLessonProgress")
+      .withIndex("by_community_user_completedAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("userId", args.userId)
+          .gt("completedAt", args.afterMs)
+          .lte("completedAt", args.throughMs),
+      )
+      .first(),
   ]);
-  const byUser = new Map<
-    string,
-    { postsCount: number; firstPostAtMs: number | null; latestPostAtMs: number | null }
-  >();
-  const record = (actorUserId: unknown, createdAt: unknown) => {
-    if (!actorUserId) return;
-    const key = String(actorUserId);
-    const ts = typeof createdAt === "number" && Number.isFinite(createdAt) ? createdAt : null;
-    const current = byUser.get(key) ?? {
-      postsCount: 0,
-      firstPostAtMs: null,
-      latestPostAtMs: null,
-    };
-    current.postsCount += 1;
-    if (ts !== null) {
-      if (current.firstPostAtMs === null || ts < current.firstPostAtMs) current.firstPostAtMs = ts;
-      if (current.latestPostAtMs === null || ts > current.latestPostAtMs) current.latestPostAtMs = ts;
-    }
-    byUser.set(key, current);
-  };
-  for (const row of roots) record(row.actorUserId, row.createdAt);
-  for (const row of replies) record(row.actorUserId, row.createdAt);
-  return byUser;
+  const hits: number[] = [];
+  if (typeof rootHit?.createdAt === "number" && Number.isFinite(rootHit.createdAt)) {
+    hits.push(rootHit.createdAt);
+  }
+  if (typeof replyHit?.createdAt === "number" && Number.isFinite(replyHit.createdAt)) {
+    hits.push(replyHit.createdAt);
+  }
+  if (typeof lessonHit?.completedAt === "number" && Number.isFinite(lessonHit.completedAt)) {
+    hits.push(lessonHit.completedAt);
+  }
+  return hits;
 }
 
 async function resolveDerivedStageKeyForMember(
