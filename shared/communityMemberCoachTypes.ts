@@ -100,6 +100,11 @@ export type MemberCoachImpactSummary = {
   reengaged_30d: number;
   contacted_30d: number;
   reengagement_truncated: boolean;
+  verified_saved_members_90d?: number;
+  verified_saved_mrr_base_units_90d?: number;
+  verified_saved_currency?: string | null;
+  verified_saved_currency_decimals?: number;
+  verified_saved_mixed_currency?: boolean;
 };
 
 export type MemberCoachSettingsView = {

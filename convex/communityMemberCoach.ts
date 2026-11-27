@@ -60,6 +60,11 @@ import {
   summarizeCommunityAiSpend,
 } from "../shared/agentRoiSummary";
 import {
+  evaluateVerifiedSavedMember,
+  isAtRiskCoachReason,
+  monthlyMrrForPricePoint,
+} from "../shared/memberRevenueLedger";
+import {
   COMMITMENT_FOLLOWUP_MAX_AGE_MS,
   COMMITMENT_FOLLOWUP_MIN_AGE_MS,
   UNSEEN_COACH_EMAIL_GRACE_MS,
@@ -2429,7 +2434,7 @@ async function buildCoachSettingsView(
   const latestActivityByMember = new Map<string, number | null>();
   await Promise.all(
     [...uniqueMembers.entries()].map(async ([memberKey, memberUserId]) => {
-      const [lastChannelAt, lastAgentAt, latestLesson] = await Promise.all([
+      const [lastChannelAt, lastAgentAt, latestLesson, journeyCard] = await Promise.all([
         readLatestMemberChannelActivityAt(ctx, communityId, memberUserId),
         readLastUserAgentMessageAt(ctx, communityId, memberUserId),
         ctx.db
@@ -2439,11 +2444,18 @@ async function buildCoachSettingsView(
           )
           .order("desc")
           .first(),
+        ctx.db
+          .query("communityMemberJourneyCards")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", communityId).eq("userId", memberUserId),
+          )
+          .unique(),
       ]);
       const best = Math.max(
         lastChannelAt ?? 0,
         lastAgentAt ?? 0,
         Number(latestLesson?.completedAt ?? 0),
+        typeof journeyCard?.lastAppActivityAt === "number" ? journeyCard.lastAppActivityAt : 0,
       );
       latestActivityByMember.set(memberKey, best > 0 ? best : null);
     }),
@@ -2452,6 +2464,120 @@ async function buildCoachSettingsView(
     sentChecks: sentChecks.filter((c: any) => uniqueMembers.has(c.memberUserId)),
     latestActivityByMember,
   });
+
+  // 90-day Verified Saved Revenue: strictly requires at-risk check-in sent ->
+  // member re-engaged -> next Stripe paid renewal completed (no inflation).
+  const saveWindowCutoffMs = nowMs - 90 * DAY_MS;
+  const sent90d = await ctx.db
+    .query("communityMemberCoachDrafts")
+    .withIndex("by_community_status_sentAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "sent").gte("sentAt", saveWindowCutoffMs),
+    )
+    .order("desc")
+    .take(100);
+  const earliestAtRiskByMember = new Map<string, { userId: Id<"users">; sentAt: number }>();
+  for (const draft of sent90d) {
+    if (!isAtRiskCoachReason(draft.reason)) continue;
+    const sentAt = Number(draft.sentAt ?? draft.createdAt ?? 0);
+    if (sentAt <= 0) continue;
+    const key = String(draft.memberUserId);
+    const prev = earliestAtRiskByMember.get(key);
+    if (!prev && earliestAtRiskByMember.size >= 40) continue;
+    if (!prev || sentAt < prev.sentAt) {
+      earliestAtRiskByMember.set(key, { userId: draft.memberUserId as Id<"users">, sentAt });
+    }
+  }
+  let verifiedSavedMembers90d = 0;
+  let verifiedSavedMrrBaseUnits90d = 0;
+  let verifiedSavedCurrency: string | null = null;
+  let verifiedSavedCurrencyDecimals = 2;
+  let verifiedSavedMixedCurrency = false;
+  if (earliestAtRiskByMember.size > 0) {
+    const pricePointCache = new Map<string, any>();
+    await Promise.all(
+      [...earliestAtRiskByMember.entries()].map(async ([memberKey, entry]) => {
+        const [membership, subRows] = await Promise.all([
+          ctx.db
+            .query("communityMemberships")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", communityId).eq("userId", entry.userId),
+            )
+            .unique(),
+          ctx.db
+            .query("communitySubscriptions")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", communityId).eq("userId", entry.userId),
+            )
+            .take(5),
+        ]);
+        if (!membership) return;
+        subRows.sort((a: any, b: any) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0));
+        const sub = subRows.find((r: any) => r.status !== "ended") ?? subRows[0] ?? null;
+        if (!sub || !sub.pricePointId) return;
+        const ppKey = String(sub.pricePointId);
+        let pp = pricePointCache.get(ppKey);
+        if (pp === undefined) {
+          pp = (await ctx.db.get(sub.pricePointId)) ?? null;
+          pricePointCache.set(ppKey, pp);
+        }
+        if (!pp) return;
+
+        let latestActivityAtMs = latestActivityByMember.get(memberKey);
+        if (latestActivityAtMs === undefined) {
+          const [lastChannelAt, lastAgentAt, latestLesson, journeyCard] = await Promise.all([
+            readLatestMemberChannelActivityAt(ctx, communityId, entry.userId),
+            readLastUserAgentMessageAt(ctx, communityId, entry.userId),
+            ctx.db
+              .query("communityLessonProgress")
+              .withIndex("by_community_user_completedAt", (q: any) =>
+                q.eq("communityId", communityId).eq("userId", entry.userId),
+              )
+              .order("desc")
+              .first(),
+            ctx.db
+              .query("communityMemberJourneyCards")
+              .withIndex("by_community_user", (q: any) =>
+                q.eq("communityId", communityId).eq("userId", entry.userId),
+              )
+              .unique(),
+          ]);
+          const best = Math.max(
+            lastChannelAt ?? 0,
+            lastAgentAt ?? 0,
+            Number(latestLesson?.completedAt ?? 0),
+            typeof journeyCard?.lastAppActivityAt === "number" ? journeyCard.lastAppActivityAt : 0,
+          );
+          latestActivityAtMs = best > 0 ? best : null;
+        }
+
+        const verdict = evaluateVerifiedSavedMember({
+          earliestAtRiskSentAtMs: entry.sentAt,
+          latestActivityAtMs,
+          subscription: {
+            status: sub.status,
+            currentPeriodStartAt: sub.currentPeriodStartAt,
+            riskAccessState: sub.riskAccessState,
+            activeMrrBaseUnits: monthlyMrrForPricePoint(pp),
+            currency: pp.currency,
+            currencyDecimals: pp.currencyDecimals,
+          },
+          membershipRevokedReason: membership.revokedReason,
+        });
+        if (!verdict.saved) return;
+        verifiedSavedMembers90d += 1;
+        if (verifiedSavedMixedCurrency) return;
+        if (verifiedSavedCurrency && verifiedSavedCurrency !== verdict.currency) {
+          verifiedSavedMixedCurrency = true;
+          verifiedSavedCurrency = null;
+          verifiedSavedMrrBaseUnits90d = 0;
+        } else {
+          verifiedSavedCurrency = verdict.currency;
+          verifiedSavedCurrencyDecimals = verdict.currency_decimals;
+          verifiedSavedMrrBaseUnits90d += verdict.saved_mrr_base_units;
+        }
+      }),
+    );
+  }
 
   return {
     enabled: row ? Boolean(row.enabled) : true,
@@ -2497,6 +2623,11 @@ async function buildCoachSettingsView(
       reengaged_30d: reengagement.reengagedCount,
       contacted_30d: reengagement.contactedCount,
       reengagement_truncated: reengagementTruncated,
+      verified_saved_members_90d: verifiedSavedMembers90d,
+      verified_saved_mrr_base_units_90d: verifiedSavedMrrBaseUnits90d,
+      verified_saved_currency: verifiedSavedCurrency,
+      verified_saved_currency_decimals: verifiedSavedCurrencyDecimals,
+      verified_saved_mixed_currency: verifiedSavedMixedCurrency,
     },
   };
 }

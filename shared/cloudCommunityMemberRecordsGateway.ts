@@ -51,6 +51,8 @@ export type CloudMemberRecordsPage = {
   continueCursor: string;
 };
 
+import type { MemberRevenueSummary, VerifiedSaveResult } from "./memberRevenueLedger";
+
 export type CloudMemberRecord = {
   membership_id: string | null;
   user_id: string;
@@ -63,9 +65,14 @@ export type CloudMemberRecord = {
   role: string;
   joined_at: string | null;
   last_active_at: string | null;
+  last_app_active_at?: string | null;
   out: { reason: MemberOutReason; text: string } | null;
   plan: MemberPlan;
   money: MemberMoney;
+  revenue?: MemberRevenueSummary | null;
+  verified_save?: VerifiedSaveResult | null;
+  attribution?: { source_label: string; click_id: string | null; attributed_at: string | null } | null;
+  coach_events?: Array<{ id: string; text: string; at: string; replied: boolean }>;
   facts: Array<{ kind: string; label: string; body: string; source: string; at: string | null }>;
   events: Array<{ kind: string; text: string; at: string | null }>;
   notes: Array<{ id: string; body: string; author: string; at: string; can_delete: boolean }>;

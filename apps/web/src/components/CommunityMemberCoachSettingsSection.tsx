@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { formatAllowanceResetDate } from "../../../../shared/allowanceGuardrails";
 import { formatAiCredits } from "../../../../shared/agentRoiSummary";
+import { formatCompactMrr } from "../../../../shared/memberRevenueLedger";
 import {
   MEMBER_COACH_REASONS,
   MEMBER_COACH_REASON_LABELS,
@@ -216,12 +217,30 @@ export function CommunityMemberCoachSettingsSection(props: {
   const reserveNote = !isGuideTier && impact?.background_ai_paused
     ? "Background check-ins and reply drafts are paused at 90% to reserve the remaining credits for live chats, @mentions, and your Daily Brief."
     : null;
+  const savedMembers90d = !isGuideTier && impact ? Number(impact.verified_saved_members_90d ?? 0) : 0;
+  const savedMrrLabel =
+    savedMembers90d > 0 && impact && !impact.verified_saved_mixed_currency
+      ? formatCompactMrr(
+          Number(impact.verified_saved_mrr_base_units_90d ?? 0),
+          impact.verified_saved_currency,
+          impact.verified_saved_currency_decimals ?? 2,
+        )
+      : null;
+  const savedRevenueSummary =
+    savedMembers90d > 0
+      ? `${savedMembers90d} paying ${savedMembers90d === 1 ? "member" : "members"} rescued and renewed${savedMrrLabel ? ` (${savedMrrLabel} verified saved in the last 90 days)` : " in the last 90 days"}.`
+      : null;
   const winBackSummary = !isGuideTier && impact
-    ? impact.contacted_30d > 0
-      ? impact.reengagement_truncated
-        ? `${impact.reengaged_30d} of ${impact.contacted_30d} sampled members checked in came back in the last 30 days.`
-        : `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
-      : "No proactive check-ins sent in the last 30 days yet."
+    ? [
+        impact.contacted_30d > 0
+          ? impact.reengagement_truncated
+            ? `${impact.reengaged_30d} of ${impact.contacted_30d} sampled members checked in came back in the last 30 days.`
+            : `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
+          : "No proactive check-ins sent in the last 30 days yet.",
+        savedRevenueSummary,
+      ]
+        .filter(Boolean)
+        .join(" ")
     : null;
   const fillTone =
     (impact?.percent_used ?? 0) >= 100

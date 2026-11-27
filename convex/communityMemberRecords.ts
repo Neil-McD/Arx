@@ -24,6 +24,13 @@ import {
   type MemberOutReason,
   type MemberPlan,
 } from "../shared/communityMemberRecords";
+import { formatCoachOutcomeSummary } from "../shared/communityMemberJourney";
+import {
+  computeMemberRevenueSummary,
+  evaluateVerifiedSavedMember,
+  isAtRiskCoachReason,
+  monthlyMrrForPricePoint,
+} from "../shared/memberRevenueLedger";
 
 // Paging: the table loads a page at a time; the summary (view counts) reads
 // only cheap rows for small communities and uses a pre-computed paginated
@@ -692,7 +699,7 @@ export const getCommunityMemberRecord = query({
     const [
       user,
       profile,
-      subscription,
+      subscriptionRows,
       blockRow,
       communityFacts,
       globalFacts,
@@ -700,10 +707,22 @@ export const getCommunityMemberRecord = query({
       noteRows,
       presence,
       publicUserId,
+      journeyCard,
+      coachDrafts,
+      podPaymentRows,
+      attributionRow,
+      latestChannelRoot,
+      latestChannelReply,
+      latestLesson,
     ] = await Promise.all([
       ctx.db.get(subjectId) as Promise<{ displayName?: string; handle?: string } | null>,
       resolveUserProfileDisplayProjection(ctx, subjectId),
-      membership ? latestSubscription(ctx, membership._id) : Promise.resolve(null),
+      membership
+        ? ctx.db
+            .query("communitySubscriptions")
+            .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
+            .take(10)
+        : Promise.resolve([] as any[]),
       ctx.db
         .query("communityBlocks")
         .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", subjectId))
@@ -733,16 +752,221 @@ export const getCommunityMemberRecord = query({
         .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", subjectId))
         .first(),
       resolvePublicUserId(ctx, subjectId),
+      membership
+        ? ctx.db
+            .query("communityMemberJourneyCards")
+            .withIndex("by_community_user", (q) =>
+              q.eq("communityId", args.communityId).eq("userId", subjectId),
+            )
+            .unique()
+        : Promise.resolve(null),
+      membership
+        ? ctx.db
+            .query("communityMemberCoachDrafts")
+            .withIndex("by_community_member_createdAt", (q) =>
+              q.eq("communityId", args.communityId).eq("memberUserId", subjectId),
+            )
+            .order("desc")
+            .take(12)
+        : Promise.resolve([] as any[]),
+      membership
+        ? ctx.db
+            .query("communityPodPayments")
+            .withIndex("by_user", (q) => q.eq("userId", subjectId))
+            .take(20)
+        : Promise.resolve([] as any[]),
+      membership
+        ? ctx.db
+            .query("distributionAttributionDeliveries")
+            .withIndex("by_user", (q) => q.eq("userId", subjectId))
+            .order("desc")
+            .first()
+        : Promise.resolve(null),
+      membership
+        ? ctx.db
+            .query("communityInteractionRoots")
+            .withIndex("by_community_actorUser_createdAt", (q) =>
+              q.eq("communityId", args.communityId).eq("actorUserId", subjectId),
+            )
+            .order("desc")
+            .first()
+        : Promise.resolve(null),
+      membership
+        ? ctx.db
+            .query("communityInteractionReplies")
+            .withIndex("by_community_actorUser_createdAt", (q) =>
+              q.eq("communityId", args.communityId).eq("actorUserId", subjectId),
+            )
+            .order("desc")
+            .first()
+        : Promise.resolve(null),
+      membership
+        ? ctx.db
+            .query("communityLessonProgress")
+            .withIndex("by_community_user_completedAt", (q) =>
+              q.eq("communityId", args.communityId).eq("userId", subjectId),
+            )
+            .order("desc")
+            .first()
+        : Promise.resolve(null),
     ]);
 
+    const sortedSubs = [...subscriptionRows].sort((a: any, b: any) => b.updatedAt - a.updatedAt);
+    const subscription = sortedSubs.find((row: any) => row.status !== "ended") ?? sortedSubs[0] ?? null;
+
+    const subPricePointIds = [...new Set(
+      [
+        ...sortedSubs.map((row: any) => row.pricePointId),
+        membership?.pricePointId,
+      ].filter(Boolean).map(String),
+    )];
+    const loadedPoints = await Promise.all(
+      subPricePointIds.map(async (id) => {
+        const normalized = ctx.db.normalizeId("communityPricePoints", id);
+        return normalized ? ((await ctx.db.get(normalized)) as PricePointRow | null) : null;
+      }),
+    );
+    const pointMap = new Map<string, PricePointRow>();
+    for (const row of loadedPoints) {
+      if (row) pointMap.set(String(row._id), row);
+    }
+
     const pointId = subscription?.pricePointId ?? membership?.pricePointId ?? null;
-    const point = pointId ? await ctx.db.get(pointId) as PricePointRow | null : null;
+    const point = pointId ? pointMap.get(String(pointId)) ?? null : null;
     const plan = planFor({
       isOwner: !membership,
       accessSource: membership?.accessSource,
       pricePoint: point ? { id: String(point._id), name: point.name, amountBaseUnits: point.amountBaseUnits, currency: point.currency, currencyDecimals: point.currencyDecimals, billingPeriod: point.billingPeriod } : null,
     });
     const out = membership ? outReasonFor(membership.state, Boolean(blockRow && !blockRow.liftedAt), membership.revokedReason) : null;
+
+    const nowMs = Date.now();
+    const subscriptionAuditEvents = audit
+      .filter((row: any) => row.eventType === "community_subscription_synced" && row.status === "succeeded")
+      .map((row: any) => {
+        const meta = row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
+        return {
+          subscriptionStatus: String(meta.subscriptionStatus ?? meta.communitySubscriptionStatus ?? ""),
+          currentPeriodStartAt:
+            typeof meta.currentPeriodStartAt === "number" ? meta.currentPeriodStartAt : null,
+          createdAt: Number(row.createdAt ?? 0),
+        };
+      });
+    const communityPodPayments = podPaymentRows.filter(
+      (row: any) => String(row.communityId) === String(args.communityId),
+    );
+    const revenue = membership
+      ? computeMemberRevenueSummary({
+          membership: {
+            state: membership.state,
+            createdAt: membership.createdAt,
+            activatedAt: membership.activatedAt,
+            revokedAt: membership.revokedAt,
+            revokedReason: membership.revokedReason,
+          },
+          subscriptions: sortedSubs.map((row: any) => {
+            const pp = row.pricePointId ? pointMap.get(String(row.pricePointId)) ?? null : null;
+            return {
+              status: row.status,
+              pricePoint: pp
+                ? {
+                    amountBaseUnits: pp.amountBaseUnits,
+                    currency: pp.currency,
+                    currencyDecimals: pp.currencyDecimals,
+                    billingPeriod: pp.billingPeriod,
+                  }
+                : null,
+              createdAt: row.createdAt,
+              updatedAt: row.updatedAt,
+              currentPeriodStartAt: row.currentPeriodStartAt,
+              currentPeriodEndAt: row.currentPeriodEndAt,
+              endedAt: row.endedAt,
+              cancelAtPeriodEnd: row.cancelAtPeriodEnd,
+              riskAccessState: row.riskAccessState,
+            };
+          }),
+          subscriptionAuditEvents,
+          podPayments: communityPodPayments.map((row: any) => ({
+            status: row.status,
+            amountBaseUnits: row.amountBaseUnits,
+            currency: row.currency,
+            createdAt: row.createdAt,
+            grantedAt: row.grantedAt,
+            refundDue: row.refundDue,
+          })),
+          nowMs,
+        })
+      : null;
+
+    const lastAppAt =
+      typeof journeyCard?.lastAppActivityAt === "number" && Number.isFinite(journeyCard.lastAppActivityAt)
+        ? journeyCard.lastAppActivityAt
+        : 0;
+    const bestLastActiveAt = Math.max(
+      typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0,
+      latestChannelRoot?.status === "live" ? Number(latestChannelRoot.createdAt ?? 0) : 0,
+      latestChannelReply?.status === "live" ? Number(latestChannelReply.createdAt ?? 0) : 0,
+      Number(latestLesson?.completedAt ?? 0),
+      lastAppAt,
+    );
+
+    // Privacy-safe Chief of Staff touch history + 90-day Verified Save check.
+    const sentCoachDrafts = coachDrafts.filter((row: any) => row.status === "sent");
+    const coachEvents = sentCoachDrafts.slice(0, 6).map((row: any) => {
+      const at = Number(row.sentAt ?? row.createdAt ?? nowMs);
+      const replied = bestLastActiveAt > at;
+      return {
+        id: String(row._id),
+        text: formatCoachOutcomeSummary({
+          status: row.status,
+          reason: row.reason,
+          sentAt: row.sentAt ?? null,
+          createdAt: row.createdAt,
+          replied,
+        }),
+        at: iso(at) ?? new Date(nowMs).toISOString(),
+        replied,
+      };
+    });
+
+    const saveCutoffMs = nowMs - 90 * 24 * 60 * 60_000;
+    const atRiskSentInWindow = sentCoachDrafts
+      .filter((row: any) => {
+        const sentAt = Number(row.sentAt ?? row.createdAt ?? 0);
+        return sentAt >= saveCutoffMs && isAtRiskCoachReason(row.reason);
+      })
+      .map((row: any) => Number(row.sentAt ?? row.createdAt ?? 0));
+    const earliestAtRiskSentAtMs =
+      atRiskSentInWindow.length > 0 ? Math.min(...atRiskSentInWindow) : null;
+    const activeSubPoint = subscription?.pricePointId
+      ? pointMap.get(String(subscription.pricePointId)) ?? null
+      : null;
+    const verifiedSave = membership
+      ? evaluateVerifiedSavedMember({
+          earliestAtRiskSentAtMs,
+          latestActivityAtMs: bestLastActiveAt > 0 ? bestLastActiveAt : null,
+          subscription: subscription && activeSubPoint
+            ? {
+                status: subscription.status,
+                currentPeriodStartAt: subscription.currentPeriodStartAt,
+                riskAccessState: subscription.riskAccessState,
+                activeMrrBaseUnits: monthlyMrrForPricePoint(activeSubPoint),
+                currency: activeSubPoint.currency,
+                currencyDecimals: activeSubPoint.currencyDecimals,
+              }
+            : null,
+          membershipRevokedReason: membership.revokedReason,
+        })
+      : null;
+
+    const attribution =
+      attributionRow && (attributionRow.clickId || attributionRow.anonymousId)
+        ? {
+            source_label: "Distribution Engineer",
+            click_id: attributionRow.clickId ?? null,
+            attributed_at: iso(attributionRow.createdAt),
+          }
+        : null;
 
     const facts: MemberRecordFact[] = [];
     for (const fact of [...communityFacts, ...globalFacts]) {
@@ -799,10 +1023,15 @@ export const getCommunityMemberRecord = query({
       avatar_zoom: profile.avatar_zoom,
       role: membership ? membership.role : "owner",
       joined_at: iso(membership ? (membership.activatedAt ?? membership.createdAt) : community.createdAt),
-      last_active_at: iso(presence?.lastSeenAt),
+      last_active_at: iso(bestLastActiveAt > 0 ? bestLastActiveAt : presence?.lastSeenAt),
+      last_app_active_at: iso(lastAppAt > 0 ? lastAppAt : null),
       out: out ? { reason: out, text: OUT_REASON_TEXT[out] } : null,
       plan,
       money: membership ? moneyFor({ membershipState: membership.state, subscription }) : null,
+      revenue,
+      verified_save: verifiedSave,
+      attribution,
+      coach_events: coachEvents,
       facts,
       events,
       notes,
