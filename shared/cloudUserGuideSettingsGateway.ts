@@ -7,6 +7,8 @@ export type UserGlobalGuideSettingsView = {
   soul_max_chars: number;
   allow_post: boolean;
   allow_message: boolean;
+  legacy_post_count?: number;
+  legacy_message_count?: number;
   coach_muted: boolean;
 };
 

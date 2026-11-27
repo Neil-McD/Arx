@@ -140,8 +140,20 @@ export function WebPersonalGuideSettingsSection(props: { session: unknown | null
       <SettingsGroup label="What your guide does for you">
         <SettingsRow
           label={GUIDE_ALLOWED_POST_LABEL}
-          help={`${GUIDE_ALLOWED_POST_HELP} Applies across every community.`}
+          help={
+            !settings?.allow_post && (settings?.legacy_post_count ?? 0) > 0
+              ? `Currently allowed in ${settings?.legacy_post_count} ${settings?.legacy_post_count === 1 ? "community" : "communities"} from earlier per-community settings. Turn off everywhere or enable globally.`
+              : `${GUIDE_ALLOWED_POST_HELP} Applies across every community.`
+          }
         >
+          {!settings?.allow_post && (settings?.legacy_post_count ?? 0) > 0 ? (
+            <SettingsButton
+              disabled={busy}
+              onClick={() => void update({ allowPost: false })}
+            >
+              Turn off everywhere
+            </SettingsButton>
+          ) : null}
           <SettingsSwitch
             label={GUIDE_ALLOWED_POST_LABEL}
             checked={Boolean(settings?.allow_post)}
@@ -151,8 +163,20 @@ export function WebPersonalGuideSettingsSection(props: { session: unknown | null
         </SettingsRow>
         <SettingsRow
           label={GUIDE_ALLOWED_MESSAGE_LABEL}
-          help={`${GUIDE_ALLOWED_MESSAGE_HELP} Applies across every community.`}
+          help={
+            !settings?.allow_message && (settings?.legacy_message_count ?? 0) > 0
+              ? `Currently allowed in ${settings?.legacy_message_count} ${settings?.legacy_message_count === 1 ? "community" : "communities"} from earlier per-community settings. Turn off everywhere or enable globally.`
+              : `${GUIDE_ALLOWED_MESSAGE_HELP} Applies across every community.`
+          }
         >
+          {!settings?.allow_message && (settings?.legacy_message_count ?? 0) > 0 ? (
+            <SettingsButton
+              disabled={busy}
+              onClick={() => void update({ allowMessage: false })}
+            >
+              Turn off everywhere
+            </SettingsButton>
+          ) : null}
           <SettingsSwitch
             label={GUIDE_ALLOWED_MESSAGE_LABEL}
             checked={Boolean(settings?.allow_message)}

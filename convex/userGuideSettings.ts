@@ -40,7 +40,41 @@ export async function readUserGlobalGuideSettings(
     .first();
 }
 
-function buildGlobalGuideSettingsView(row: UserGlobalGuideSettingsRow | null) {
+async function countLegacyCommunityAlwaysAllowed(ctx: any, userId: any) {
+  if (!userId) return { post: 0, message: 0 };
+  const [postRows, messageRows] = await Promise.all([
+    ctx.db
+      .query("communityGuideAlwaysAllowed")
+      .withIndex("by_user_kind", (q: any) => q.eq("userId", userId).eq("kind", "post"))
+      .take(100),
+    ctx.db
+      .query("communityGuideAlwaysAllowed")
+      .withIndex("by_user_kind", (q: any) => q.eq("userId", userId).eq("kind", "message"))
+      .take(100),
+  ]);
+  return { post: postRows.length, message: messageRows.length };
+}
+
+async function clearLegacyCommunityAlwaysAllowed(
+  ctx: any,
+  userId: any,
+  kind: "post" | "message",
+) {
+  while (true) {
+    const batch = await ctx.db
+      .query("communityGuideAlwaysAllowed")
+      .withIndex("by_user_kind", (q: any) => q.eq("userId", userId).eq("kind", kind))
+      .take(100);
+    if (batch.length === 0) break;
+    await Promise.all(batch.map((row: any) => ctx.db.delete(row._id)));
+    if (batch.length < 100) break;
+  }
+}
+
+function buildGlobalGuideSettingsView(
+  row: UserGlobalGuideSettingsRow | null,
+  legacyCounts: { post: number; message: number } = { post: 0, message: 0 },
+) {
   const customSoul = cleanAgentSoulText(row?.soulMd);
   return {
     soul_md: customSoul || DEFAULT_PERSONAL_SOUL_MD,
@@ -49,6 +83,8 @@ function buildGlobalGuideSettingsView(row: UserGlobalGuideSettingsRow | null) {
     soul_max_chars: AGENT_SOUL_MAX_CHARS,
     allow_post: row?.allowPostWithoutAsking === true,
     allow_message: row?.allowMessageWithoutAsking === true,
+    legacy_post_count: legacyCounts.post,
+    legacy_message_count: legacyCounts.message,
     coach_muted: row?.coachMuted === true,
   };
 }
@@ -60,8 +96,11 @@ export const getMyGlobalGuideSettings = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const current = await readUserGlobalGuideSettings(ctx, userId);
-    return buildGlobalGuideSettingsView(current);
+    const [current, legacyCounts] = await Promise.all([
+      readUserGlobalGuideSettings(ctx, userId),
+      countLegacyCommunityAlwaysAllowed(ctx, userId),
+    ]);
+    return buildGlobalGuideSettingsView(current, legacyCounts);
   },
 });
 
@@ -123,6 +162,17 @@ export const saveMyGlobalGuideSettings = mutation({
       });
     }
 
-    return buildGlobalGuideSettingsView(await readUserGlobalGuideSettings(ctx, userId));
+    if (args.allowPost === false) {
+      await clearLegacyCommunityAlwaysAllowed(ctx, userId, "post");
+    }
+    if (args.allowMessage === false) {
+      await clearLegacyCommunityAlwaysAllowed(ctx, userId, "message");
+    }
+
+    const [updated, legacyCounts] = await Promise.all([
+      readUserGlobalGuideSettings(ctx, userId),
+      countLegacyCommunityAlwaysAllowed(ctx, userId),
+    ]);
+    return buildGlobalGuideSettingsView(updated, legacyCounts);
   },
 });

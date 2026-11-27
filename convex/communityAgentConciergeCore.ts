@@ -360,13 +360,7 @@ async function resolveTriggerKind(args: {
     !reply.targetReplyId &&
     !args.hasOtherMentions
   ) {
-    const coachSettings = await args.ctx.db
-      .query("communityMemberCoachSettings" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .first();
-    const enabled = coachSettings?.threadFollowupEnabled !== false;
-    if (!enabled) return null;
-
+    // Active-thread follow-ups are always on whenever the community agent is enabled.
     const recentReplies = (await args.ctx.db
       .query("communityInteractionReplies" as any)
       .withIndex("by_root_status_createdAt", (q: any) =>
@@ -407,7 +401,7 @@ async function resolveTriggerKind(args: {
     }
 
     const decision = shouldAutoFollowThreadReply({
-      enabled,
+      enabled: true,
       hasTargetReply: Boolean(reply.targetReplyId),
       hasOtherMentions: Boolean(args.hasOtherMentions),
       lastAgentReplyCreatedAt,

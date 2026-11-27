@@ -218,6 +218,8 @@ describe("community-agent canonical source-turn admission", () => {
     expect(activeResult).toMatchObject({ status: "queued", trigger_kind: "thread_followup" });
     expect(await requests(t)).toHaveLength(1);
 
+    // Even if a legacy coach settings row saved threadFollowupEnabled: false,
+    // active-thread follow-ups remain always on while the community agent is on.
     await t.run(async (ctx) => {
       await ctx.db.insert("communityMemberCoachSettings", {
         communityId: fixture.communityId,
@@ -229,7 +231,7 @@ describe("community-agent canonical source-turn admission", () => {
       });
     });
     const nextHumanReplyId = await insertReply(t, fixture, { seq: 3, actorType: "human" });
-    const disabledResult = await t.run(async (ctx) => await intakeCommunityAgentTurn({
+    const legacyRowResult = await t.run(async (ctx) => await intakeCommunityAgentTurn({
       ctx,
       communityId: fixture.communityId,
       rootId: fixture.rootId,
@@ -237,8 +239,8 @@ describe("community-agent canonical source-turn admission", () => {
       nowMs: 4_000,
     }));
 
-    expect(disabledResult).toMatchObject({ status: "ignored", intake_reason: "not_addressed" });
-    expect(await requests(t)).toHaveLength(1);
+    expect(legacyRowResult).toMatchObject({ status: "queued", trigger_kind: "thread_followup" });
+    expect(await requests(t)).toHaveLength(2);
   });
 
   test("a human reply continues an agent-authored root without another mention", async () => {

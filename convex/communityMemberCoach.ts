@@ -2640,7 +2640,7 @@ async function buildCoachSettingsView(
     enabled: row ? Boolean(row.enabled) : true,
     auto_reasons: normalizeMemberCoachReasons(row?.autoReasons ?? []),
     auto_reply_enabled: Boolean(row?.autoReplyEnabled),
-    thread_followup_enabled: row?.threadFollowupEnabled !== false,
+    thread_followup_enabled: true,
     weekly_digest_enabled: row?.weeklyDigestEnabled !== false,
     sent_this_week: sentWeek.length,
     waiting_count: waiting.filter((item: any) => nowMs - item.createdAt <= MEMBER_COACH_DRAFT_MAX_AGE_MS).length,

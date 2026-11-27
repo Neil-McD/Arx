@@ -228,6 +228,52 @@ describe("userGuideSettings global Personal Guide defaults", () => {
     expect(internalPost).toBe(true);
     expect(internalMsg).toBe(false);
     expect(bobAllowed).toEqual({ post: false, message: false, post_global: false, message_global: false });
+
+    // Legacy per-community grants (e.g., from an owner before global settings)
+    // are surfaced in global settings and revoked across all communities when turned off.
+    const owner = t.withIdentity({ subject: fx.ownerSubject });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityGuideAlwaysAllowed", {
+        communityId: fx.community1Id,
+        userId: fx.ownerId,
+        kind: "post",
+        createdAt: 100_000,
+      });
+      await ctx.db.insert("communityGuideAlwaysAllowed", {
+        communityId: fx.community2Id,
+        userId: fx.ownerId,
+        kind: "message",
+        createdAt: 100_000,
+      });
+    });
+
+    const ownerBefore = await owner.query(api.userGuideSettings.getMyGlobalGuideSettings, {
+      authSubject: fx.ownerSubject,
+    });
+    expect(ownerBefore.allow_post).toBe(false);
+    expect(ownerBefore.legacy_post_count).toBe(1);
+    expect(ownerBefore.legacy_message_count).toBe(1);
+
+    const afterRevokePost = await owner.mutation(api.userGuideSettings.saveMyGlobalGuideSettings, {
+      authSubject: fx.ownerSubject,
+      allowPost: false,
+    });
+    expect(afterRevokePost.legacy_post_count).toBe(0);
+    expect(afterRevokePost.legacy_message_count).toBe(1);
+    expect(
+      await t.query(internal.communityGuideQuestions.isAlwaysAllowedInternal, {
+        communityId: fx.community1Id,
+        userId: fx.ownerId,
+        kind: "post",
+      }),
+    ).toBe(false);
+    expect(
+      await t.query(internal.communityGuideQuestions.isAlwaysAllowedInternal, {
+        communityId: fx.community2Id,
+        userId: fx.ownerId,
+        kind: "message",
+      }),
+    ).toBe(true);
   });
 
   test("global coachMuted pauses proactive check-ins for both members and builders across all communities", async () => {

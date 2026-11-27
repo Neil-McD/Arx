@@ -408,7 +408,8 @@ describe("smart thread follow-up without re-tagging", () => {
     expect(storedReq?.status).toBe("skipped");
     expect(storedReq?.skipReason).toBe("thread_followup_silent");
 
-    // Founder turns off thread follow-up in Settings -> Guide.
+    // Active-thread follow-ups stay always on even if a legacy payload passes
+    // threadFollowupEnabled: false (turning off the community agent disables all replies).
     const ownerClient = t.withIdentity({ subject: fixture.ownerAuthSubject });
     const updatedSettings = await ownerClient.mutation(api.communityMemberCoach.setMemberCoachSettings, {
       authSubject: fixture.ownerAuthSubject,
@@ -418,18 +419,18 @@ describe("smart thread follow-up without re-tagging", () => {
       autoReplyEnabled: false,
       threadFollowupEnabled: false,
     });
-    expect(updatedSettings.thread_followup_enabled).toBe(false);
+    expect(updatedSettings.thread_followup_enabled).toBe(true);
 
-    const replyWhileOff = await addReply(t, fixture, { seq: 4, actorType: "human", createdAt: agentAt + 40_000 });
-    const ignoredOff = await t.run(async (ctx) =>
+    const replyAfterLegacyFlag = await addReply(t, fixture, { seq: 4, actorType: "human", createdAt: agentAt + 40_000 });
+    const stillQueued = await t.run(async (ctx) =>
       await intakeCommunityAgentTurn({
         ctx,
         communityId: fixture.communityId,
         rootId: fixture.rootId,
-        replyId: replyWhileOff,
+        replyId: replyAfterLegacyFlag,
         nowMs: agentAt + 40_000,
       }),
     );
-    expect(ignoredOff.status).toBe("ignored");
+    expect(stillQueued).toMatchObject({ status: "queued", trigger_kind: "thread_followup" });
   });
 });
