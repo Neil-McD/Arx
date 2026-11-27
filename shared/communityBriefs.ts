@@ -19,8 +19,12 @@
 export const BRIEF_WRITE_OPERATION = "brief.write";
 // Long enough that a burst of posts is read once.
 export const BRIEF_DELAY_MS = 60 * 60_000;
-// A place's brief is rewritten at most this often, however busy it is.
-export const BRIEF_MIN_GAP_MS = 3 * 60 * 60_000;
+// Tiered minimum gaps between community pulse rewrites:
+// Chief of Staff refreshes up to every 4 hours; Guide refreshes up to every 12 hours
+// so background pulse updates stay light on Guide's included credit allowance.
+export const BRIEF_MIN_GAP_COS_MS = 4 * 60 * 60_000;
+export const BRIEF_MIN_GAP_GUIDE_MS = 12 * 60 * 60_000;
+export const BRIEF_MIN_GAP_MS = BRIEF_MIN_GAP_COS_MS;
 // What "recent" means: each brief is written from this much of the place.
 export const BRIEF_WINDOW_MS = 3 * 24 * 60 * 60_000;
 // A brief nobody has rewritten for this long stops showing: as long as the
@@ -92,10 +96,18 @@ export function visibleBrief(
   return { summary: brief.summary, refs: brief.refs, updatedAt: brief.updatedAt };
 }
 
+export function briefMinGapMsForTier(proactiveTier: boolean): number {
+  return proactiveTier ? BRIEF_MIN_GAP_COS_MS : BRIEF_MIN_GAP_GUIDE_MS;
+}
+
 // When a place's brief is next due: an hour after the first new activity, and
-// never sooner than three hours after the last one was written.
-export function nextBriefAtMs(nowMs: number, lastWrittenAtMs: number | null | undefined): number {
-  return Math.max(nowMs + BRIEF_DELAY_MS, (lastWrittenAtMs ?? 0) + BRIEF_MIN_GAP_MS);
+// never sooner than the tier's minimum gap after the last one was written.
+export function nextBriefAtMs(
+  nowMs: number,
+  lastWrittenAtMs: number | null | undefined,
+  minGapMs: number = BRIEF_MIN_GAP_MS,
+): number {
+  return Math.max(nowMs + BRIEF_DELAY_MS, (lastWrittenAtMs ?? 0) + minGapMs);
 }
 
 export const BRIEF_INSTRUCTIONS = [

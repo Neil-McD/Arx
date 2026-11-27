@@ -22,10 +22,11 @@ import { readCachedUserDisplayName as displayName } from "./profileCore";
 import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, removeBrief, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
 import { docReader, evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { communityAgentIsOn } from "./communityApps";
+import { communityHasProactiveAgentTier } from "./founderInferenceCore";
 import { memoryEvidenceRefusal, parseMemoryEvidenceRef } from "../shared/communityMemory";
 import { renderCommunityCard } from "../shared/communityOntology";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
-import { BRIEF_INSTRUCTIONS, BRIEF_WINDOW_MS, BRIEF_WRITE_OPERATION, nextBriefAtMs, parseBriefWriteCall, visibleBrief, type BriefView } from "../shared/communityBriefs";
+import { BRIEF_INSTRUCTIONS, BRIEF_WINDOW_MS, BRIEF_WRITE_OPERATION, briefMinGapMsForTier, nextBriefAtMs, parseBriefWriteCall, visibleBrief, type BriefView } from "../shared/communityBriefs";
 
 const internalRefs = internal as any;
 // The write, and one more if it's refused.
@@ -59,13 +60,16 @@ export async function markCommunityBriefDue(ctx: any, args: { communityId: any; 
     }
     return;
   }
+  const minGapMs = briefMinGapMsForTier(
+    await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs),
+  );
   if (work) {
     // reviewedThrough is when the last brief was written.
-    const dueAt = nextBriefAtMs(args.nowMs, work.reviewedThrough);
+    const dueAt = nextBriefAtMs(args.nowMs, work.reviewedThrough, minGapMs);
     await ctx.db.patch(work._id, { pending: work.pending + 1, firstPendingAt: args.nowMs, dueAt, failures: 0, updatedAt: args.nowMs });
     await scheduleAgentWork(ctx, work._id, dueAt);
   } else {
-    const dueAt = nextBriefAtMs(args.nowMs, null);
+    const dueAt = nextBriefAtMs(args.nowMs, null, minGapMs);
     const workId = await insertWork(ctx, scope, {
       communityId: args.communityId, kind: "brief", pending: 1, firstPendingAt: args.nowMs,
       reviewedThrough: 0, dueAt, failures: 0, createdAt: args.nowMs, updatedAt: args.nowMs,

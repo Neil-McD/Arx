@@ -57,7 +57,7 @@ export function CommunityFounderBriefSection(props: {
     };
   }, [props.communityId, props.planTier]);
 
-  const save = async (next: { enabled: boolean; localHour: number }) => {
+  const save = async (next: { localHour: number; emailEnabled: boolean }) => {
     if (saving) return;
     setSaving(true);
     setError(null);
@@ -67,7 +67,8 @@ export function CommunityFounderBriefSection(props: {
       setSettings(await setCloudFounderBriefSettings({
         session,
         communityId: props.communityId,
-        enabled: next.enabled,
+        enabled: true,
+        emailEnabled: next.emailEnabled,
         localHour: next.localHour,
         // A brief already set keeps its time zone; a new one takes this browser's.
         timeZone: settings?.time_zone ?? browserTimeZone(),
@@ -81,10 +82,10 @@ export function CommunityFounderBriefSection(props: {
 
   if (props.planTier === "guide") {
     return (
-      <SettingsGroup label="Daily brief">
+      <SettingsGroup label="Morning brief">
         <SettingsRow
           label="Daily founder brief"
-          help="Included on Chief of Staff ($100/month with $20 AI included). Each morning: what your guide sent and drafted, join requests, stalled learners, quiet paying members, rising contributors, and upcoming events."
+          help="Included on Chief of Staff ($100/month with 20,000 AI credits included). Each morning on Home, in your guide chat, and optionally by email: what needs you, what your guide handled, and key member signals."
         >
           {props.onUpgradeToChiefOfStaff ? (
             <SettingsButton
@@ -102,24 +103,56 @@ export function CommunityFounderBriefSection(props: {
     );
   }
 
-  const enabled = Boolean(settings?.enabled);
+  const emailEnabled = settings ? settings.email_enabled : true;
   const localHour = settings?.local_hour ?? 8;
+  const pausedLegacySchedule = Boolean(settings && !settings.enabled);
   return (
-    <SettingsGroup label="Daily brief">
-      <SettingsRow label="Send me a daily brief"
-        help={error ? <span className="settings-v1-error" role="alert">{error}</span>
-          : "Each morning: what your guide sent and drafted, join requests, stalled learners, quiet paying members, rising contributors, pod pulse, and upcoming events — in your guide chat and by email; it never messages members."}>
-        <SettingsSwitch label="Send me a daily brief" checked={enabled} disabled={!settings || saving}
-          onChange={(checked) => void save({ enabled: checked, localHour })} />
-      </SettingsRow>
-      {enabled ? (
-        <SettingsRow label="Time" htmlFor="brief-hour" help={settings?.time_zone ? `${settings.time_zone} time.` : "Your time."}>
-          <SettingsSelect id="brief-hour" value={localHour} disabled={saving}
-            onChange={(event) => void save({ enabled: true, localHour: Number(event.target.value) })}>
-            {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
-          </SettingsSelect>
+    <SettingsGroup label="Morning brief">
+      {pausedLegacySchedule ? (
+        <SettingsRow
+          label="Morning brief is paused"
+          help="Morning briefs are now included by default on Chief of Staff. Resume to start receiving yours on Home and in your guide chat."
+        >
+          <SettingsButton
+            variant="primary"
+            disabled={saving}
+            onClick={() => void save({ localHour, emailEnabled })}
+          >
+            {saving ? "Enabling…" : "Enable morning brief"}
+          </SettingsButton>
         </SettingsRow>
       ) : null}
+      <SettingsRow
+        label="Morning brief time"
+        htmlFor="brief-hour"
+        help={
+          error ? (
+            <span className="settings-v1-error" role="alert">{error}</span>
+          ) : (
+            `Always on for Chief of Staff — appears on Home and in your guide chat each morning (${settings?.time_zone ? `${settings.time_zone} time` : `${browserTimeZone()} time on save`}).`
+          )
+        }
+      >
+        <SettingsSelect
+          id="brief-hour"
+          value={localHour}
+          disabled={!settings || saving}
+          onChange={(event) => void save({ localHour: Number(event.target.value), emailEnabled })}
+        >
+          {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+        </SettingsSelect>
+      </SettingsRow>
+      <SettingsRow
+        label="Also send by email"
+        help="Get a morning copy in your inbox in addition to Home and your guide chat."
+      >
+        <SettingsSwitch
+          label="Also send by email"
+          checked={emailEnabled}
+          disabled={!settings || saving}
+          onChange={(checked) => void save({ localHour, emailEnabled: checked })}
+        />
+      </SettingsRow>
     </SettingsGroup>
   );
 }

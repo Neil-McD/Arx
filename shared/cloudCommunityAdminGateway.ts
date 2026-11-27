@@ -1131,14 +1131,20 @@ export async function saveCloudCommunityMemberSettings<SessionT>(
   });
 }
 
-// The owner's switch: where the community's members spend time.
-export type CloudFounderBriefSettings = { enabled: boolean; local_hour: number; time_zone: string | null };
+// The owner's morning brief schedule & email preference.
+export type CloudFounderBriefSettings = {
+  enabled: boolean;
+  email_enabled: boolean;
+  local_hour: number;
+  time_zone: string | null;
+};
 
 function normalizeFounderBriefSettings(payload: unknown): CloudFounderBriefSettings {
   const record = (payload ?? {}) as Record<string, unknown>;
   const hour = Number(record.local_hour);
   return {
-    enabled: record.enabled === true,
+    enabled: record.enabled !== false,
+    email_enabled: record.email_enabled !== false,
     local_hour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 8,
     time_zone: typeof record.time_zone === "string" && record.time_zone ? record.time_zone : null,
   };
@@ -1159,6 +1165,7 @@ export async function setCloudFounderBriefSettings<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     enabled: boolean;
+    emailEnabled?: boolean;
     localHour: number;
     timeZone: string;
   },
@@ -1168,10 +1175,19 @@ export async function setCloudFounderBriefSettings<SessionT>(
     authSubject,
     communityId: params.communityId,
     enabled: params.enabled,
+    ...(typeof params.emailEnabled === "boolean" ? { emailEnabled: params.emailEnabled } : {}),
     localHour: params.localHour,
     timeZone: params.timeZone,
   }));
 }
+
+export type CloudHomeFounderBrief = {
+  headline: string;
+  sections: Array<{ title: string; items: string[] }>;
+  nextStep: string | null;
+  briefDate: string;
+  sentAt: string;
+};
 
 // Home's facts (convex/communityFounderBrief.ts): getCommunityHomeSnapshot for the
 // owner, getCommunityMemberHomeSnapshot for a member.
@@ -1186,6 +1202,7 @@ export type CloudCommunityHomeSnapshot = {
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
   upcomingEvents: Array<{ title: string; startsAt: string }>;
+  founderBrief?: CloudHomeFounderBrief | null;
 };
 
 function count(value: unknown): number {
@@ -1233,6 +1250,31 @@ export function normalizeCommunityHomeSnapshot(payload: unknown): CloudCommunity
       title: String(row?.title ?? ""),
       startsAt: String(row?.startsAt ?? ""),
     })),
+    founderBrief:
+      record.founderBrief &&
+      typeof record.founderBrief === "object" &&
+      typeof record.founderBrief.headline === "string" &&
+      record.founderBrief.headline.trim()
+        ? {
+            headline: record.founderBrief.headline.trim(),
+            sections: (Array.isArray(record.founderBrief.sections) ? record.founderBrief.sections : [])
+              .map((section: any) => ({
+                title: String(section?.title ?? "").trim(),
+                items: (Array.isArray(section?.items) ? section.items : [])
+                  .map((item: unknown) => String(item ?? "").trim())
+                  .filter(Boolean)
+                  .slice(0, 5),
+              }))
+              .filter((section: { title: string; items: string[] }) => section.title && section.items.length > 0)
+              .slice(0, 5),
+            nextStep:
+              typeof record.founderBrief.nextStep === "string" && record.founderBrief.nextStep.trim()
+                ? record.founderBrief.nextStep.trim()
+                : null,
+            briefDate: String(record.founderBrief.briefDate ?? ""),
+            sentAt: String(record.founderBrief.sentAt ?? ""),
+          }
+        : null,
   };
 }
 

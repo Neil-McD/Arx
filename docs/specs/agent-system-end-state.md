@@ -171,7 +171,7 @@ for that row only; a daily sweep re-schedules any row whose job was lost.
 
 | Kind | Made due by | When it runs | What it does |
 |---|---|---|---|
-| **Brief** | A person's post or reply in a place | An hour after the first new one, and at most once every three hours | Writes that place's brief fresh from its recent threads |
+| **Brief** | A person's post or reply in a place | An hour after the first new one, and at most once every 4 hours on Chief of Staff (12 hours on Guide) | Writes that place's brief fresh from its recent threads |
 | **Memory review** | Any evidence in a scope that day | Nightly, at the community's quiet hour | Reads the day; writes, corrects and merges memories with `observe`; rebuilds `memory.md` |
 | **Unanswered question** (later) | A question with no reply | After the wait the builder set | Answers in the thread with a cited answer, or hands it to the builder |
 

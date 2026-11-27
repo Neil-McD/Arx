@@ -124,12 +124,49 @@ test("one model request: the guide is shown who the community is and its threads
   expect(briefs[0]).toMatchObject({ scopeKey: `community:${String(w.communityId)}`, summary: "Saturday's climb at the north wall is coming together.", refs: [`post:${climb}`, `reply:${yes}`] });
   const runs: any[] = await t.run((ctx: any) => ctx.db.query("agentWorkRuns").collect());
   expect(runs[0]).toMatchObject({ kind: "brief", status: "done", summary: "Saturday's climb at the north wall is coming together.", promptTokens: 2000 });
-  // Nothing new since: no more work is due, and the next brief waits out its gap.
+  // Nothing new since: no more work is due, and the next brief waits out its tier gap (4h for Chief of Staff).
   const after: any = await briefWork(t, w.communityId);
   expect(after).toMatchObject({ pending: 0, reviewedThrough: row.dueAt });
   expect(after.dueAt).toBeUndefined();
   await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: row.dueAt + 10 * 60_000 }));
-  expect((await briefWork(t, w.communityId)).dueAt).toBe(row.dueAt + 3 * HOUR);
+  expect((await briefWork(t, w.communityId)).dueAt).toBe(row.dueAt + 4 * HOUR);
+});
+
+test("Guide tier communities refresh their community pulse at most every 12 hours", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  // Switch the community from operator-comped Chief of Staff to a Guide ($20) subscription.
+  await t.run(async (ctx: any) => {
+    const ops = await ctx.db.query("operatorRoles").collect();
+    for (const op of ops) await ctx.db.delete(op._id);
+    const community = await ctx.db.get(w.communityId);
+    await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: community.ownerId,
+      communityId: w.communityId,
+      provider: "stripe",
+      providerCustomerId: "cus_guide_brief",
+      providerSubscriptionId: "sub_guide_brief",
+      providerPriceId: "price_guide_brief",
+      planTier: "guide",
+      status: "active",
+      currentPeriodStartAt: NOW - 24 * HOUR,
+      currentPeriodEndAt: NOW + 30 * 24 * HOUR,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: NOW - 24 * HOUR,
+      createdAt: NOW - 24 * HOUR,
+      updatedAt: NOW - 24 * HOUR,
+    });
+  });
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
+  await t.run(async (ctx: any) => {
+    const existing = await ctx.db
+      .query("agentWork")
+      .withIndex("by_scope_kind", (q: any) => q.eq("scopeKey", `community:${String(w.communityId)}`).eq("kind", "brief"))
+      .first();
+    await ctx.db.patch(existing._id, { pending: 0, dueAt: undefined, reviewedThrough: NOW });
+  });
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW + 10 * 60_000 }));
+  expect((await briefWork(t, w.communityId)).dueAt).toBe(NOW + 12 * HOUR);
 });
 
 test("a point citing a post it wasn't shown, or a link, is refused with the reason and written again", async () => {

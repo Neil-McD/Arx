@@ -27,6 +27,7 @@ import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
+import { ensureChiefOfStaffFounderBriefEnrolled } from "./communityFounderBrief";
 import { runDueBuilderHeartbeatsForAction } from "./communityBuilderHeartbeat";
 import {
   readActiveCommunityAllowanceState,
@@ -341,6 +342,16 @@ export const enrollFounderSubscriptionsPageInternal = internalMutation({
           nowMs: args.nowMs,
         });
       }
+      if (founderPlanTierHasProactiveAgent(sub.planTier)) {
+        const community = await ctx.db.get(sub.communityId);
+        if (community && communityIsActive(community)) {
+          await ensureChiefOfStaffFounderBriefEnrolled(ctx, {
+            communityId: sub.communityId,
+            ownerUserId: community.ownerId,
+            nowMs: args.nowMs,
+          });
+        }
+      }
     }
     return {
       enrolled,
@@ -386,6 +397,11 @@ export const enrollAndListDueMemberCoachCommunitiesInternal = internalMutation({
             updatedAt: args.nowMs,
           });
         }
+        await ensureChiefOfStaffFounderBriefEnrolled(ctx, {
+          communityId: comm._id,
+          ownerUserId: comm.ownerId,
+          nowMs: args.nowMs,
+        });
         if (existing?.weeklyDigestEnabled !== false) {
           await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
             communityId: comm._id,

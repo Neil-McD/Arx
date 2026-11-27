@@ -318,7 +318,7 @@ test("Chief of Staff signals populate Founder Brief and builder analytics withou
   expect(md).toContain("1 paying member quiet 14+ days: Maya.");
   expect(md).toContain("1 learner stalled in Launch Playbook: Rashid.");
   expect(md).toContain("Rising contributors this week: Rashid");
-  expect(md).toContain("Pods: Shippers Pod (1 seats, 3 msgs/7d).");
+  expect(md).toContain("Pods: Shippers Pod (1 member, 3 messages this week).");
 
   // 2. Owner/Admin builder/analytics.json exposes the exact same live Chief of Staff summary.
   const analytics: any = await t.query(internal.communityAdmin.readCommunityAnalyticsForTrustedManagerInternal, {

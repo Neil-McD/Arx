@@ -26,6 +26,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 const MAX_WINDOW_MS = 3 * DAY_MS;
+const UPCOMING_EVENTS_WINDOW_MS = 7 * DAY_MS;
+const HOME_FOUNDER_BRIEF_FRESH_MS = 36 * HOUR_MS;
 const CLAIM_LEASE_MS = 10 * 60 * 1000;
 const MAX_BRIEFS_PER_RUN = 25;
 const FOUNDER_BRIEF_CONCURRENCY = 5;
@@ -35,6 +37,14 @@ const SCAN_LIMIT = 200;
 const LIST_LIMIT = 5;
 const BRIEF_MAX_OUTPUT_TOKENS = 1_200;
 const internalRefs = internal as any;
+
+export type HomeFounderBrief = {
+  headline: string;
+  sections: Array<{ title: string; items: string[] }>;
+  nextStep: string | null;
+  briefDate: string;
+  sentAt: string;
+};
 
 export type FounderBriefSnapshot = {
   communityName: string;
@@ -56,6 +66,9 @@ export type FounderBriefSnapshot = {
   // Founder-only Chief of Staff intelligence (populated for the daily Founder
   // Brief; never included on member Home snapshots).
   chiefOfStaff?: FounderChiefOfStaffSignals;
+  // Fresh Chief of Staff morning brief surfaced directly on Home for the owner
+  // (never populated on member Home snapshots or non-Chief-of-Staff communities).
+  founderBrief?: HomeFounderBrief | null;
 };
 
 export type FounderBrief = {
@@ -132,7 +145,7 @@ export async function buildSnapshot(
       : Promise.resolve([]),
     ctx.db.query("communityEvents")
       .withIndex("by_community_status_startsAt", (q: any) =>
-        q.eq("communityId", community._id).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + 2 * DAY_MS))
+        q.eq("communityId", community._id).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + UPCOMING_EVENTS_WINDOW_MS))
       .take(LIST_LIMIT),
   ]);
   const live = (row: any) => row.status === "live";
@@ -383,14 +396,20 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
   if (snapshot.quietNewcomers.count) people.push(`${plural(snapshot.quietNewcomers.count, "newcomer")} haven't posted yet: ${snapshot.quietNewcomers.names.join(", ")}.`);
   if (people.length) sections.push({ title: "People", items: people.slice(0, 5) });
 
-  const activityItems = [
-    `${plural(snapshot.activity.posts, "post")} and ${plural(snapshot.activity.replies, "reply")} from ${plural(snapshot.activity.activePeople, "person")} in the last ${snapshot.windowHours} hours.`,
-  ];
+  const activityItems: string[] = [];
+  if (snapshot.activity.posts > 0 || snapshot.activity.replies > 0) {
+    activityItems.push(
+      `${plural(snapshot.activity.posts, "post")} and ${plural(snapshot.activity.replies, "reply")} from ${plural(snapshot.activity.activePeople, "person")} in the last ${snapshot.windowHours} hours.`,
+    );
+  }
   if (cos && cos.podHealth.length > 0) {
-    const podSummary = cos.podHealth.slice(0, 3).map((pod) => `${pod.name} (${pod.seats} seats, ${pod.messages7d} msgs/7d)`).join("; ");
+    const podSummary = cos.podHealth
+      .slice(0, 3)
+      .map((pod) => `${pod.name} (${plural(pod.seats, "member")}, ${plural(pod.messages7d, "message")} this week)`)
+      .join("; ");
     activityItems.push(`Pods: ${podSummary}.`);
   }
-  sections.push({ title: "Activity", items: activityItems });
+  if (activityItems.length) sections.push({ title: "Activity", items: activityItems });
 
   if (snapshot.upcomingEvents.length) {
     sections.push({ title: "Coming up", items: snapshot.upcomingEvents.map((event) => `${event.title} (${event.startsAt})`) });
@@ -415,13 +434,22 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
 
 export const FOUNDER_BRIEF_PROMPT = [
   "You are this community's AI chief of staff writing the founder's morning brief.",
-  "Write like a sharp chief of staff: short, specific, warm, no filler.",
+  "Write like a sharp chief of staff: short, specific, warm, high-signal, zero filler.",
   "Use only facts in the snapshot. Never invent people, numbers or events, and never quote or speculate about members' private chats or private pod messages.",
-  "Lead with what needs the founder (join requests, waiting guide drafts and ready stage moves on Home, unanswered posts), then what the guide did, then people signals (recent member wins, Member Board stuck/needs-you highlights, quiet paying members at churn risk, stalled course learners, rising contributors, new and quiet newcomers), then activity/pod health and what's coming up.",
+  "HARD RULE — NEVER REPORT ZEROS OR ABSENT ITEMS: never write sentences like 'No pending join requests', 'No unanswered posts', 'No recent wins', 'No quiet paying members', 'No stalled learners', 'No reply drafts waiting', 'None were sent', or 'No upcoming events'. If a category has nothing real to report, omit it completely.",
+  "HARD RULE — PLAIN FOUNDER LANGUAGE ONLY: never use internal jargon like 'coach draft', 'in the window', or 'seats'. Say 'check-in draft', 'over the last 24 hours', and 'members'.",
+  "Lead with what needs the founder (join requests, waiting check-in or reply drafts, ready Member Board stage moves, unanswered posts), then what the guide handled, then people signals (recent wins, Member Board needs-attention highlights, quiet paying members at churn risk, stalled learners, rising contributors, new and quiet newcomers), then activity/pods and upcoming events (only when present).",
   "Name people. Event start times are already formatted in the founder's local time (e.g. \"Sat 7:00 AM\"); include them naturally without raw UTC timestamps.",
-  "End with one concrete suggested next step the founder can do in two minutes.",
-  "Reply with JSON only: {\"headline\": string (max 90 chars), \"sections\": [{\"title\": string (max 30 chars), \"items\": [string (max 220 chars)]}] (1-5 sections, 1-5 items each), \"next_step\": string (max 160 chars)}.",
+  "End with one concrete next step the founder can act on right away (or ask you to run right here in chat).",
+  "Reply with JSON only: {\"headline\": string (max 90 chars), \"sections\": [{\"title\": string (max 30 chars), \"items\": [string (max 220 chars)]}] (1-4 sections, 1-4 items each), \"next_step\": string (max 160 chars)}.",
 ].join("\n");
+
+const ZERO_SIGNAL_BRIEF_ITEM_PATTERN =
+  /^(?:no\s+(?:pending\s+join\s+requests|unanswered\s+(?:posts|questions)|recent\s+(?:member\s+)?wins|quiet\s+paying\s+members|stalled\s+(?:course\s+)?learners|reply\s+drafts|check-?in\s+drafts|coach\s+drafts|upcoming\s+events|new\s+members|activity)|none\s+(?:were\s+sent|waiting)|zero\s+(?:pending|new|unanswered|upcoming|waiting))/i;
+
+export function isZeroSignalBriefItem(item: string): boolean {
+  return ZERO_SIGNAL_BRIEF_ITEM_PATTERN.test(item.trim());
+}
 
 // Parses and bounds the model's brief; null when it isn't usable.
 export function parseBrief(raw: string): FounderBrief | null {
@@ -434,13 +462,20 @@ export function parseBrief(raw: string): FounderBrief | null {
     return null;
   }
   const headline = clip(value?.headline, 120);
-  const sections = (Array.isArray(value?.sections) ? value.sections : [])
+  const rawSections = (Array.isArray(value?.sections) ? value.sections : [])
     .map((section: any) => ({
       title: clip(section?.title, 40),
       items: (Array.isArray(section?.items) ? section.items : []).map((item: unknown) => clip(item, 260)).filter(Boolean).slice(0, 5),
     }))
     .filter((section: any) => section.title && section.items.length)
     .slice(0, 5);
+  const filteredSections = rawSections
+    .map((section: { title: string; items: string[] }) => ({
+      title: section.title,
+      items: section.items.filter((item) => !isZeroSignalBriefItem(item)),
+    }))
+    .filter((section: { title: string; items: string[] }) => section.items.length > 0);
+  const sections = filteredSections.length > 0 ? filteredSections : rawSections;
   if (!headline || !sections.length) return null;
   return { headline, sections, nextStep: clip(value?.next_step, 200) || null };
 }
@@ -495,9 +530,9 @@ async function scheduleNext(ctx: any, communityId: any, nowMs: number, retry: bo
 
 const DEFAULT_BRIEF_LOCAL_HOUR = 8;
 
-// Only the community's owner turns the brief on, picks its hour and time zone.
+// Only the community's owner turns the brief on, picks its hour, email copy, and time zone.
 async function saveFounderBriefSettings(ctx: any, args: {
-  communityId: any; enabled: boolean; localHour: number; timeZone: string; actorUserId: any;
+  communityId: any; enabled: boolean; emailEnabled?: boolean; localHour: number; timeZone: string; actorUserId: any;
 }) {
   const community = await ctx.db.get(args.communityId);
   if (!community || String(community.ownerId) !== String(args.actorUserId)) throw new Error("founder_brief_owner_required");
@@ -505,9 +540,19 @@ async function saveFounderBriefSettings(ctx: any, args: {
   if (!validTimeZone(args.timeZone)) throw new Error("founder_brief_time_zone_invalid");
   const nowMs = Date.now();
   const existing = await readSettings(ctx, args.communityId);
+  const emailEnabled =
+    typeof args.emailEnabled === "boolean"
+      ? args.emailEnabled
+      : existing?.emailEnabled !== false;
   const fields = {
-    enabled: args.enabled, localHour: args.localHour, timeZone: args.timeZone, updatedByUserId: args.actorUserId,
-    nextDueAt: firstDueAtMs(nowMs, args.localHour, args.timeZone), updatedAt: nowMs,
+    enabled: args.enabled,
+    emailEnabled,
+    localHour: args.localHour,
+    timeZone: args.timeZone,
+    timeZoneSource: "explicit" as const,
+    updatedByUserId: args.actorUserId,
+    nextDueAt: firstDueAtMs(nowMs, args.localHour, args.timeZone),
+    updatedAt: nowMs,
   };
   if (existing) await ctx.db.patch(existing._id, fields);
   else await ctx.db.insert("communityFounderBriefSettings", { communityId: args.communityId, ...fields, createdAt: nowMs });
@@ -516,14 +561,61 @@ async function saveFounderBriefSettings(ctx: any, args: {
 
 function mapFounderBriefSettings(settings: any) {
   return settings
-    ? { enabled: Boolean(settings.enabled), local_hour: settings.localHour, time_zone: settings.timeZone }
-    : { enabled: false, local_hour: DEFAULT_BRIEF_LOCAL_HOUR, time_zone: null };
+    ? {
+        enabled: Boolean(settings.enabled),
+        email_enabled: settings.emailEnabled !== false,
+        local_hour: settings.localHour,
+        time_zone: settings.timeZoneSource === "default" ? null : settings.timeZone,
+      }
+    : {
+        enabled: true,
+        email_enabled: true,
+        local_hour: DEFAULT_BRIEF_LOCAL_HOUR,
+        time_zone: null,
+      };
+}
+
+// Auto-enrolls Chief of Staff communities so the Morning Founder Brief runs by
+// default without requiring the founder to flip an initial switch in Settings.
+// Previously disabled schedules are also upgraded to the always-on policy, and
+// default UTC rows stay marked `timeZoneSource: "default"` until the founder's
+// local browser time zone is captured.
+export async function ensureChiefOfStaffFounderBriefEnrolled(
+  ctx: any,
+  args: { communityId: any; ownerUserId: any; nowMs: number },
+): Promise<boolean> {
+  const existing = await readSettings(ctx, args.communityId);
+  if (existing) {
+    if (!existing.enabled) {
+      await ctx.db.patch(existing._id, {
+        enabled: true,
+        nextDueAt: nextOccurrenceMs(args.nowMs, existing.localHour, existing.timeZone),
+        updatedAt: args.nowMs,
+      });
+      return true;
+    }
+    return false;
+  }
+  await ctx.db.insert("communityFounderBriefSettings", {
+    communityId: args.communityId,
+    enabled: true,
+    emailEnabled: true,
+    localHour: DEFAULT_BRIEF_LOCAL_HOUR,
+    timeZone: "UTC",
+    timeZoneSource: "default",
+    nextDueAt: nextOccurrenceMs(args.nowMs, DEFAULT_BRIEF_LOCAL_HOUR, "UTC"),
+    updatedByUserId: args.ownerUserId,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return true;
 }
 
 export const setFounderBriefSettingsInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     enabled: v.boolean(),
+    emailEnabled: v.optional(v.boolean()),
     localHour: v.number(),
     timeZone: v.string(),
     actorUserId: v.id("users"),
@@ -542,6 +634,48 @@ export const getFounderBriefSettings = query({
   },
 });
 
+async function readFreshHomeFounderBrief(
+  ctx: any,
+  communityId: any,
+  nowMs: number,
+): Promise<HomeFounderBrief | null> {
+  const [agentOn, proactiveTier] = await Promise.all([
+    communityAgentIsOn(ctx, communityId),
+    communityHasProactiveAgentTier(ctx, communityId, nowMs),
+  ]);
+  if (!agentOn || !proactiveTier) return null;
+  const latest = await ctx.db
+    .query("communityFounderBriefs")
+    .withIndex("by_community_status_windowEnd", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "sent"),
+    )
+    .order("desc")
+    .first();
+  if (!latest) return null;
+  const sentAtMs = Number(latest.sentAt ?? latest.updatedAt ?? 0);
+  if (!Number.isFinite(sentAtMs) || nowMs - sentAtMs > HOME_FOUNDER_BRIEF_FRESH_MS) return null;
+  const payload = latest.delivery?.emailPayload;
+  const headline = clip(payload?.headline, 140);
+  const sections = (Array.isArray(payload?.sections) ? payload.sections : [])
+    .map((section: any) => ({
+      title: clip(section?.title, 40),
+      items: (Array.isArray(section?.items) ? section.items : [])
+        .map((item: unknown) => clip(item, 260))
+        .filter((item: string) => Boolean(item) && !isZeroSignalBriefItem(item))
+        .slice(0, 5),
+    }))
+    .filter((section: { title: string; items: string[] }) => section.title && section.items.length > 0)
+    .slice(0, 5);
+  if (!headline || sections.length === 0) return null;
+  return {
+    headline,
+    sections,
+    nextStep: clip(payload?.nextStep, 200) || null,
+    briefDate: String(latest.briefDate ?? ""),
+    sentAt: new Date(sentAtMs).toISOString(),
+  };
+}
+
 // Home (design system v1): the same facts the brief reads, live, for the last
 // day. Owner only, like the brief itself, and nothing the brief doesn't send.
 export const getCommunityHomeSnapshot = query({
@@ -552,7 +686,14 @@ export const getCommunityHomeSnapshot = query({
     if (!community || String(community.ownerId) !== String(userId)) throw new Error("community_home_owner_required");
     if (!communityIsActive(community)) return null;
     const nowMs = Date.now();
-    return await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
+    const [snapshot, founderBrief] = await Promise.all([
+      buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs),
+      readFreshHomeFounderBrief(ctx, args.communityId, nowMs),
+    ]);
+    return {
+      ...snapshot,
+      ...(founderBrief ? { founderBrief } : {}),
+    };
   },
 });
 
@@ -575,6 +716,7 @@ export const setFounderBriefSettings = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     enabled: v.boolean(),
+    emailEnabled: v.optional(v.boolean()),
     localHour: v.number(),
     timeZone: v.string(),
   },
@@ -606,9 +748,14 @@ export const claimFounderBriefInternal = internalMutation({
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }
-    // Daily Founder Briefs require an active Chief of Staff tier (or operator grant).
-    // Free, Guide ($20/mo), past-due, expired, and risk-revoked communities fail closed.
-    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))) {
+    // Daily Founder Briefs require the community agent to be on AND an active
+    // Chief of Staff tier (or operator grant). Disabled-agent, Free, Guide,
+    // past-due, expired, and risk-revoked communities fail closed.
+    const [agentOn, proactiveTier] = await Promise.all([
+      communityAgentIsOn(ctx, args.communityId),
+      communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs),
+    ]);
+    if (!agentOn || !proactiveTier) {
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }
@@ -647,7 +794,15 @@ export const claimFounderBriefInternal = internalMutation({
     }
     // Hold the schedule while this attempt runs; finishing sets the next time.
     await scheduleNext(ctx, args.communityId, args.nowMs, true);
-    return { briefId, ownerUserId: community.ownerId, windowStartMs: fields.windowStartMs, windowEndMs: fields.windowEndMs, delivery };
+    const briefSettings = await readSettings(ctx, args.communityId);
+    return {
+      briefId,
+      ownerUserId: community.ownerId,
+      windowStartMs: fields.windowStartMs,
+      windowEndMs: fields.windowEndMs,
+      delivery,
+      emailEnabled: briefSettings?.emailEnabled !== false,
+    };
   },
 });
 
@@ -797,15 +952,17 @@ async function writeAndDeliver(ctx: any, args: { communityId: any; briefDate: st
       trustedOwnerId: claim.ownerUserId, threadId: delivery.threadId, messageKey: threadMessageKey, role: "assistant",
       contentJson: { text: delivery.markdown, meta: { kind: "founder_brief", brief_date: args.briefDate, writer } },
     });
-    await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
-      kind: "founder_daily_brief",
-      communityId: args.communityId,
-      communityLifecycleGeneration: delivery.communityLifecycleGeneration,
-      recipientUserId: claim.ownerUserId,
-      templateKey: "founder_daily_brief",
-      payload: delivery.emailPayload,
-      dedupeKey: threadMessageKey,
-    });
+    if (claim.emailEnabled !== false) {
+      await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
+        kind: "founder_daily_brief",
+        communityId: args.communityId,
+        communityLifecycleGeneration: delivery.communityLifecycleGeneration,
+        recipientUserId: claim.ownerUserId,
+        templateKey: "founder_daily_brief",
+        payload: delivery.emailPayload,
+        dedupeKey: threadMessageKey,
+      });
+    }
     await finish("sent", { writer, ...(stats ? { stats } : {}), threadMessageKey });
     return "sent";
   } catch (error) {

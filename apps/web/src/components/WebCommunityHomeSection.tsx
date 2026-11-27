@@ -296,6 +296,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     return draft ? `coach:${draft.id}` : null;
   }, [draftHandle, coachDrafts]);
   const [stageProposals, setStageProposals] = useState<CloudJourneyStageAdvanceProposal[] | null>(null);
+  const [founderBriefOpen, setFounderBriefOpen] = useState(false);
   const loadedCommunityIdRef = useRef<string | null>(null);
   const isHost = props.audience === "host";
   const agentOn = props.agentOn !== false;
@@ -330,6 +331,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       setDrafts(null);
       setCoachDrafts(null);
       setStageProposals(null);
+      setFounderBriefOpen(false);
     }
     setFailed(false);
     void (async () => {
@@ -521,16 +523,61 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       <Rail index={0} label="The community today">{panel}</Rail>
     </KitApp>
   ) : null;
+  const founderBrief = isHost && agentOn ? snapshot?.founderBrief ?? null : null;
+  const founderBriefItems = founderBrief
+    ? founderBrief.sections.flatMap((section) => section.items)
+    : [];
+  const founderBriefCanExpand = Boolean(
+    founderBrief && (founderBriefItems.length > 3 || founderBrief.sections.length > 1),
+  );
+  const founderAge = founderBrief?.sentAt ? briefAge(founderBrief.sentAt, now.getTime()) : "";
   const age = brief ? briefAge(brief.updated_at, now.getTime()) : "";
+  const hasAnyBrief = Boolean(founderBrief || brief);
   return (
     <>
       <HomeBody
         onPointerEnter={() => { if (liveTags) setHeldTags({ refreshKey: props.refreshKey, tags: liveTags }); }}
         onPointerLeave={() => setHeldTags(null)}>
         <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
-        <Hello greeting={greeting} line={!ready ? (failed ? "" : " ") : brief ? "" : homeSentenceFor(snapshot!, props.audience, needs, homeTagsTotal(shownTags))} />
+        <Hello greeting={greeting} line={!ready ? (failed ? "" : " ") : hasAnyBrief ? "" : homeSentenceFor(snapshot!, props.audience, needs, homeTagsTotal(shownTags))} />
         {!ready && !failed ? <PanelBlockSkeleton label="Loading home…" rows={2} compact /> : null}
-        {ready && brief ? (
+        {ready && founderBrief ? (
+          <div className={cx("hbrief", "hbrief-founder")}>
+            <p className={cx("hbrief-head")}>{founderBrief.headline}</p>
+            {founderBriefOpen ? (
+              <div className={cx("hbrief-sections")}>
+                {founderBrief.sections.map((section) => (
+                  <div key={section.title} className={cx("hbrief-sec")}>
+                    <h4>{section.title}</h4>
+                    <ul>
+                      {section.items.map((item, idx) => (
+                        <li key={`${section.title}:${idx}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <ul className={cx("hbrief-list")}>
+                {founderBriefItems.slice(0, 3).map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
+            )}
+            {founderBrief.nextStep ? (
+              <p className={cx("hbrief-next")}><strong>Next:</strong> {founderBrief.nextStep}</p>
+            ) : null}
+            <span>
+              <em>Morning brief{founderAge ? ` · ${founderAge}` : ""}</em>
+              {founderBriefCanExpand ? (
+                <button type="button" aria-expanded={founderBriefOpen} onClick={() => setFounderBriefOpen((open) => !open)}>
+                  {founderBriefOpen ? "Show less" : "Full brief"}
+                </button>
+              ) : null}
+              <button type="button" onClick={kit.onTalkItOver}>Talk it over</button>
+            </span>
+          </div>
+        ) : ready && brief ? (
           <div className={cx("hbrief")}>
             <p><BriefText summary={brief.summary} /></p>
             {age || brief.channels.length ? (
@@ -543,7 +590,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             ) : null}
           </div>
         ) : null}
-        {ready && brief && isHost && needs === 0 ? <p className={cx("hnone")}>Nothing needs you today.</p> : null}
+        {ready && hasAnyBrief && isHost && needs === 0 ? <p className={cx("hnone")}>Nothing needs you today.</p> : null}
         {ready && isHost && agentOn ? (
           <Suspense fallback={null}>
             <GuideSuggests
