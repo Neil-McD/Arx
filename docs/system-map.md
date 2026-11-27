@@ -247,7 +247,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   that exist are filed without being rewritten), `communityBriefs` (a place's brief, table
   `communityBriefs`: written by the guide after new posts in a place, the
   community's open channels or a pod's own room where the guide works, at
-  most every three hours, on the same run entry in one request, with one
+  most every 4 hours on Chief of Staff and every 12 hours on Guide, on the
+  same run entry in one request, with one
   `brief.write`: a summary of one to three sentences and the posts it drew
   on, or nothing when the posts are only noise; read back as
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
@@ -394,7 +395,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes;
   runs up to `25` due briefs per round in bounded parallel chunks of `5` and
   self-continues up to `4` rounds when a batch fills with progress;
-  the owner turns it on in Settings → Daily brief, `CommunityFounderBriefSection`);
+  auto-enrolled and always on by default for Chief of Staff communities while
+  the community agent is on, surfaced on owner Home and in Guide chat with an
+  optional email copy and delivery-hour picker in Settings → Morning brief,
+  `CommunityFounderBriefSection`);
   `stagingSeedBriefLab` and `stagingSeedPolynetDemo` (hand-run staging seeds; the demo
   community behind design v1); `reviewDemoSeed` (hand-run on production too, behind
   `POLYNET_ALLOW_REVIEW_DEMO=1`: the Unlisted Harbor Run Club for app-directory

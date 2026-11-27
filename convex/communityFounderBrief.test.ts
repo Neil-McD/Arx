@@ -7,6 +7,7 @@ import schema from "./schema";
 import {
   briefMarkdown,
   deterministicBrief,
+  ensureChiefOfStaffFounderBriefEnrolled,
   formatEventStartInTimeZone,
   localDateAndHour,
   nextOccurrenceMs,
@@ -276,6 +277,73 @@ describe("founder brief writing", () => {
     expect(briefs).toHaveLength(1);
     expect(briefs[0]?.status).toBe("sent");
     expect(emails).toHaveLength(0);
+  });
+
+  it("honors the community agent off switch in claimFounderBriefInternal", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityAgentConfigs", {
+        communityId: f.communityId,
+        systemPrompt: "",
+        agentEnabled: false,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await ctx.db.insert("communityFounderBriefSettings", {
+        communityId: f.communityId,
+        enabled: true,
+        emailEnabled: true,
+        localHour: 8,
+        timeZone: "UTC",
+        nextDueAt: nowMs,
+        updatedByUserId: f.ownerId,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    });
+    const claimed = await t.mutation(internalRefs.communityFounderBrief.claimFounderBriefInternal, {
+      communityId: f.communityId,
+      briefDate: "2026-11-27",
+      nowMs,
+    });
+    expect(claimed).toBeNull();
+  });
+
+  it("auto-enrolls Chief of Staff with uninitialized time zone and upgrades previously disabled schedules", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+
+    await t.run((ctx) =>
+      ensureChiefOfStaffFounderBriefEnrolled(ctx, {
+        communityId: f.communityId,
+        ownerUserId: f.ownerId,
+        nowMs,
+      }),
+    );
+    // Default UTC enrollment reports time_zone: null so Settings captures the founder's browser zone on save.
+    await expect(asOwner.query(api.communityFounderBrief.getFounderBriefSettings, { communityId: f.communityId }))
+      .resolves.toEqual({ enabled: true, email_enabled: true, local_hour: 8, time_zone: null });
+
+    // Saving explicitly captures the founder's zone.
+    await expect(asOwner.mutation(api.communityFounderBrief.setFounderBriefSettings, {
+      communityId: f.communityId, enabled: false, localHour: 9, timeZone: "America/New_York",
+    })).resolves.toEqual({ enabled: false, email_enabled: true, local_hour: 9, time_zone: "America/New_York" });
+
+    // Re-running Chief of Staff enrollment upgrades legacy enabled:false schedules back to enabled:true
+    // while keeping the founder's explicit time zone intact.
+    await t.run((ctx) =>
+      ensureChiefOfStaffFounderBriefEnrolled(ctx, {
+        communityId: f.communityId,
+        ownerUserId: f.ownerId,
+        nowMs: nowMs + HOUR_MS,
+      }),
+    );
+    await expect(asOwner.query(api.communityFounderBrief.getFounderBriefSettings, { communityId: f.communityId }))
+      .resolves.toEqual({ enabled: true, email_enabled: true, local_hour: 9, time_zone: "America/New_York" });
   });
 });
 

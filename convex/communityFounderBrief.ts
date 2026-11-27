@@ -549,6 +549,7 @@ async function saveFounderBriefSettings(ctx: any, args: {
     emailEnabled,
     localHour: args.localHour,
     timeZone: args.timeZone,
+    timeZoneSource: "explicit" as const,
     updatedByUserId: args.actorUserId,
     nextDueAt: firstDueAtMs(nowMs, args.localHour, args.timeZone),
     updatedAt: nowMs,
@@ -564,7 +565,7 @@ function mapFounderBriefSettings(settings: any) {
         enabled: Boolean(settings.enabled),
         email_enabled: settings.emailEnabled !== false,
         local_hour: settings.localHour,
-        time_zone: settings.timeZone,
+        time_zone: settings.timeZoneSource === "default" ? null : settings.timeZone,
       }
     : {
         enabled: true,
@@ -576,18 +577,32 @@ function mapFounderBriefSettings(settings: any) {
 
 // Auto-enrolls Chief of Staff communities so the Morning Founder Brief runs by
 // default without requiring the founder to flip an initial switch in Settings.
+// Previously disabled schedules are also upgraded to the always-on policy, and
+// default UTC rows stay marked `timeZoneSource: "default"` until the founder's
+// local browser time zone is captured.
 export async function ensureChiefOfStaffFounderBriefEnrolled(
   ctx: any,
   args: { communityId: any; ownerUserId: any; nowMs: number },
 ): Promise<boolean> {
   const existing = await readSettings(ctx, args.communityId);
-  if (existing) return false;
+  if (existing) {
+    if (!existing.enabled) {
+      await ctx.db.patch(existing._id, {
+        enabled: true,
+        nextDueAt: nextOccurrenceMs(args.nowMs, existing.localHour, existing.timeZone),
+        updatedAt: args.nowMs,
+      });
+      return true;
+    }
+    return false;
+  }
   await ctx.db.insert("communityFounderBriefSettings", {
     communityId: args.communityId,
     enabled: true,
     emailEnabled: true,
     localHour: DEFAULT_BRIEF_LOCAL_HOUR,
     timeZone: "UTC",
+    timeZoneSource: "default",
     nextDueAt: nextOccurrenceMs(args.nowMs, DEFAULT_BRIEF_LOCAL_HOUR, "UTC"),
     updatedByUserId: args.ownerUserId,
     createdAt: args.nowMs,
@@ -733,9 +748,14 @@ export const claimFounderBriefInternal = internalMutation({
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }
-    // Daily Founder Briefs require an active Chief of Staff tier (or operator grant).
-    // Free, Guide ($20/mo), past-due, expired, and risk-revoked communities fail closed.
-    if (!(await communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs))) {
+    // Daily Founder Briefs require the community agent to be on AND an active
+    // Chief of Staff tier (or operator grant). Disabled-agent, Free, Guide,
+    // past-due, expired, and risk-revoked communities fail closed.
+    const [agentOn, proactiveTier] = await Promise.all([
+      communityAgentIsOn(ctx, args.communityId),
+      communityHasProactiveAgentTier(ctx, args.communityId, args.nowMs),
+    ]);
+    if (!agentOn || !proactiveTier) {
       await scheduleNext(ctx, args.communityId, args.nowMs, false);
       return null;
     }

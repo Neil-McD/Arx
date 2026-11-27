@@ -1179,6 +1179,7 @@ export default defineSchema({
     emailEnabled: v.optional(v.boolean()),
     localHour: v.number(),
     timeZone: v.string(),
+    timeZoneSource: v.optional(v.union(v.literal("default"), v.literal("explicit"))),
     nextDueAt: v.number(),
     updatedByUserId: v.id("users"),
     createdAt: v.number(),

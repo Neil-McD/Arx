@@ -105,8 +105,23 @@ export function CommunityFounderBriefSection(props: {
 
   const emailEnabled = settings ? settings.email_enabled : true;
   const localHour = settings?.local_hour ?? 8;
+  const pausedLegacySchedule = Boolean(settings && !settings.enabled);
   return (
     <SettingsGroup label="Morning brief">
+      {pausedLegacySchedule ? (
+        <SettingsRow
+          label="Morning brief is paused"
+          help="Morning briefs are now included by default on Chief of Staff. Resume to start receiving yours on Home and in your guide chat."
+        >
+          <SettingsButton
+            variant="primary"
+            disabled={saving}
+            onClick={() => void save({ localHour, emailEnabled })}
+          >
+            {saving ? "Enabling…" : "Enable morning brief"}
+          </SettingsButton>
+        </SettingsRow>
+      ) : null}
       <SettingsRow
         label="Morning brief time"
         htmlFor="brief-hour"
@@ -114,7 +129,7 @@ export function CommunityFounderBriefSection(props: {
           error ? (
             <span className="settings-v1-error" role="alert">{error}</span>
           ) : (
-            `Always on for Chief of Staff — appears on Home and in your guide chat each morning (${settings?.time_zone ? `${settings.time_zone} time` : "your local time"}).`
+            `Always on for Chief of Staff — appears on Home and in your guide chat each morning (${settings?.time_zone ? `${settings.time_zone} time` : `${browserTimeZone()} time on save`}).`
           )
         }
       >
