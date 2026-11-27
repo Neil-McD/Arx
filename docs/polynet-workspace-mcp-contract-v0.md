@@ -481,6 +481,18 @@ reuse the same `idempotency_key` when retrying a mutating tool call, then use
 the canonical receipt and readback to distinguish a replayed success from a
 new effect.
 
+## Registry listing
+
+Polynet is listed in the official MCP Registry as `ai.polynet/polynet`
+(published 2026-11-27; `server.json` at the repo root is the listed record).
+Ownership of `polynet.ai` is proven by a DNS TXT record on the apex,
+`v=MCPv1; k=ed25519; p=<public key>`, because the apex redirects to `www` and
+the registry's HTTP check does not follow redirects. The matching private key
+lives only on Neil's Mac (`~/.config/polynet/mcp-registry-key.pem`), never in
+the repo. To update the listing: bump `version` in `server.json`, then
+`mcp-publisher login dns --domain polynet.ai --private-key <hex>` and
+`mcp-publisher publish`.
+
 ## OAuth continuity
 
 The intended experience is:
