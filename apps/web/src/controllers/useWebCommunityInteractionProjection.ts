@@ -86,6 +86,7 @@ type UseWebCommunityInteractionProjectionParams = {
   canonicalSessionUserId: string | null;
   ensureSession: EnsureAuthSession;
   isCommunityChatActive: boolean;
+  resumeEpoch?: number;
   session: AuthSession | null;
 };
 
@@ -294,11 +295,15 @@ export function useWebCommunityInteractionProjection<
     canonicalSessionUserId,
     ensureSession,
     isCommunityChatActive,
+    resumeEpoch = 0,
     session,
   } = params;
   const [roots, setRoots] = useState<CommunityInteractionRootBundle[]>([]);
   const [activityEvents, setActivityEvents] = useState<CommunityActivityEvent[]>([]);
   const [nextBeforeCreatedAt, setNextBeforeCreatedAt] = useState<number | null>(null);
+  const [subscriptionRecoveryNonce, setSubscriptionRecoveryNonce] = useState(0);
+  const liveSubscriptionHealthyRef = useRef(false);
+  const lastResumeEpochRef = useRef(resumeEpoch);
   const [isLoadingOlderRoots, setIsLoadingOlderRoots] = useState(false);
   const [rootChangeReason, setRootChangeReason] =
     useState<"initial" | "newer" | "older" | "reset">("reset");
@@ -532,10 +537,22 @@ export function useWebCommunityInteractionProjection<
   }, [activeChannelId, activeCommunityId, ensureSession]);
 
   useEffect(() => {
+    if (resumeEpoch === lastResumeEpochRef.current) return;
+    lastResumeEpochRef.current = resumeEpoch;
+    if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) return;
+    if (!liveSubscriptionHealthyRef.current) {
+      setSubscriptionRecoveryNonce((current) => current + 1);
+    }
+  }, [activeCommunityId, canonicalSessionUserId, isCommunityChatActive, resumeEpoch]);
+
+  useEffect(() => {
     // The feed is live only while a channel is on screen; elsewhere (Home,
     // Events, Knowledge, Members...) it does not hold a subscription. What was
     // shown stays cached, so coming back draws at once while it reconnects.
-    if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) return;
+    if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) {
+      liveSubscriptionHealthyRef.current = false;
+      return;
+    }
     const hasCurrentRoots = rootsRef.current.some((bundle) =>
       rootMatchesChannel(bundle, activeCommunityId, activeChannelId)
     );
@@ -553,9 +570,14 @@ export function useWebCommunityInteractionProjection<
     let unsubscribePinnedRoot: (() => void) | null = null;
     setPinnedRootError(null);
     void (async () => {
-      const usableSession = await ensureSession(sessionRef.current);
-      if (!usableSession || cancelled) return;
       try {
+        const usableSession = await ensureSession(sessionRef.current);
+        if (cancelled) return;
+        if (!usableSession) {
+          liveSubscriptionHealthyRef.current = false;
+          setIsLoadingRoots(false);
+          return;
+        }
         liveClient = createCloudCommunityChatLiveClient({
           session: usableSession,
           ensureSession,
@@ -571,6 +593,7 @@ export function useWebCommunityInteractionProjection<
               activeCommunityIdRef.current !== activeCommunityId ||
               activeChannelIdRef.current !== activeChannelId
             ) return;
+            liveSubscriptionHealthyRef.current = true;
             const hadLoadedRoots = rootsRef.current.some(
               (bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId),
             );
@@ -597,6 +620,7 @@ export function useWebCommunityInteractionProjection<
               activeCommunityIdRef.current !== activeCommunityId ||
               activeChannelIdRef.current !== activeChannelId
             ) return;
+            liveSubscriptionHealthyRef.current = false;
             setError(formatProjectionError(subscriptionError));
             if (communityProjectionAccessLost(subscriptionError)) {
               ++rootsRequestIdRef.current;
@@ -638,6 +662,7 @@ export function useWebCommunityInteractionProjection<
         });
       } catch (subscriptionError) {
         if (!cancelled) {
+          liveSubscriptionHealthyRef.current = false;
           lastSubscribedPinnedRootRef.current = null;
           setPinnedRoot(null);
           setPinnedRootError(formatPinnedRootError(subscriptionError));
@@ -648,11 +673,12 @@ export function useWebCommunityInteractionProjection<
     })();
     return () => {
       cancelled = true;
+      liveSubscriptionHealthyRef.current = false;
       unsubscribe?.();
       unsubscribePinnedRoot?.();
       liveClient?.close();
     };
-  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive]);
+  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive, subscriptionRecoveryNonce]);
 
   useEffect(() => {
     if (

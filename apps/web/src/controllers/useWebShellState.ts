@@ -25,6 +25,7 @@ import type {
   PublicRoute,
 } from "../../../../shared/webAppRouteState";
 import {
+  normalizeAppRouteForShellVariant,
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
   resolveInitialAppShellVariant,
@@ -54,10 +55,13 @@ export function useWebShellState() {
           phone: isPhoneViewport(),
         });
   const initialPublicRoute: PublicRoute = readPublicRouteFromLocation();
-  const initialAppRoute: AppRouteState | null =
+  const rawInitialAppRoute: AppRouteState | null =
     initialPublicRoute.kind === "app"
       ? readAppRouteFromLocation()
       : null;
+  const initialAppRoute: AppRouteState | null = rawInitialAppRoute
+    ? normalizeAppRouteForShellVariant(rawInitialAppRoute, initialShellVariant)
+    : null;
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(
     initialPublicRoute,
   );

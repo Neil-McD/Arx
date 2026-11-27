@@ -1012,3 +1012,24 @@ export function eventIdFromAddressKey(key: string | null | undefined): string | 
   const value = readRouteId(key);
   return value ? value.replace("_", ":") : null;
 }
+
+// Desktop has no separate channel-list screen (/c/:slug/browse is phone-only);
+// normalizing community_home -> home/chat on desktop keeps #General selected
+// and subscribed instead of stranding desktop on an unselected skeleton feed.
+export function normalizeAppRouteForShellVariant(
+  route: AppRouteState,
+  shellVariant: AppShellVariant,
+): AppRouteState {
+  if (
+    shellVariant !== "mobile" &&
+    route.page === "community" &&
+    route.view === "community_home"
+  ) {
+    return {
+      ...route,
+      view: "home",
+      communityTab: "chat",
+    };
+  }
+  return route;
+}

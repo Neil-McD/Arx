@@ -33,6 +33,7 @@ import {
   buildAppRoutePath,
   buildCommunityFunnelPath,
   buildSettingsPath,
+  normalizeAppRouteForShellVariant,
   readAppRouteFromLocation,
   readLegacyWorkspaceRouteContext,
   readPublicRouteFromLocation,
@@ -147,8 +148,11 @@ export function useWebShellNavigationController(params: {
       ? "mobile"
       : readShellVariantFromPathname(window.location.pathname || "/");
     const nextPublicRoute = readPublicRouteFromLocation();
-    const nextAppRoute =
+    const rawNextAppRoute =
       nextPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
+    const nextAppRoute = rawNextAppRoute
+      ? normalizeAppRouteForShellVariant(rawNextAppRoute, nextShellVariant)
+      : null;
     startTransition(() => {
       current.setShellVariant(nextShellVariant);
       current.setPublicRoute(nextPublicRoute);
