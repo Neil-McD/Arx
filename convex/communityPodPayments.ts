@@ -19,6 +19,10 @@ import { canReceiveCommunityRevenue, getStripeConnectDestinationAccountId, isStr
 import { getStripeClient, requireStripeConnectWebhookConfiguration } from "./stripeCore";
 import { cancelAndRefundDuplicateSubscription, cancelStripeSubscriptionAtPeriodEnd, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
+import {
+  distributionAttributionStripeMetadata,
+  normalizeDistributionAttributionTracking,
+} from "./distributionAttributionCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { communityIsActive } from "../shared/communityLifecycle";
 
@@ -123,6 +127,15 @@ export const podCheckoutConfigInternal = internalQuery({
       .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", args.userId)).collect())
       .find((row: any) => row.status === "pending" && row.checkoutUrl && row.checkoutExpiresAt > args.nowMs + 60_000
         && row.amountBaseUnits === price.amount_base_units && row.providerAccountId === providerAccountId);
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const attribution = normalizeDistributionAttributionTracking({
+      anonymousId: membership?.attributionAnonymousId,
+      clickId: membership?.attributionClickId,
+    });
     return {
       communityName: String(community.name ?? ""),
       podName: String(channel.name ?? ""),
@@ -134,6 +147,8 @@ export const podCheckoutConfigInternal = internalQuery({
       providerPriceId: record.providerAccountId === providerAccountId ? record.providerPriceId ?? null : null,
       openCheckoutUrl: open?.checkoutUrl ?? null,
       openPaymentId: open ? String(open._id) : null,
+      attributionAnonymousId: attribution?.anonymousId ?? null,
+      attributionClickId: attribution?.clickId ?? null,
     };
   },
 });
@@ -275,7 +290,14 @@ export const startPodCheckout = action({
         });
       const paymentId = reserved.paymentId;
       if (reserved.checkoutUrl) return { checkout_url: reserved.checkoutUrl, payment_id: String(paymentId) };
-      const paymentMetadata = { ...metadata, [POD_PAYMENT_METADATA_KEY]: String(paymentId) };
+      const paymentMetadata = {
+        ...metadata,
+        [POD_PAYMENT_METADATA_KEY]: String(paymentId),
+        ...distributionAttributionStripeMetadata({
+          anonymousId: config.attributionAnonymousId,
+          clickId: config.attributionClickId,
+        }),
+      };
       try {
         const session = await stripe.checkout.sessions.create({
           mode: "subscription",

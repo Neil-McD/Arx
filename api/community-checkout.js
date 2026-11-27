@@ -58,6 +58,18 @@ export default async function handler(req, res) {
         billingPeriod: body?.billingPeriod,
         plan: body?.plan ?? null,
         appId: typeof body?.appId === "string" ? body.appId : null,
+        ...(body?.distributionAttribution && typeof body.distributionAttribution === "object"
+          ? {
+              distributionAttribution: {
+                ...(typeof body.distributionAttribution.anonymousId === "string"
+                  ? { anonymousId: body.distributionAttribution.anonymousId }
+                  : {}),
+                ...(typeof body.distributionAttribution.clickId === "string"
+                  ? { clickId: body.distributionAttribution.clickId }
+                  : {}),
+              },
+            }
+          : {}),
         visitorHash: visitorHash(address, secret),
       }),
     });

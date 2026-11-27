@@ -711,7 +711,8 @@ export const getCommunityMemberRecord = query({
       journeyCard,
       coachDrafts,
       podPaymentRows,
-      attributionRow,
+      communityAttributionRow,
+      userAttributionRows,
       participation,
     ] = await Promise.all([
       ctx.db.get(subjectId) as Promise<{ displayName?: string; handle?: string } | null>,
@@ -777,10 +778,19 @@ export const getCommunityMemberRecord = query({
       membership
         ? ctx.db
             .query("distributionAttributionDeliveries")
-            .withIndex("by_user", (q) => q.eq("userId", subjectId))
+            .withIndex("by_community_user", (q) =>
+              q.eq("communityId", args.communityId).eq("userId", subjectId),
+            )
             .order("desc")
             .first()
         : Promise.resolve(null),
+      membership
+        ? ctx.db
+            .query("distributionAttributionDeliveries")
+            .withIndex("by_user", (q) => q.eq("userId", subjectId))
+            .order("desc")
+            .take(5)
+        : Promise.resolve([] as any[]),
       membership
         ? readMemberParticipationSignals(ctx, args.communityId, subjectId)
         : Promise.resolve(null),
@@ -957,14 +967,35 @@ export const getCommunityMemberRecord = query({
         })
       : null;
 
+    // Community-specific origin first (membership stamp, then per-community delivery);
+    // fall back only to a legacy global signup delivery (never another community's).
+    const legacyGlobalAttributionRow =
+      userAttributionRows.find(
+        (row: any) => !row.communityId && (row.clickId || row.anonymousId),
+      ) ?? null;
     const attribution =
-      attributionRow && (attributionRow.clickId || attributionRow.anonymousId)
+      membership && (membership.attributionClickId || membership.attributionAnonymousId)
         ? {
             source_label: "Distribution Engineer",
-            click_id: attributionRow.clickId ?? null,
-            attributed_at: iso(attributionRow.createdAt),
+            click_id: membership.attributionClickId ?? null,
+            attributed_at: iso(
+              membership.attributedAt ?? membership.activatedAt ?? membership.createdAt,
+            ),
           }
-        : null;
+        : communityAttributionRow &&
+            (communityAttributionRow.clickId || communityAttributionRow.anonymousId)
+          ? {
+              source_label: "Distribution Engineer",
+              click_id: communityAttributionRow.clickId ?? null,
+              attributed_at: iso(communityAttributionRow.createdAt),
+            }
+          : legacyGlobalAttributionRow
+            ? {
+                source_label: "Distribution Engineer",
+                click_id: legacyGlobalAttributionRow.clickId ?? null,
+                attributed_at: iso(legacyGlobalAttributionRow.createdAt),
+              }
+            : null;
 
     const facts: MemberRecordFact[] = [];
     for (const fact of [...communityFacts, ...globalFacts]) {

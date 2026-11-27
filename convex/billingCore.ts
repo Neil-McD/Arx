@@ -182,6 +182,7 @@ export async function ensureCommunityMembership(args: {
   userId: any;
   pricePointId?: any;
   accessSourceOverride?: "free_grant" | "manual_grant" | "paid_subscription";
+  distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
   nowMs: number;
 }): Promise<{ membership: CommunityMembershipLike; accessGranted: boolean }> {
   const defaultAccessSource = "paid_subscription";
@@ -193,6 +194,7 @@ export async function ensureCommunityMembership(args: {
     accessSource,
     pricePointId: args.pricePointId,
     activationReason: "billing_entitlement",
+    distributionAttribution: args.distributionAttribution,
     nowMs: args.nowMs,
   });
   return { membership: activation.membership, accessGranted: activation.accessGranted };
@@ -383,12 +385,20 @@ export async function grantCommunityCheckout(args: {
     communityId: session.communityId,
     userId,
   });
+  const checkoutAttribution =
+    session.attributionAnonymousId || session.attributionClickId
+      ? {
+          ...(session.attributionAnonymousId ? { anonymousId: session.attributionAnonymousId } : {}),
+          ...(session.attributionClickId ? { clickId: session.attributionClickId } : {}),
+        }
+      : undefined;
   const { membership, accessGranted } = await ensureCommunityMembership({
     ctx: args.ctx,
     community,
     communityId: session.communityId,
     userId,
     pricePointId: session.pricePointId,
+    distributionAttribution: checkoutAttribution,
     nowMs: args.nowMs,
   });
   if (session.pricePointId && resolveCommunityEntryPolicy(community as any) === "paid_subscription") {

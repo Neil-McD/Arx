@@ -26,6 +26,7 @@ import {
   ensurePendingCommunityJoinRequest,
   getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
+import { normalizeDistributionAttributionTracking } from "./distributionAttributionCore";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   communityMembershipRequiresManagerReapproval,
@@ -383,11 +384,13 @@ export async function joinPublicCommunityInternal(args: {
   community: CommunityLike;
   userId: any;
   nowMs: number;
+  distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
 }): Promise<{
   outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
   community_id: string;
   reapply_at?: string | null;
 }> {
+  const attribution = normalizeDistributionAttributionTracking(args.distributionAttribution);
   await acceptCommunityJoin(args.ctx, args.userId, args.nowMs);
   await requireAccountSetupCompleteForUser(args.ctx, args.userId);
 
@@ -419,6 +422,7 @@ export async function joinPublicCommunityInternal(args: {
       userId: args.userId,
       accessSource: "free_grant",
       activationReason: "public_join",
+      distributionAttribution: attribution,
       nowMs: args.nowMs,
     });
     grantedMembershipMarker = activation.activationMarker;
@@ -450,6 +454,7 @@ export async function joinPublicCommunityInternal(args: {
       userId: args.userId,
       accessSource: "app_grant" as any,
       activationReason: "connected_app_rejoin",
+      distributionAttribution: attribution,
       nowMs: args.nowMs,
     });
     return {
@@ -506,6 +511,7 @@ export async function joinPublicCommunityInternal(args: {
           communityId: args.community._id,
           userId: args.userId,
           nowMs: args.nowMs,
+          attribution,
         });
         return {
           outcome: "approval_pending",
@@ -526,6 +532,7 @@ export async function joinPublicCommunityInternal(args: {
         communityId: args.community._id,
         userId: args.userId,
         nowMs: args.nowMs,
+        attribution,
       });
       return {
         outcome: "approval_pending",

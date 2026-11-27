@@ -604,14 +604,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `operatorAccess`, `operatorEntitlementsCore`,
   `operatorGrantUsageCore`,
   `communityAnalyticsRollups` (daily community analytics rollups, live billing summaries, and 15-minute paginated Discover activity stats refresh for published communities with a 25-minute read-cache TTL in `communityPublic.listPublicDiscoverCommunities`),
-  `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (cron;
-  kept on purpose, Nov 7: it forwards sign-ups that arrive from Distribution
-  Engineer, Neil's own product, and has had none yet),
+  `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (per-community
+  Distribution Engineer workspace connections encrypted at rest in Settings → Your app,
+  community-scoped join/approval/checkout attribution stamping + Stripe membership/pod
+  checkout metadata handoff, and cron-backed delivery recovery),
   `criticalAudit`, `errorLogging`, `probe` (health check).
 - **Tables:** `operatorRoles`, `operatorGrantUsageCycles`, `platformDiagnosticEvents`,
   `criticalAuditEvents`, `communityAnalyticsEvents`, `communityDailyAnalytics`,
   `communityBillingSummary`, `platformOperatorSummary` (retired — cron stopped, awaiting table drop), `platformBusinessVisits`,
-  `distributionAttributionDeliveries`.
+  `communityDistributionConnections`, `distributionAttributionDeliveries`.
 - **Contracts:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md).
 
 ### 15. Integrations and skills — Deleted (Neil, Oct 27)

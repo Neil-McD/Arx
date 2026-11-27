@@ -31,6 +31,7 @@ export default defineSchema({
 
   distributionAttributionDeliveries: defineTable({
     userId: v.id('users'),
+    communityId: v.optional(v.id('communities')),
     deliveryKey: v.string(),
     sourceEventId: v.string(),
     anonymousId: v.optional(v.string()),
@@ -58,8 +59,22 @@ export default defineSchema({
   })
     .index('by_delivery_key', ['deliveryKey'])
     .index('by_user', ['userId'])
+    .index('by_community_user', ['communityId', 'userId'])
+    .index('by_community_status_updatedAt', ['communityId', 'status', 'updatedAt'])
     .index('by_status_next_attempt_at', ['status', 'nextAttemptAt'])
     .index('by_status_lease_expires_at', ['status', 'leaseExpiresAt']),
+
+  communityDistributionConnections: defineTable({
+    communityId: v.id('communities'),
+    accountId: v.string(),
+    encryptedWebhookKeyHex: v.string(),
+    webhookKeyIvHex: v.string(),
+    webhookKeyVersion: v.number(),
+    webhookKeyHint: v.string(),
+    connectedByUserId: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_community', ['communityId']),
 
   authSessions: defineTable({
     sessionId: v.string(),
@@ -576,6 +591,9 @@ export default defineSchema({
     // Who started a checkout before signing in, as a keyed hash of their
     // address (from the edge): the per-visitor limit counts these.
     buyerVisitorHash: v.optional(v.string()),
+    // Distribution Engineer origin captured when starting a community checkout.
+    attributionAnonymousId: v.optional(v.string()),
+    attributionClickId: v.optional(v.string()),
     // community_join held before it was granted (a payment made before signing
     // in has no subscription row yet): never grants while held. A refund is
     // final; only a dispute's hold lifts (when the dispute is won).
@@ -1113,6 +1131,10 @@ export default defineSchema({
     // History only: when and why a membership last ended. Never decides access.
     revokedAt: v.optional(v.number()),
     revokedReason: v.optional(v.string()),
+    // First-touch Distribution Engineer origin stamped for this community membership.
+    attributionAnonymousId: v.optional(v.string()),
+    attributionClickId: v.optional(v.string()),
+    attributedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1220,6 +1242,8 @@ export default defineSchema({
     message: v.optional(v.string()),
     deniedAt: v.optional(v.number()),
     reapplyAt: v.optional(v.number()),
+    attributionAnonymousId: v.optional(v.string()),
+    attributionClickId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

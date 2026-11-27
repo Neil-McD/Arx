@@ -5,6 +5,7 @@ import {
   bootstrapConvexAuthenticatedClient,
   createConvexClient,
 } from "./convexAuthenticatedClient";
+import { readPersistedDistributionAttributionForCommunity } from "./distributionAttribution";
 
 export type CommunityLandingPlan = {
   billing_period: "monthly" | "annual" | string;
@@ -88,7 +89,12 @@ export async function fetchCommunityLanding(
 
 export async function joinCommunityFromLanding(session: unknown, communitySlug: string): Promise<{ outcome?: string }> {
   const { client, authSubject } = await clientFor(session);
-  return (await client.mutation("communityLanding:joinCommunityFromLanding" as any, { communitySlug, authSubject })) as { outcome?: string };
+  const distributionAttribution = readPersistedDistributionAttributionForCommunity(communitySlug);
+  return (await client.mutation("communityLanding:joinCommunityFromLanding" as any, {
+    communitySlug,
+    authSubject,
+    ...(distributionAttribution ? { distributionAttribution } : {}),
+  })) as { outcome?: string };
 }
 
 export async function cancelCommunityJoinRequestFromLanding(session: unknown, communitySlug: string): Promise<void> {
@@ -100,6 +106,7 @@ export async function startCommunityLandingCheckout(
   session: unknown | null,
   params: { communitySlug: string; billingPeriod: "monthly" | "annual"; plan: string | null; appId?: string | null },
 ): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> {
+  const distributionAttribution = readPersistedDistributionAttributionForCommunity(params.communitySlug);
   // Signed out (cash first): through the app's own server function, which
   // limits each visitor's checkouts (api/community-checkout.js).
   if (!session) {
@@ -111,6 +118,7 @@ export async function startCommunityLandingCheckout(
         billingPeriod: params.billingPeriod,
         plan: params.plan,
         ...(params.appId ? { appId: params.appId } : {}),
+        ...(distributionAttribution ? { distributionAttribution } : {}),
       }),
     });
     const payload = (await response.json().catch(() => null)) as
@@ -126,6 +134,7 @@ export async function startCommunityLandingCheckout(
     billingPeriod: params.billingPeriod,
     ...(params.plan ? { plan: params.plan } : {}),
     ...(params.appId ? { appId: params.appId } : {}),
+    ...(distributionAttribution ? { distributionAttribution } : {}),
     ...(authSubject ? { authSubject } : {}),
   })) as { checkout_url: string; session_id: string; buyer_secret: string | null };
 }
