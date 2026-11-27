@@ -40,6 +40,9 @@ test("the page sells the product in plain words, with one door in", () => {
   // A founder can look around a real community before signing up.
   expect(html).toContain('href="/c/polynet"');
   expect(html).toContain("See it live");
+  // The hero's second way in: set Polynet up from your own AI, with the AIs it works with under it.
+  expect(html).toContain("Copy setup prompt");
+  expect(html).toMatch(/aria-label="Works with Claude, ChatGPT, Codex, Cursor/);
   // Retired or untrue things never appear.
   expect(html.replace(/Polynet/g, "")).not.toMatch(/Coming soon|\bCLI\b|\bSDK\b|RSVP|\bMCP\b|zero-AI|trained on|Most popular|Get started/);
   // Every button into the product is the same door.

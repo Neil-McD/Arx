@@ -17,6 +17,9 @@ const BrainScene = lazy(() => import("./BrainScene").then((module) => ({ default
 const ChiefScene = lazy(() => import("./ChiefScene").then((module) => ({ default: module.ChiefScene })));
 const BoardScene = lazy(() => import("./BoardScene").then((module) => ({ default: module.BoardScene })));
 import { captureProductAnalyticsEvent } from "../../posthogAnalytics";
+import { buildPolynetMcpSetupForOrigin } from "../../../../../shared/polynetMcpSetup";
+import { Copy } from "lucide-react";
+import { HarnessStack } from "./HarnessStack";
 
 type JoinProps = { onJoin: () => void };
 
@@ -512,6 +515,30 @@ function useReveal(late: unknown) {
   return ref;
 }
 
+// The hero's second button (Neil, Nov 27): set Polynet up from your own AI.
+// It copies the official setup prompt (shared/polynetMcpSetup.ts) for this
+// site's MCP address; pasted into Claude, ChatGPT, Codex, Cursor and the rest,
+// it adds Polynet and walks you through signing in. Without a clipboard, it
+// opens the page that explains the setup.
+function CopySetupPrompt() {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    captureProductAnalyticsEvent("setup_prompt_copied", { placement: "hero" });
+    try {
+      await navigator.clipboard.writeText(buildPolynetMcpSetupForOrigin(window.location.origin).setupBundle);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2600);
+    } catch {
+      window.location.assign("/ai");
+    }
+  };
+  return (
+    <button type="button" className="cta-setup" onClick={() => { void copy(); }} aria-live="polite">
+      <Copy size={14} aria-hidden="true" />{copied ? "Copied. Paste it into your AI" : "Copy setup prompt"}
+    </button>
+  );
+}
+
 export function ConversionLanding({ onJoin }: JoinProps) {
   const reveal = useReveal(null);
 
@@ -534,8 +561,9 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <p className="subhead">Give your people a home with its own AI. It answers them, remembers them, and helps you run the place.</p>
             <div className="doors">
               <button className="cta" type="button" onClick={trackStart("hero", onJoin)}>Start a community</button>
-              <a className="cta-quiet" href={LIVE_COMMUNITY_PATH} onClick={() => captureProductAnalyticsEvent("see_it_live_clicked", { placement: "hero" })}>See it live</a>
+              <CopySetupPrompt />
             </div>
+            <HarnessStack />
             <p className="microcopy">{LANDING_OFFER_LINE}</p>
           </div>
           {/* The product sits inside the hero, so the night sky runs down behind it. */}
