@@ -79,7 +79,7 @@ const statusOverrideValidator = v.union(
   v.literal("auto"),
 );
 
-async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
+export async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
   stages: JourneyStageDefinition[];
   autoAdvanceEnabled: boolean;
 }> {
@@ -166,6 +166,52 @@ export async function readMemberParticipationSignals(
     participationCount: postsCount + lessonsDoneCount,
     lastParticipationAtMs: bestAt > 0 ? bestAt : null,
   };
+}
+
+export async function readCommunityPostSignalsForAnalytics(
+  ctx: any,
+  communityId: any,
+): Promise<Map<string, { postsCount: number; firstPostAtMs: number | null; latestPostAtMs: number | null }>> {
+  const SCAN_CAP = 1_500;
+  const [roots, replies] = await Promise.all([
+    ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(SCAN_CAP),
+    ctx.db
+      .query("communityInteractionReplies")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(SCAN_CAP),
+  ]);
+  const byUser = new Map<
+    string,
+    { postsCount: number; firstPostAtMs: number | null; latestPostAtMs: number | null }
+  >();
+  const record = (actorUserId: unknown, createdAt: unknown) => {
+    if (!actorUserId) return;
+    const key = String(actorUserId);
+    const ts = typeof createdAt === "number" && Number.isFinite(createdAt) ? createdAt : null;
+    const current = byUser.get(key) ?? {
+      postsCount: 0,
+      firstPostAtMs: null,
+      latestPostAtMs: null,
+    };
+    current.postsCount += 1;
+    if (ts !== null) {
+      if (current.firstPostAtMs === null || ts < current.firstPostAtMs) current.firstPostAtMs = ts;
+      if (current.latestPostAtMs === null || ts > current.latestPostAtMs) current.latestPostAtMs = ts;
+    }
+    byUser.set(key, current);
+  };
+  for (const row of roots) record(row.actorUserId, row.createdAt);
+  for (const row of replies) record(row.actorUserId, row.createdAt);
+  return byUser;
 }
 
 async function resolveDerivedStageKeyForMember(

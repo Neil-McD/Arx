@@ -1,6 +1,7 @@
 import type { AccountSetupStatus } from "./accountSetup";
 import type { SocialProfileLinks } from "./socialProfileLinks";
 import type { CommunityVisualIdentity } from "./communityVisualIdentity";
+import type { CommunityRetentionAnalytics } from "./retentionAnalytics";
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
@@ -372,6 +373,8 @@ export type CommunityAnalyticsSummary = {
   // Members on each plan now, most revenue first; "Free" last. Missing from
   // an older backend.
   plans?: CommunityAnalyticsPlan[];
+  // Retention & LTV attribution breakdown (Slice 4A). Optional for older backends.
+  retention?: CommunityRetentionAnalytics | null;
 };
 
 export type AnalyticsPoint = {

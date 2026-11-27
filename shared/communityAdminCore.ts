@@ -1,5 +1,6 @@
 import type { AccountSetupStatus } from "./accountSetup";
 import type { SocialProfileLinks } from "./socialProfileLinks";
+import type { CommunityRetentionAnalytics } from "./retentionAnalytics";
 
 export type SessionLike = {
   user: {
@@ -39,6 +40,7 @@ export type AnalyticsSummaryLike = {
   total_resources: number | null;
   resources_added_window: number | null;
   plans?: Array<{ key: string; name: string; members: number; mrr_base_units: number | null }>;
+  retention?: CommunityRetentionAnalytics | null;
 };
 
 export type AnalyticsPointLike = {
