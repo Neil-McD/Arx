@@ -5,6 +5,37 @@
 // puts those in their own environment.
 
 export type SetupPromptTier = { key: string; name: string; grants: string[] };
+export type SetupPromptMilestone = { key: string; label: string; stageName: string };
+
+function formatPromptMilestonesSection(args: {
+  appName: string;
+  apiOrigin: string;
+  milestones?: SetupPromptMilestone[];
+  identityMode: "unified" | "existing";
+}): string {
+  const endpoint = `${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/milestones`;
+  const idExample =
+    args.identityMode === "unified"
+      ? `"user_id": "pusr_..."` // or verified "email"
+      : `"email": "member@example.com"`;
+  const idNote =
+    args.identityMode === "unified"
+      ? `Identify the member with \`user_id\` (\`pusr_...\` from Sign in with Polynet) or their verified \`email\`.`
+      : `Identify the member with their verified \`email\` (or \`user_id\` \`pusr_...\` if using Sign in with Polynet).`;
+  const list = (args.milestones ?? []).filter((item) => item.key.trim() && item.label.trim());
+  const configuredBlock = list.length
+    ? `Configured Member Board checkpoints for "${args.appName}" (use these exact \`milestone\` keys so cards tick and auto-advance automatically):\n${list
+        .map((item) => `- \`${item.key}\` — ${item.label} (Stage: ${item.stageName})`)
+        .join("\n")}`
+    : `No custom app checkpoints are configured on the Member Board yet. Inspect this app's key activation moments (e.g. first project created, first core action finished, first result achieved), suggest 2–3 snake_case \`milestone\` keys with a one-line reason each, and confirm with me before wiring them. Polynet automatically surfaces reported milestones on the Member Board for one-click tracking.`;
+
+  return `${configuredBlock}
+   - Endpoint (server-to-server, \`Authorization: Bearer \${POLYNET_APP_SECRET}\`): \`POST ${endpoint}\`
+   - ${idNote}
+   - Milestone / win: \`{ ${idExample}, "milestone": "<key>", "label": "<human label>", "outcome": "<optional win summary>", "idempotency_key": "<unique-event-id>" }\`
+   - Daily active ping (keeps active app users from being marked quiet in Polynet even when they don't post in channels — works for UI, API, and MCP usage): send \`{ ${idExample}, "active": true }\` once per day on server-verified app activity (Polynet deduplicates to at most one write per UTC day).
+   - Non-blocking & fail-safe: send fire-and-forget with a short timeout (~5s); never block user actions or throw if Polynet is unreachable.`;
+}
 
 export function buildCommunityPlanCheckoutUrl(args: {
   communityUrl: string;
@@ -30,6 +61,7 @@ export function buildConnectedAppSetupPrompt(args: {
   apiOrigin: string;
   hasWebhook: boolean;
   tiers: SetupPromptTier[];
+  milestones?: SetupPromptMilestone[];
   guide: string;
   // Where buyers open the community (its home), and whether members already
   // see a link to the app in Polynet.
@@ -39,6 +71,12 @@ export function buildConnectedAppSetupPrompt(args: {
   const plans = args.tiers.length
     ? args.tiers.map((tier) => `- ${tier.name}: tier key \`${tier.key}\`${tier.key === "member" ? " (the base membership: leave \`tier\` out)" : ""}; grants ${["community", ...tier.grants].map((grant) => `\`${grant}\``).join(", ")}`).join("\n")
     : "- (No plans named yet: everyone holds the base membership `member` and the grant `community`.)";
+  const milestonesSection = formatPromptMilestonesSection({
+    appName: args.appName,
+    apiOrigin: args.apiOrigin,
+    milestones: args.milestones,
+    identityMode: "existing",
+  });
   // The guide without its front matter.
   const guide = args.guide.replace(/^---[\s\S]*?\n---\n+/, "").trim();
   return `Connect this app to its Polynet community ("${args.communityName}").
@@ -49,6 +87,8 @@ Polynet runs the community and its plans; this app keeps its own sign-in and che
 2. Gate features on Polynet grants as well as this app's own billing (someone may have bought through Polynet).
 ${args.hasWebhook ? "3. Add the webhook endpoint for access.changed, verifying the Standard Webhooks signature." : "3. (Optional) If you add a webhook address in Polynet later, add the access.changed endpoint."}
 4. Link to the community from this app (guide section 4). Look at this app's screens first, then suggest where the link would help buyers most (after purchase, main navigation, onboarding, account or billing page, help menu, welcome email), with a one-line reason each. Ask me which to add before adding any; use this app's own components and design.
+5. Report member milestones and daily app activity to the Member Board so onboarding and Chief of Staff reflect real product progress:
+   ${milestonesSection}
 
 Values for this community:
 - POLYNET_API_ORIGIN = ${args.apiOrigin}
@@ -125,10 +165,17 @@ export function buildUnifiedGateAppPrompt(args: {
   redirectUrls: string[];
   hasWebhook: boolean;
   tiers: SetupPromptTier[];
+  milestones?: SetupPromptMilestone[];
 }): string {
   const authorizeUrl = `${args.appOrigin.replace(/\/+$/, "")}/oauth/authorize`;
   const tokenUrl = `${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/oauth/token`;
   const accessUrl = `${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/access`;
+  const milestonesSection = formatPromptMilestonesSection({
+    appName: args.appName,
+    apiOrigin: args.apiOrigin,
+    milestones: args.milestones,
+    identityMode: "unified",
+  });
   const plans = args.tiers.length
     ? args.tiers
         .map((tier) => {
@@ -191,8 +238,8 @@ Implement these 4 parts in this codebase following its conventions:
 4. **Community link in the app:**
    - Add a clean link to \`${args.communityUrl}\` in navigation so members can jump between "${args.appName}" and "${args.communityName}" in one click.
 
-5. **(Optional) Report key product milestones to the Member Board:**
-   - When a member finishes an onboarding or activation milestone inside "${args.appName}", send \`POST ${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/milestones\` with \`Authorization: Bearer \${POLYNET_APP_SECRET}\` and JSON \`{ "email": "...", "milestone": "first_win", "outcome": "Completed first setup" }\` (fire-and-forget; never block app actions). Their Member Board card and automated onboarding update automatically.
+5. **Report product milestones & daily activity to the Member Board:**
+   ${milestonesSection}
 
 Before writing code, inspect this repo's framework and routing structure, propose your exact file plan, and ask me if any details need adjusting. Add tests for PKCE state verification, token exchange error handling, and fail-closed grant checks, and add the env variable names to \`.env.example\`.
 `;

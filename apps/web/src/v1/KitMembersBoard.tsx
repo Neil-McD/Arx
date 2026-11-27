@@ -116,6 +116,8 @@ export function KitMembersBoard(props: {
   const [dropStageKey, setDropStageKey] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+  const [dismissedDiscoveredKeys, setDismissedDiscoveredKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const [promoteStageKey, setPromoteStageKey] = useState<string>("");
   const phone = usePhoneLayout();
 
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -127,6 +129,29 @@ export function KitMembersBoard(props: {
   const stages = localStages ?? propStages;
   stagesRef.current = stages;
   const allCards = props.board?.cards ?? [];
+  const configuredCheckpointKeys = useMemo(
+    () => new Set(stages.flatMap((stage) => (stage.checkpoints ?? []).map((cp) => cp.key))),
+    [stages],
+  );
+  const discoveredMilestones = useMemo(
+    () =>
+      (props.board?.discovered_app_milestones ?? []).filter(
+        (item) => !configuredCheckpointKeys.has(item.key),
+      ),
+    [props.board?.discovered_app_milestones, configuredCheckpointKeys],
+  );
+  const topDiscoveredMilestone = useMemo(
+    () => discoveredMilestones.find((item) => !dismissedDiscoveredKeys.has(item.key)) ?? null,
+    [discoveredMilestones, dismissedDiscoveredKeys],
+  );
+  const effectivePromoteStageKey = useMemo(() => {
+    const valid = stages.find(
+      (stage) => stage.key === promoteStageKey && (stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS,
+    );
+    if (valid) return valid.key;
+    const firstWithRoom = stages.find((stage) => (stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS);
+    return firstWithRoom?.key ?? stages[0]?.key ?? "";
+  }, [stages, promoteStageKey]);
 
   useEffect(() => {
     if (!openMenuStageKey && !openCpStageKey) return;
@@ -256,6 +281,26 @@ export function KitMembersBoard(props: {
         : entry,
     );
     setCustomCpDraft("");
+    await persistStages(nextList);
+  };
+
+  const addDiscoveredMilestoneToStage = async (stageKey: string, milestone: { key: string; label: string }) => {
+    const currentStages = stagesRef.current;
+    const currentStage = currentStages.find((entry) => entry.key === stageKey);
+    if (!currentStage) return;
+    if (
+      currentStage.checkpoints.length >= MAX_STAGE_CHECKPOINTS ||
+      currentStage.checkpoints.some((cp) => cp.key === milestone.key)
+    ) {
+      return;
+    }
+    const cleanLabel = milestone.label.replace(/\s+/g, " ").trim().slice(0, MAX_CHECKPOINT_LABEL_CHARS);
+    if (!cleanLabel) return;
+    const nextList = toSaveList(currentStages).map((entry) =>
+      entry.key === stageKey
+        ? { ...entry, checkpoints: [...entry.checkpoints, { key: milestone.key, label: cleanLabel, kind: "custom" as const }] }
+        : entry,
+    );
     await persistStages(nextList);
   };
 
@@ -468,6 +513,55 @@ export function KitMembersBoard(props: {
         </p>
       ) : null}
 
+      {topDiscoveredMilestone && effectivePromoteStageKey ? (
+        <div className="members-board-discovered" role="status">
+          <span className="members-board-discovered-text">
+            Your app reported <strong>{topDiscoveredMilestone.label}</strong>
+            {" "}({topDiscoveredMilestone.member_count} {topDiscoveredMilestone.member_count === 1 ? "member" : "members"})
+          </span>
+          <div className="members-board-discovered-actions">
+            <select
+              aria-label="Stage for app milestone checkpoint"
+              value={effectivePromoteStageKey}
+              disabled={savingStage}
+              onChange={(event) => setPromoteStageKey(event.target.value)}
+            >
+              {stages.map((stage) => (
+                <option
+                  key={stage.key}
+                  value={stage.key}
+                  disabled={(stage.checkpoints ?? []).length >= MAX_STAGE_CHECKPOINTS}
+                >
+                  {stage.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="members-board-discovered-track"
+              disabled={savingStage}
+              onClick={() => void addDiscoveredMilestoneToStage(effectivePromoteStageKey, topDiscoveredMilestone)}
+            >
+              Track as checkpoint
+            </button>
+            <button
+              type="button"
+              className="members-board-discovered-dismiss"
+              aria-label={`Dismiss suggestion for ${topDiscoveredMilestone.label}`}
+              onClick={() =>
+                setDismissedDiscoveredKeys((prev) => {
+                  const next = new Set(prev);
+                  next.add(topDiscoveredMilestone.key);
+                  return next;
+                })
+              }
+            >
+              <X size={12} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="members-board-columns" role="region" aria-label="Member journey board">
         {shownStages.map((stage) => {
           const stageIndex = stages.findIndex((entry) => entry.key === stage.key);
@@ -604,7 +698,7 @@ export function KitMembersBoard(props: {
                           );
                         })}
                         {(stage.checkpoints ?? []).some((cp) => cp.kind === "custom") ? (
-                          <span className="members-board-popover-label">You tick these</span>
+                          <span className="members-board-popover-label">Custom &amp; app milestones</span>
                         ) : null}
                         {(stage.checkpoints ?? []).filter((cp) => cp.kind === "custom").map((cp) => (
                           <span key={cp.key} className="members-board-popover-row">
@@ -615,6 +709,26 @@ export function KitMembersBoard(props: {
                             </button>
                           </span>
                         ))}
+                        {discoveredMilestones.length > 0 && (stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS ? (
+                          <>
+                            <span className="members-board-popover-label">Reported by your app</span>
+                            {discoveredMilestones.slice(0, 4).map((item) => (
+                              <button
+                                key={item.key}
+                                type="button"
+                                role="menuitem"
+                                disabled={savingStage}
+                                onClick={() => void addDiscoveredMilestoneToStage(stage.key, item)}
+                              >
+                                <Plus size={12} aria-hidden="true" />
+                                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {item.label}
+                                </span>
+                                <span style={{ color: "var(--ink3)", fontSize: 11 }}>{item.member_count}</span>
+                              </button>
+                            ))}
+                          </>
+                        ) : null}
                         {(stage.checkpoints ?? []).length < MAX_STAGE_CHECKPOINTS ? (
                           <form className="members-board-popover-custom"
                             onSubmit={(event) => { event.preventDefault(); void addStageCustomCheckpoint(stageIndex, stage.key); }}>
@@ -670,7 +784,14 @@ export function KitMembersBoard(props: {
                     const ready = isReady(card);
                     const offTrack = NEEDS_LOOK.has(card.status);
                     const did = guideDidShort(card.agent_outcome);
-                    const lastSeen = card.last_active_at ? `Last seen ${props.timeFor(card.last_active_at, props.now).toLowerCase()}` : null;
+                    const appFreshest = Boolean(
+                      card.last_app_active_at &&
+                        (!card.last_active_at ||
+                          Date.parse(card.last_app_active_at) >= Date.parse(card.last_active_at)),
+                    );
+                    const lastSeen = card.last_active_at
+                      ? `${appFreshest ? "Active in app" : "Last seen"} ${props.timeFor(card.last_active_at, props.now).toLowerCase()}`
+                      : null;
                     // Off track: why. Otherwise their latest win, or what they're working on.
                     const line = offTrack
                       ? cardReason(card, props.now) ?? lastSeen

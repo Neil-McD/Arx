@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 const NOW = Date.UTC(2026, 10, 25, 2, 30); // 2:30am UTC (quiet hours in UTC)
@@ -560,4 +561,267 @@ test("POST /apps/v1/milestones records verified member milestones & outcomes ont
     stage_key: "active",
     stage_name: "Active",
   });
+});
+
+async function pkceChallenge(verifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return Buffer.from(digest)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+test("POST /apps/v1/milestones supports pairwise user_id, daily active pings, idempotency, unmapped discovery, and Chief of Staff recency", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await seedCommunity(t, "chief_of_staff");
+  const asOwner = t.withIdentity({ subject: "owner-chief_of_staff" });
+  const asMember = t.withIdentity({ subject: "member-chief_of_staff" });
+
+  // Complete Maya's account setup so Sign in with Polynet OAuth succeeds.
+  await t.run(async (ctx) => {
+    await ctx.db.insert("userProfileDetails", {
+      userId: ids.memberId,
+      displayName: "Maya",
+      createdAt: NOW - 10_000,
+      updatedAt: NOW - 10_000,
+    } as any);
+    for (const doc of PLATFORM_LEGAL_DOCUMENTS) {
+      await ctx.db.insert("legalAcceptances", {
+        userId: ids.memberId,
+        documentKey: doc.key,
+        documentVersion: doc.version,
+        acceptedAt: NOW - 10_000,
+        source: "account_setup",
+        createdAt: NOW - 10_000,
+      } as any);
+    }
+  });
+
+  const callbackA = "https://acme.example.com/api/auth/polynet/callback";
+  const callbackB = "https://other.example.com/api/auth/polynet/callback";
+  const appA = await asOwner.mutation(api.connectedApps.registerConnectedApp, {
+    communityId: ids.communityId,
+    name: "Acme Studio",
+    appUrl: "https://acme.example.com",
+  });
+  const appB = await asOwner.mutation(api.connectedApps.registerConnectedApp, {
+    communityId: ids.communityId,
+    name: "Other App",
+    appUrl: "https://other.example.com",
+  });
+  await asOwner.mutation(api.connectedApps.updateConnectedApp, {
+    communityId: ids.communityId,
+    appId: appA.app_id,
+    redirectUrls: [callbackA],
+  });
+  await asOwner.mutation(api.connectedApps.updateConnectedApp, {
+    communityId: ids.communityId,
+    appId: appB.app_id,
+    redirectUrls: [callbackB],
+  });
+
+  // Exchange a Sign in with Polynet code for App A to obtain Maya's pairwise pusr_... ID.
+  const verifier = "verifier_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG";
+  const challenge = await pkceChallenge(verifier);
+  const approved = await asMember.mutation(api.connectedApps.approveConnectedAppAuthorization, {
+    clientId: appA.app_id,
+    redirectUri: callbackA,
+    codeChallenge: challenge,
+    codeChallengeMethod: "S256",
+  });
+  const tokenRes = await t.fetch("/apps/v1/oauth/token", {
+    method: "POST",
+    headers: { authorization: `Bearer ${appA.secret}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code: approved.code,
+      redirect_uri: callbackA,
+      code_verifier: verifier,
+    }),
+  });
+  expect(tokenRes.status).toBe(200);
+  const { user: oauthUser } = await tokenRes.json();
+  expect(oauthUser.id).toMatch(/^pusr_[a-f0-9]{32}$/);
+
+  const postMilestone = (secret: string, body: unknown) =>
+    t.fetch("/apps/v1/milestones", {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // Validation rejects missing identifier or malformed user_id.
+  expect((await postMilestone(appA.secret, { milestone: "first_campaign" })).status).toBe(400);
+  expect((await postMilestone(appA.secret, { user_id: "not_a_pusr", active: true })).status).toBe(400);
+
+  // Cross-app isolation: App B cannot use App A's pairwise user_id.
+  const crossApp = await postMilestone(appB.secret, {
+    user_id: oauthUser.id,
+    milestone: "first_campaign",
+  });
+  expect(crossApp.status).toBe(200);
+  expect(await crossApp.json()).toEqual({ recorded: false });
+
+  // Email + user_id mismatch fails closed.
+  const mismatch = await postMilestone(appA.secret, {
+    user_id: oauthUser.id,
+    email: "someone-else@example.com",
+    milestone: "first_campaign",
+  });
+  expect(mismatch.status).toBe(200);
+  expect(await mismatch.json()).toEqual({ recorded: false });
+
+  // Valid pairwise user_id + idempotency_key records unmapped milestone and surfaces it for discovery.
+  const firstCall = await postMilestone(appA.secret, {
+    user_id: oauthUser.id,
+    milestone: "first_campaign",
+    label: "Launched first campaign",
+    outcome: "Sent first outbound campaign",
+    idempotency_key: "evt_camp_1",
+  });
+  expect(firstCall.status).toBe(200);
+  expect(await firstCall.json()).toMatchObject({
+    recorded: true,
+    milestone_key: "first_campaign",
+    done: true,
+    outcome: "Sent first outbound campaign",
+  });
+
+  // Repeating the same idempotency_key deduplicates cleanly without creating a second outcome.
+  const dupKey = await postMilestone(appA.secret, {
+    user_id: oauthUser.id,
+    outcome: "Different text that should be ignored on duplicate key",
+    idempotency_key: "evt_camp_1",
+  });
+  expect(dupKey.status).toBe(200);
+  expect(await dupKey.json()).toMatchObject({ recorded: true, deduplicated: true });
+
+  // Daily active ping on the same UTC day deduplicates cleanly and does not rewrite updatedAt.
+  const cardBeforePing: any = await t.run((ctx) =>
+    ctx.db
+      .query("communityMemberJourneyCards")
+      .withIndex("by_community_user", (q) => q.eq("communityId", ids.communityId).eq("userId", ids.memberId))
+      .unique(),
+  );
+  expect(typeof cardBeforePing?.lastAppActivityAt).toBe("number");
+  expect(cardBeforePing?.outcomes).toHaveLength(1);
+
+  const sameDayPing = await postMilestone(appA.secret, {
+    user_id: oauthUser.id,
+    active: true,
+  });
+  expect(sameDayPing.status).toBe(200);
+  expect(await sameDayPing.json()).toMatchObject({ recorded: true, deduplicated: true, active: true });
+
+  // Member Board surfaces the unmapped milestone for 1-click tracking AND exposes last_app_active_at.
+  const boardBefore = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+    communityId: ids.communityId,
+  });
+  expect(boardBefore.discovered_app_milestones).toEqual([
+    expect.objectContaining({
+      key: "first_campaign",
+      label: "Launched first campaign",
+      member_count: 1,
+    }),
+  ]);
+  const mayaCardBefore = boardBefore.cards.find((c) => c.name === "Maya");
+  expect(mayaCardBefore?.last_app_active_at).toBeTruthy();
+
+  // Lightweight getCommunityJourneyStages works for managers and fails closed for regular members.
+  const stagesRes = await asOwner.query(api.communityMemberJourney.getCommunityJourneyStages, {
+    communityId: ids.communityId,
+  });
+  expect(stagesRes.stages.length).toBeGreaterThanOrEqual(2);
+  await expect(
+    asMember.query(api.communityMemberJourney.getCommunityJourneyStages, {
+      communityId: ids.communityId,
+    }),
+  ).rejects.toThrow();
+
+  // Promoting "first_campaign" to a stage checkpoint clears it from discovered_app_milestones
+  // and immediately ticks Maya's card checkpoint as done.
+  await asOwner.mutation(api.communityMemberJourney.saveCommunityJourneyStages, {
+    communityId: ids.communityId,
+    stages: [
+      {
+        key: "new",
+        name: "New",
+        goal: "Ship your first campaign.",
+        checkpoints: [
+          { key: "first_post", label: "Posted or replied once", kind: "first_post" },
+          { key: "first_campaign", label: "Launched first campaign", kind: "custom" },
+        ],
+      },
+      {
+        key: "active",
+        name: "Active",
+        goal: "Shipping weekly.",
+        checkpoints: [],
+      },
+    ],
+  });
+  const boardAfter = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+    communityId: ids.communityId,
+  });
+  expect(boardAfter.discovered_app_milestones).toEqual([]);
+  const mayaCardAfter = boardAfter.cards.find((c) => c.name === "Maya");
+  expect(mayaCardAfter?.checkpoints.find((cp) => cp.key === "first_campaign")?.done).toBe(true);
+
+  // Chief of Staff cross-surface recency (evaluated at 15:00 UTC outside quiet hours):
+  // Maya joined 5 days ago and never posted in community channels, but she IS active in Acme Studio today
+  // -> must NOT be flagged as a quiet_newcomer.
+  const mayaMembership: any = await t.run((ctx) =>
+    ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) => q.eq("communityId", ids.communityId).eq("userId", ids.memberId))
+      .unique(),
+  );
+  const dayScanNowMs = Date.UTC(2026, 10, 26, 15, 0);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(mayaMembership._id, {
+      createdAt: dayScanNowMs - 5 * 86_400_000,
+      activatedAt: dayScanNowMs - 5 * 86_400_000,
+    });
+    await ctx.db.patch(cardBeforePing._id, {
+      lastAppActivityAt: dayScanNowMs - 60_000,
+    });
+  });
+  const scanActiveInApp = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+    communityId: ids.communityId,
+    autoReasons: [],
+    nowMs: dayScanNowMs,
+  });
+  expect(scanActiveInApp.candidate).toBeNull();
+
+  // If Maya joined 25 days ago, was last active in Acme Studio 18 days ago (quiet in BOTH app and community),
+  // and there is an upcoming event within 7 days -> Chief of Staff catches her as quiet_member.
+  await t.run(async (ctx) => {
+    await ctx.db.patch(mayaMembership._id, {
+      createdAt: dayScanNowMs - 25 * 86_400_000,
+      activatedAt: dayScanNowMs - 25 * 86_400_000,
+    });
+    await ctx.db.patch(cardBeforePing._id, {
+      lastAppActivityAt: dayScanNowMs - 18 * 86_400_000,
+    });
+    await ctx.db.insert("communityEvents", {
+      communityId: ids.communityId,
+      createdByUserId: ids.ownerId,
+      title: "Weekly Builder Office Hours",
+      startsAt: dayScanNowMs + 2 * 86_400_000,
+      endsAt: dayScanNowMs + 2 * 86_400_000 + 3_600_000,
+      timezone: "UTC",
+      locationType: "online",
+      visibility: "members",
+      status: "live",
+      createdAt: dayScanNowMs - 86_400_000,
+      updatedAt: dayScanNowMs - 86_400_000,
+    } as any);
+  });
+  const scanQuietInBoth = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+    communityId: ids.communityId,
+    autoReasons: [],
+    nowMs: dayScanNowMs,
+  });
+  expect(scanQuietInBoth.candidate?.reason).toBe("quiet_member");
 });

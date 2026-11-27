@@ -51,12 +51,21 @@ export type CloudMemberJourneyCard = {
   latest_outcome: { text: string; at: string } | null;
   joined_at: string | null;
   last_active_at: string | null;
+  last_app_active_at?: string | null;
+};
+
+export type CloudDiscoveredAppMilestone = {
+  key: string;
+  label: string;
+  member_count: number;
+  last_seen_at: string | null;
 };
 
 export type CloudMemberJourneyBoard = {
   stages: JourneyStageDefinition[];
   auto_advance_enabled: boolean;
   cards: CloudMemberJourneyCard[];
+  discovered_app_milestones?: CloudDiscoveredAppMilestone[];
   total_active_members: number;
   capped: boolean;
   hosted_ai_tier?: "free" | "guide" | "chief_of_staff";
@@ -127,6 +136,17 @@ export async function getCloudCommunityMemberJourneyBoard<SessionT>(params: {
     authSubject,
     communityId: params.communityId,
   })) as CloudMemberJourneyBoard;
+}
+
+export async function getCloudCommunityJourneyStages<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+}): Promise<{ stages: JourneyStageDefinition[]; auto_advance_enabled: boolean }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.query("communityMemberJourney:getCommunityJourneyStages" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as { stages: JourneyStageDefinition[]; auto_advance_enabled: boolean };
 }
 
 export async function saveCloudCommunityJourneyStages<SessionT>(params: {

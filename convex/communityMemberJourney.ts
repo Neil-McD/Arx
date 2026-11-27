@@ -54,9 +54,20 @@ import {
 const BOARD_MEMBER_CAP = 200;
 const COACH_OUTCOME_SCAN_CAP = 300;
 const GOALS_SCAN_CAP = 500;
+const MAX_APP_EVENT_KEYS = 32;
+const MAX_DISCOVERED_APP_MILESTONES = 8;
 
 const iso = (ms: number | null | undefined) =>
   typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+
+function utcDayKey(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function sameUtcDay(aMs: number | null | undefined, bMs: number): boolean {
+  if (typeof aMs !== "number" || !Number.isFinite(aMs)) return false;
+  return utcDayKey(aMs) === utcDayKey(bMs);
+}
 
 const statusOverrideValidator = v.union(
   v.literal("on_track"),
@@ -166,6 +177,7 @@ async function resolveDerivedStageKeyForMember(
     user?: any | null;
     presence?: any | null;
     participation?: { participationCount: number; lastParticipationAtMs: number | null } | null;
+    lastAppActivityAtMs?: number | null;
     nowMs: number;
   },
 ): Promise<string> {
@@ -195,7 +207,8 @@ async function resolveDerivedStageKeyForMember(
   const presenceAt = typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0;
   const userAt = typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0;
   const partAt = participation?.lastParticipationAtMs ?? 0;
-  const bestActiveAt = Math.max(presenceAt, userAt, partAt);
+  const appAt = typeof args.lastAppActivityAtMs === "number" ? args.lastAppActivityAtMs : 0;
+  const bestActiveAt = Math.max(presenceAt, userAt, partAt, appAt);
   const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
   return defaultStageKeyForMember({
     stages: args.stages,
@@ -296,6 +309,7 @@ export async function readMemberJourneyGuidanceForCoach(
   stageName: string;
   stageGoal: string;
   founderInstruction: string | null;
+  lastAppActivityAtMs: number | null;
 } | null> {
   const [config, card] = await Promise.all([
     readStagesForCommunity(ctx, args.communityId),
@@ -307,6 +321,10 @@ export async function readMemberJourneyGuidanceForCoach(
       .unique(),
   ]);
   const validStageKeys = new Set(config.stages.map((entry) => entry.key));
+  const lastAppActivityAtMs =
+    typeof card?.lastAppActivityAt === "number" && Number.isFinite(card.lastAppActivityAt)
+      ? card.lastAppActivityAt
+      : null;
   const effectiveStageKey =
     card && validStageKeys.has(card.stageKey)
       ? String(card.stageKey)
@@ -314,12 +332,13 @@ export async function readMemberJourneyGuidanceForCoach(
           communityId: args.communityId,
           userId: args.memberUserId,
           stages: config.stages,
+          lastAppActivityAtMs,
           nowMs: args.nowMs ?? Date.now(),
         });
   const stage =
     config.stages.find((entry) => entry.key === effectiveStageKey) ?? config.stages[0] ?? null;
   const founderInstruction = normalizeFounderInstruction(card?.founderInstruction);
-  if (!stage && !founderInstruction) return null;
+  if (!stage && !founderInstruction && lastAppActivityAtMs === null) return null;
   let stageGoal = stage?.goal ?? "";
   if (stage && stage.checkpoints.length > 0) {
     const [participation, goalRows] = await Promise.all([
@@ -356,6 +375,7 @@ export async function readMemberJourneyGuidanceForCoach(
     stageName: stage?.name ?? "New",
     stageGoal,
     founderInstruction,
+    lastAppActivityAtMs,
   };
 }
 
@@ -485,6 +505,12 @@ async function computeCommunityMemberJourneyBoard(
     else coachDraftsByUserId.set(key, [check]);
   }
 
+  const configuredCheckpointKeys = new Set(stages.flatMap((stage) => stage.checkpoints.map((cp) => cp.key)));
+  const discoveredAppMilestoneMap = new Map<
+    string,
+    { key: string; label: string; memberIds: Set<string>; lastSeenAtMs: number }
+  >();
+
   const cards = await Promise.all(
     activeMemberships.map(async (membership: any) => {
       const userIdStr = String(membership.userId);
@@ -524,6 +550,33 @@ async function computeCommunityMemberJourneyBoard(
       ]);
       const user: any = userRaw;
 
+      for (const row of storedCard?.completedMilestones ?? []) {
+        if (!row || row.source !== "app" || !row.key) continue;
+        const key = String(row.key);
+        if (configuredCheckpointKeys.has(key)) continue;
+        const rawLabel = String(row.label ?? key.replace(/_/g, " "))
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, MAX_CHECKPOINT_LABEL_CHARS);
+        if (!rawLabel) continue;
+        const completedAt = Number(row.completedAt ?? 0) || 0;
+        const existing = discoveredAppMilestoneMap.get(key);
+        if (existing) {
+          existing.memberIds.add(userIdStr);
+          if (completedAt >= existing.lastSeenAtMs) {
+            existing.lastSeenAtMs = completedAt;
+            existing.label = rawLabel;
+          }
+        } else {
+          discoveredAppMilestoneMap.set(key, {
+            key,
+            label: rawLabel,
+            memberIds: new Set([userIdStr]),
+            lastSeenAtMs: completedAt,
+          });
+        }
+      }
+
       subRows.sort((a: any, b: any) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0));
       const subscription = subRows.find((row: any) => row.status !== "ended") ?? subRows[0] ?? null;
       const point = subscription?.pricePointId ? priceById.get(String(subscription.pricePointId)) ?? null : null;
@@ -532,10 +585,15 @@ async function computeCommunityMemberJourneyBoard(
       const moneyKind = money?.kind === "on_hold" || money?.kind === "cancelling" ? money.kind : null;
 
       const joinedAtMs = typeof membership.createdAt === "number" ? membership.createdAt : null;
+      const lastAppAt =
+        typeof storedCard?.lastAppActivityAt === "number" && Number.isFinite(storedCard.lastAppActivityAt)
+          ? storedCard.lastAppActivityAt
+          : 0;
       const bestActiveAt = Math.max(
         typeof presence?.lastSeenAt === "number" ? presence.lastSeenAt : 0,
         typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0,
         participation.lastParticipationAtMs ?? 0,
+        lastAppAt,
       );
       const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
 
@@ -673,12 +731,23 @@ async function computeCommunityMemberJourneyBoard(
         latest_outcome: latestOutcome,
         joined_at: iso(joinedAtMs),
         last_active_at: iso(lastActiveAtMs),
+        last_app_active_at: iso(lastAppAt > 0 ? lastAppAt : null),
         dismissed_advance_for_stage_key: storedCard?.dismissedAdvanceForStageKey
           ? String(storedCard.dismissedAdvanceForStageKey)
           : null,
       };
     }),
   );
+
+  const discoveredAppMilestones = [...discoveredAppMilestoneMap.values()]
+    .sort((a, b) => b.memberIds.size - a.memberIds.size || b.lastSeenAtMs - a.lastSeenAtMs)
+    .slice(0, MAX_DISCOVERED_APP_MILESTONES)
+    .map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      member_count: entry.memberIds.size,
+      last_seen_at: iso(entry.lastSeenAtMs > 0 ? entry.lastSeenAtMs : null),
+    }));
 
   const totalActiveMembers = Math.max(
     cards.length,
@@ -689,6 +758,7 @@ async function computeCommunityMemberJourneyBoard(
     stages,
     auto_advance_enabled: autoAdvanceEnabled,
     cards,
+    discovered_app_milestones: discoveredAppMilestones,
     total_active_members: totalActiveMembers,
     capped,
   };
@@ -725,10 +795,34 @@ export const getCommunityMemberJourneyBoard = query({
       cards: board.cards.map(
         ({ db_user_id: _dbUserId, stage_name: _stageName, dismissed_advance_for_stage_key: _dismissed, ...card }) => card,
       ),
+      discovered_app_milestones: board.discovered_app_milestones,
       total_active_members: board.total_active_members,
       capped: board.capped,
       hosted_ai_tier: (fundingAdmission.ok ? fundingAdmission.planTier : "free") as "free" | "guide" | "chief_of_staff",
       hosted_agent_on: agentOn,
+    };
+  },
+});
+
+export const getCommunityJourneyStages = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const actorUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: actorUserId,
+    });
+    const { stages, autoAdvanceEnabled } = await readStagesForCommunity(ctx, args.communityId);
+    return {
+      stages,
+      auto_advance_enabled: autoAdvanceEnabled,
     };
   },
 });
@@ -844,6 +938,7 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
         ...(card.activity_summary ? { activity_summary: card.activity_summary } : {}),
         joined_at: card.joined_at,
         last_active_at: card.last_active_at,
+        ...(card.last_app_active_at ? { last_app_active_at: card.last_app_active_at } : {}),
       };
     });
 
@@ -860,6 +955,9 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       read_at: new Date(nowMs).toISOString(),
       ...filterMeta,
       stages: board.stages,
+      ...(board.discovered_app_milestones.length
+        ? { discovered_app_milestones: board.discovered_app_milestones }
+        : {}),
       summary: {
         total_active_members: board.total_active_members,
         matched_members: projectedCards.length,
@@ -980,6 +1078,7 @@ export type BuilderMemberJourneySummary = {
   founder_instruction: string | null;
   agent_outcome: string | null;
   outcomes: Array<{ id: string; text: string; at: string; source: JourneyMilestoneSource }>;
+  last_app_active_at?: string | null;
 };
 
 // Member-safe own coaching context for members/me/context.md (member_private and
@@ -1092,10 +1191,15 @@ export async function readMemberJourneySummaryForBuilder(
   ]);
   const user: any = userRaw;
   const joinedAtMs = typeof args.membership.createdAt === "number" ? args.membership.createdAt : null;
+  const lastAppAt =
+    typeof storedCard?.lastAppActivityAt === "number" && Number.isFinite(storedCard.lastAppActivityAt)
+      ? storedCard.lastAppActivityAt
+      : 0;
   const bestActiveAt = Math.max(
     typeof args.presence?.lastSeenAt === "number" ? args.presence.lastSeenAt : 0,
     typeof user?.lastActiveAt === "number" ? user.lastActiveAt : 0,
     participation.lastParticipationAtMs ?? 0,
+    lastAppAt,
   );
   const lastActiveAtMs = bestActiveAt > 0 ? bestActiveAt : null;
   const validStageKeys = new Set(config.stages.map((stage) => stage.key));
@@ -1221,6 +1325,7 @@ export async function readMemberJourneySummaryForBuilder(
     founder_instruction: normalizeFounderInstruction(storedCard?.founderInstruction),
     agent_outcome: agentOutcome,
     outcomes,
+    ...(lastAppAt > 0 ? { last_app_active_at: iso(lastAppAt) } : {}),
   };
 }
 
@@ -1462,6 +1567,8 @@ async function applyCardPatchForMember(
     toggleMilestone?: { key: string; label?: string; completed: boolean };
     addOutcomeText?: string;
     removeOutcomeId?: string;
+    touchAppActivity?: boolean;
+    recordAppEventKey?: string;
   },
 ) {
   if (String(args.targetUserId) === String(args.community.ownerId)) {
@@ -1610,6 +1717,17 @@ async function applyCardPatchForMember(
     }
   }
 
+  let nextAppEventKeys: string[] | undefined = undefined;
+  if (args.recordAppEventKey) {
+    const cleanKey = args.recordAppEventKey.trim().slice(0, 128);
+    if (cleanKey) {
+      const prevKeys = Array.isArray(existing?.appEventKeys) ? existing.appEventKeys.map(String) : [];
+      const deduped = prevKeys.filter((k: string) => k !== cleanKey);
+      deduped.push(cleanKey);
+      nextAppEventKeys = deduped.slice(-MAX_APP_EVENT_KEYS);
+    }
+  }
+
   if (existing) {
     await ctx.db.patch(existing._id, {
       stageKey: finalStageKey,
@@ -1628,6 +1746,8 @@ async function applyCardPatchForMember(
       ...(args.addOutcomeText !== undefined || args.removeOutcomeId
         ? { outcomes: nextOutcomes }
         : {}),
+      ...(args.touchAppActivity ? { lastAppActivityAt: args.nowMs } : {}),
+      ...(nextAppEventKeys ? { appEventKeys: nextAppEventKeys } : {}),
       updatedByUserId: args.actorUserId,
       updatedAt: args.nowMs,
     });
@@ -1648,6 +1768,8 @@ async function applyCardPatchForMember(
         : {}),
       ...(nextCompletedMilestones?.length ? { completedMilestones: nextCompletedMilestones } : {}),
       ...(nextOutcomes?.length ? { outcomes: nextOutcomes } : {}),
+      ...(args.touchAppActivity ? { lastAppActivityAt: args.nowMs } : {}),
+      ...(nextAppEventKeys ? { appEventKeys: nextAppEventKeys } : {}),
       updatedByUserId: args.actorUserId,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -1667,22 +1789,53 @@ async function applyCardPatchForMember(
 }
 
 // Connected apps (POST /apps/v1/milestones): report a verified member's
-// product milestone or win directly onto their Member Board card so onboarding
-// and Chief of Staff check-ins reflect real software progress.
+// product milestone, win, or daily active app ping onto their Member Board
+// card so onboarding and Chief of Staff reflect real software progress.
 export const recordConnectedAppMilestoneInternal = internalMutation({
   args: {
+    appId: v.optional(v.string()),
     communityId: v.id("communities"),
-    email: v.string(),
+    email: v.optional(v.string()),
+    pairwiseUserId: v.optional(v.string()),
     milestone: v.optional(v.string()),
     label: v.optional(v.string()),
     done: v.optional(v.boolean()),
     outcome: v.optional(v.string()),
+    active: v.optional(v.boolean()),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const community: any = await ctx.db.get(args.communityId);
     if (!community || !communityIsActive(community)) return { recorded: false as const };
-    const email = args.email.trim().toLowerCase();
-    const userId = email ? await verifiedUserIdForEmail(ctx, email) : null;
+
+    const cleanEmail = typeof args.email === "string" ? args.email.trim().toLowerCase() : "";
+    const cleanPairwiseId = typeof args.pairwiseUserId === "string" ? args.pairwiseUserId.trim() : "";
+
+    let userId: any = null;
+    if (cleanPairwiseId) {
+      if (!args.appId) return { recorded: false as const };
+      const identityRow = await ctx.db
+        .query("connectedAppUserIdentities")
+        .withIndex("by_app_pairwiseUserId", (q: any) =>
+          q.eq("appId", args.appId).eq("pairwiseUserId", cleanPairwiseId),
+        )
+        .first();
+      if (!identityRow || String(identityRow.communityId) !== String(args.communityId)) {
+        return { recorded: false as const };
+      }
+      const user: any = await ctx.db.get(identityRow.userId);
+      const userEmail = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
+      if (!user || !userEmail || !user.emailVerifiedAt) {
+        return { recorded: false as const };
+      }
+      if (cleanEmail && cleanEmail !== userEmail) {
+        return { recorded: false as const };
+      }
+      userId = identityRow.userId;
+    } else if (cleanEmail) {
+      userId = await verifiedUserIdForEmail(ctx, cleanEmail);
+    }
+
     if (!userId || String(userId) === String(community.ownerId)) {
       return { recorded: false as const };
     }
@@ -1694,10 +1847,86 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
       return { recorded: false as const };
     }
 
-    const { stages, autoAdvanceEnabled } = await readStagesForCommunity(ctx, args.communityId);
+    const nowMs = Date.now();
+    const [{ stages, autoAdvanceEnabled }, existingCard] = await Promise.all([
+      readStagesForCommunity(ctx, args.communityId),
+      ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", args.communityId).eq("userId", userId),
+        )
+        .unique(),
+    ]);
+
     const rawMilestone = typeof args.milestone === "string" ? args.milestone.trim() : "";
     const rawOutcome = typeof args.outcome === "string" ? normalizeOutcomeText(args.outcome) : null;
-    if (!rawMilestone && !rawOutcome) return { recorded: false as const };
+    const isActivePing = args.active === true;
+    if (!rawMilestone && !rawOutcome && !isActivePing) return { recorded: false as const };
+
+    const validStageKeys = new Set(stages.map((entry) => entry.key));
+    const currentStageKeyForDedupe = async () => {
+      if (existingCard && validStageKeys.has(existingCard.stageKey)) return String(existingCard.stageKey);
+      return await resolveDerivedStageKeyForMember(ctx, {
+        communityId: args.communityId,
+        userId,
+        stages,
+        membership,
+        lastAppActivityAtMs:
+          typeof existingCard?.lastAppActivityAt === "number" ? existingCard.lastAppActivityAt : null,
+        nowMs,
+      });
+    };
+
+    const idempotencyKey =
+      typeof args.idempotencyKey === "string" ? args.idempotencyKey.trim().slice(0, 128) : "";
+    if (
+      idempotencyKey &&
+      Array.isArray(existingCard?.appEventKeys) &&
+      existingCard.appEventKeys.includes(idempotencyKey)
+    ) {
+      const stageKey = await currentStageKeyForDedupe();
+      const stageObj = stages.find((entry) => entry.key === stageKey) ?? null;
+      return {
+        recorded: true as const,
+        deduplicated: true as const,
+        stage_key: stageKey,
+        stage_name: stageObj?.name ?? stageKey,
+        ...(isActivePing ? { active: true as const } : {}),
+      };
+    }
+
+    // Pure daily active ping: deduplicate to at most one write per UTC day.
+    if (!rawMilestone && !rawOutcome && isActivePing) {
+      if (existingCard && sameUtcDay(existingCard.lastAppActivityAt, nowMs)) {
+        const stageKey = await currentStageKeyForDedupe();
+        const stageObj = stages.find((entry) => entry.key === stageKey) ?? null;
+        return {
+          recorded: true as const,
+          deduplicated: true as const,
+          active: true as const,
+          stage_key: stageKey,
+          stage_name: stageObj?.name ?? stageKey,
+        };
+      }
+      const updated = await applyCardPatchForMember(ctx, {
+        actorUserId: community.ownerId,
+        communityId: args.communityId,
+        community,
+        stages,
+        autoAdvanceEnabled,
+        targetUserId: userId,
+        nowMs,
+        source: "app",
+        touchAppActivity: true,
+        ...(idempotencyKey ? { recordAppEventKey: idempotencyKey } : {}),
+      });
+      return {
+        recorded: true as const,
+        active: true as const,
+        stage_key: updated.stage_key,
+        stage_name: updated.stage_name,
+      };
+    }
 
     let toggleMilestone: { key: string; label?: string; completed: boolean } | undefined;
     let implicitOutcomeText: string | null = null;
@@ -1722,6 +1951,8 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
     }
 
     const effectiveOutcome = rawOutcome ?? implicitOutcomeText;
+    const shouldTouchAppActivity =
+      isActivePing || Boolean(effectiveOutcome) || toggleMilestone?.completed === true;
     const updated = await applyCardPatchForMember(ctx, {
       actorUserId: community.ownerId,
       communityId: args.communityId,
@@ -1729,10 +1960,12 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
       stages,
       autoAdvanceEnabled,
       targetUserId: userId,
-      nowMs: Date.now(),
+      nowMs,
       source: "app",
       ...(toggleMilestone ? { toggleMilestone } : {}),
       ...(effectiveOutcome ? { addOutcomeText: effectiveOutcome } : {}),
+      ...(shouldTouchAppActivity ? { touchAppActivity: true } : {}),
+      ...(idempotencyKey ? { recordAppEventKey: idempotencyKey } : {}),
     });
 
     return {
@@ -1741,6 +1974,7 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
       stage_name: updated.stage_name,
       ...(updated.milestone_key ? { milestone_key: updated.milestone_key, done: updated.done } : {}),
       ...(updated.outcome ? { outcome: updated.outcome.text } : {}),
+      ...(isActivePing ? { active: true as const } : {}),
     };
   },
 });
