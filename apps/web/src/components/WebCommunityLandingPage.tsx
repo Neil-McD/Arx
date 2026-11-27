@@ -23,6 +23,7 @@ import {
   buildOnboardingUrlForCommunityReturn,
   sanitizeOAuthAuthorizeReturnPath,
 } from "../../../../shared/webAppRouteState";
+import { captureDistributionAttributionFromLocation } from "../../../../shared/distributionAttribution";
 import "./WebCommunityLandingPage.css";
 
 type Props = {
@@ -187,6 +188,10 @@ export function WebCommunityLandingPage(props: Props) {
       return null;
     }
   }, [props.session, slug, requestedAppId]);
+
+  useEffect(() => {
+    captureDistributionAttributionFromLocation(slug);
+  }, [slug]);
 
   useEffect(() => { void load(); }, [load]);
 

@@ -57,6 +57,17 @@ export async function approveCommunityJoinRequestForFreeAccess(args: {
     existingMembership?.accessSource === "manual_grant"
       ? existingMembership.accessSource
       : "free_grant";
+  const requestAttribution =
+    args.request.attributionAnonymousId || args.request.attributionClickId
+      ? {
+          ...(args.request.attributionAnonymousId
+            ? { anonymousId: args.request.attributionAnonymousId }
+            : {}),
+          ...(args.request.attributionClickId
+            ? { clickId: args.request.attributionClickId }
+            : {}),
+        }
+      : undefined;
   const activation = await activateCommunityMembershipCore({
     ctx: args.ctx,
     communityId: args.request.communityId,
@@ -65,6 +76,7 @@ export async function approveCommunityJoinRequestForFreeAccess(args: {
     activationReason: args.grantReason,
     nowMs: args.nowMs,
     skipMemberCountSync: args.skipMemberCountSync,
+    ...(requestAttribution ? { distributionAttribution: requestAttribution } : {}),
   });
   const grantedMembershipMarker = activation.activationMarker;
   if (grantedMembershipMarker) {

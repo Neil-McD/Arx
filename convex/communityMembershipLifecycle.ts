@@ -18,6 +18,8 @@ import { incrementCommunityDailyAnalytics } from "./communityAnalyticsRollups";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
+import { enqueueCommunityMemberIdentify } from "./distributionAttribution";
+import { normalizeDistributionAttributionTracking } from "./distributionAttributionCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -35,22 +37,45 @@ export async function activateCommunityMembershipCore(args: {
   activationReason: string;
   nowMs: number;
   skipMemberCountSync?: boolean;
+  distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
 }): Promise<{
   membership: CommunityMembershipLike;
   accessGranted: boolean;
   activationMarker: string | null;
 }> {
+  const incomingAttribution = normalizeDistributionAttributionTracking(args.distributionAttribution);
   const existing = await getUniqueCommunityMembershipByPair({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
   });
+  const existingHasAttribution = Boolean(
+    existing?.attributionAnonymousId || existing?.attributionClickId,
+  );
+  const attributionPatch =
+    !existingHasAttribution && incomingAttribution
+      ? {
+          ...(incomingAttribution.anonymousId
+            ? { attributionAnonymousId: incomingAttribution.anonymousId }
+            : {}),
+          ...(incomingAttribution.clickId ? { attributionClickId: incomingAttribution.clickId } : {}),
+          attributedAt: args.nowMs,
+        }
+      : {};
+  const effectiveAttribution = existingHasAttribution
+    ? normalizeDistributionAttributionTracking({
+        anonymousId: existing?.attributionAnonymousId,
+        clickId: existing?.attributionClickId,
+      })
+    : incomingAttribution;
+
   if (existing && communityMembershipRowIsActive(existing)) {
     const role = args.role ?? (normalizeCommunityRoleForOutput(existing.role) || "member");
     await args.ctx.db.patch(existing._id, {
       role,
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
+      ...attributionPatch,
       state: "active",
       updatedAt: args.nowMs,
     });
@@ -85,6 +110,7 @@ export async function activateCommunityMembershipCore(args: {
       role,
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
+      ...attributionPatch,
       state: "active",
       activationSequence,
       activatedAt: args.nowMs,
@@ -99,6 +125,7 @@ export async function activateCommunityMembershipCore(args: {
       role,
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
+      ...attributionPatch,
       state: "active",
       activationSequence,
       activatedAt: args.nowMs,
@@ -154,6 +181,20 @@ export async function activateCommunityMembershipCore(args: {
   });
   // One door: the community's connected apps re-read this person's access.
   await memberAccessChanged(args.ctx, args.communityId, args.userId);
+  // Best-effort per-community Distribution Engineer identify delivery (never blocks join/checkout).
+  if (role === "member" && effectiveAttribution) {
+    try {
+      await enqueueCommunityMemberIdentify({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+        tracking: effectiveAttribution,
+        nowMs: args.nowMs,
+      });
+    } catch {
+      // Best-effort: never block membership activation or checkout settlement.
+    }
+  }
   // Automated Day-0 Member Onboarding (Chief of Staff plan only; $0 on Free/Guide).
   if (role === "member" && args.ctx.scheduler) {
     try {

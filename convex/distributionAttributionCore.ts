@@ -2,8 +2,16 @@ export const DISTRIBUTION_ATTRIBUTION_MAX_ATTEMPTS = 5;
 export const DISTRIBUTION_ATTRIBUTION_LEASE_MS = 60_000;
 export const DISTRIBUTION_ATTRIBUTION_SOURCE_SYSTEM = 'polynet';
 export const DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX = 'polynet.user_created.v1:';
+export const DISTRIBUTION_ATTRIBUTION_COMMUNITY_JOIN_PREFIX = 'polynet.community_join.v1:';
+export const DEFAULT_DISTRIBUTION_ENGINEER_IDENTIFY_URL =
+  'https://www.distribution.engineer/api/identify';
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type DistributionAttributionTracking = {
+  anonymousId?: string;
+  clickId?: string;
+};
 
 export type DistributionAttributionReceipt = {
   sourceEventId: string;
@@ -18,15 +26,55 @@ export function normalizeDistributionAttributionId(value: unknown): string | und
   return UUID_RE.test(normalized) ? normalized.toLowerCase() : undefined;
 }
 
+export function normalizeDistributionAttributionTracking(
+  tracking: { anonymousId?: unknown; clickId?: unknown } | null | undefined,
+): DistributionAttributionTracking | null {
+  const anonymousId = normalizeDistributionAttributionId(tracking?.anonymousId);
+  const clickId = normalizeDistributionAttributionId(tracking?.clickId);
+  if (!anonymousId && !clickId) return null;
+  return {
+    ...(anonymousId ? { anonymousId } : {}),
+    ...(clickId ? { clickId } : {}),
+  };
+}
+
+export function distributionAttributionStripeMetadata(
+  tracking: { anonymousId?: unknown; clickId?: unknown } | null | undefined,
+): { de_aid?: string; de_cid?: string } {
+  const normalized = normalizeDistributionAttributionTracking(tracking);
+  if (!normalized) return {};
+  return {
+    ...(normalized.anonymousId ? { de_aid: normalized.anonymousId } : {}),
+    ...(normalized.clickId ? { de_cid: normalized.clickId } : {}),
+  };
+}
+
 export function createDistributionAttributionSourceEventId(): string {
   return `${DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX}${crypto.randomUUID()}`;
 }
 
+export function createCommunityJoinSourceEventId(): string {
+  return `${DISTRIBUTION_ATTRIBUTION_COMMUNITY_JOIN_PREFIX}${crypto.randomUUID()}`;
+}
+
 export function normalizeDistributionAttributionSourceEventId(value: unknown): string | undefined {
   const normalized = String(value ?? '').trim().toLowerCase();
-  if (!normalized.startsWith(DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX)) return undefined;
-  const eventId = normalized.slice(DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX.length);
-  return UUID_RE.test(eventId) ? normalized : undefined;
+  for (const prefix of [
+    DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX,
+    DISTRIBUTION_ATTRIBUTION_COMMUNITY_JOIN_PREFIX,
+  ]) {
+    if (normalized.startsWith(prefix)) {
+      const eventId = normalized.slice(prefix.length);
+      return UUID_RE.test(eventId) ? normalized : undefined;
+    }
+  }
+  return undefined;
+}
+
+export function maskDistributionWebhookKeyHint(rawKey: string): string {
+  const trimmed = rawKey.trim();
+  if (trimmed.length <= 4) return '••••';
+  return `••••${trimmed.slice(-4)}`;
 }
 
 export function parseDistributionAttributionReceipt(
@@ -83,4 +131,11 @@ export function shouldRetryDistributionAttribution(status: number | null): boole
 
 export function distributionAttributionDeliveryKey(userId: string): string {
   return `polynet_user_created:${userId}`;
+}
+
+export function distributionAttributionCommunityDeliveryKey(
+  communityId: string,
+  userId: string,
+): string {
+  return `polynet_community_join:${communityId}:${userId}`;
 }

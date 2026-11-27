@@ -14,6 +14,8 @@ export const CRITICAL_AUDIT_EVENT_TYPES = [
   "community_purchase_claim_redeemed",
   "community_checkout_granted",
   "community_checkout_attached",
+  "community_distribution_connection_saved",
+  "community_distribution_connection_disconnected",
   "community_blocked_buyer_refunded",
   "community_duplicate_subscription_refunded",
   "community_operator_retirement_completed",
@@ -117,6 +119,8 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   community_purchase_claim_redeemed: ["accessGranted", "grantMarker", "pricePointId"],
   community_checkout_granted: ["accessGranted", "grantMarker", "pricePointId"],
   community_checkout_attached: ["paid"],
+  community_distribution_connection_saved: ["accountId", "keyRotated"],
+  community_distribution_connection_disconnected: ["accountId"],
   community_blocked_buyer_refunded: ["providerAccountId"],
   community_duplicate_subscription_refunded: ["providerAccountId"],
   community_operator_retirement_completed: [

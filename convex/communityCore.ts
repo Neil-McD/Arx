@@ -80,6 +80,9 @@ export type CommunityMembershipLike = {
   activatedAt?: number;
   revokedAt?: number;
   revokedReason?: string;
+  attributionAnonymousId?: string;
+  attributionClickId?: string;
+  attributedAt?: number;
   createdAt: number;
   updatedAt: number;
 };

@@ -11,6 +11,8 @@ export type CommunityJoinRequestLike = {
   message?: string;
   deniedAt?: number;
   reapplyAt?: number;
+  attributionAnonymousId?: string;
+  attributionClickId?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -150,15 +152,21 @@ export async function ensurePendingCommunityJoinRequest(args: {
   communityId: any;
   userId: any;
   nowMs: number;
+  attribution?: { anonymousId?: string; clickId?: string } | null;
 }): Promise<CommunityJoinRequestLike> {
   const pair = await loadCompatibleCommunityJoinRequestPair(args);
   const existing = pair.current;
+  const attributionPatch = {
+    ...(args.attribution?.anonymousId ? { attributionAnonymousId: args.attribution.anonymousId } : {}),
+    ...(args.attribution?.clickId ? { attributionClickId: args.attribution.clickId } : {}),
+  };
   if (!existing) {
     await deletePairRowsExcept({ ctx: args.ctx, rows: pair.rows });
     const id = await args.ctx.db.insert("communityJoinRequests", {
       communityId: args.communityId,
       userId: args.userId,
       status: "pending",
+      ...attributionPatch,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
@@ -177,10 +185,14 @@ export async function ensurePendingCommunityJoinRequest(args: {
   if (status === "pending" || !communityJoinRequestCanReapply(existing, args.nowMs)) {
     return existing;
   }
+  const shouldKeepExistingAttribution = Boolean(
+    existing.attributionAnonymousId || existing.attributionClickId,
+  );
   await args.ctx.db.patch(existing._id, {
     status: "pending",
     deniedAt: undefined,
     reapplyAt: undefined,
+    ...(!shouldKeepExistingAttribution ? attributionPatch : {}),
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });

@@ -23,6 +23,7 @@ import {
   type CloudConnectedApp,
 } from "../../../../shared/cloudConnectedAppsGateway";
 import { SettingsButton, SettingsGroup, SettingsNote, SettingsRow, settingsButtonClass } from "./SettingsRows";
+import { CommunityDistributionEngineerSection } from "./CommunityDistributionEngineerSection";
 
 type Shown = { appId: string; secret: string; signingSecret?: string };
 
@@ -423,6 +424,11 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
           })()}
         </SettingsGroup>
       ) : null}
+      <CommunityDistributionEngineerSection
+        communityId={props.communityId}
+        session={props.session}
+        ensureSession={props.ensureSession}
+      />
     </>
   );
 }

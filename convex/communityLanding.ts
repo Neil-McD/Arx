@@ -199,12 +199,27 @@ export const getCommunityLandingPage = query({
 
 // Join (an open community) or ask to (approval): Studio's own decision.
 export const joinCommunityFromLanding = mutation({
-  args: { communitySlug: v.string(), authSubject: v.optional(v.string()) },
+  args: {
+    communitySlug: v.string(),
+    authSubject: v.optional(v.string()),
+    distributionAttribution: v.optional(
+      v.object({
+        anonymousId: v.optional(v.string()),
+        clickId: v.optional(v.string()),
+      }),
+    ),
+  },
   handler: async (ctx, args) => {
     const userId = await requiredUserId(ctx, args.authSubject);
     const community = await actionableCommunityBySlug(ctx, args.communitySlug);
     const nowMs = Date.now();
-    const result = await joinPublicCommunityInternal({ ctx, community, userId, nowMs });
+    const result = await joinPublicCommunityInternal({
+      ctx,
+      community,
+      userId,
+      nowMs,
+      distributionAttribution: args.distributionAttribution,
+    });
     await recordCommunityJoinStarted(ctx, { communityId: community._id, userId, nowMs });
     return result;
   },
@@ -229,6 +244,12 @@ export const startCommunityLandingCheckout = action({
     plan: v.optional(v.string()),
     appId: v.optional(v.string()),
     authSubject: v.string(),
+    distributionAttribution: v.optional(
+      v.object({
+        anonymousId: v.optional(v.string()),
+        clickId: v.optional(v.string()),
+      }),
+    ),
   },
   handler: async (ctx, args): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> => {
     const slug = cleanSlug(args.communitySlug);
@@ -252,6 +273,7 @@ export const startCommunityLandingCheckout = action({
       successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}${returnQuery}`,
       cancelUrl: `${page}?checkout=canceled${returnQuery}`,
       ...(plan ? { tierKey: plan } : {}),
+      ...(args.distributionAttribution ? { distributionAttribution: args.distributionAttribution } : {}),
       authSubject: args.authSubject,
     });
     return { checkout_url: started.checkout_url, session_id: started.session_id, buyer_secret: started.buyer_secret ?? null };
