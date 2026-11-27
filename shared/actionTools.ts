@@ -421,7 +421,7 @@ export const ACTION_TOOLS: ActionTool[] = [
     (a) => call("community.members.unban", a, { members: a.members })),
   // Member Board (owners and admins).
   tool("polynet_move_member_stage", "community.journey.move_stage", "Move members on the board",
-    "Move one or more active members to another stage on the Member Board. Read builder/journey.json first for stage keys and current placement.",
+    "Move one or more active members (up to 50 in one batch) to another stage on the Member Board. Read builder/suggestions.json (for ready stage moves from Home or a morning brief) or builder/journey.json first for member refs and stage keys.",
     { community: COMMUNITY, members: MEMBERS, stage: TEXT("Stage key or exact stage name from builder/journey.json.", 64) },
     ["community", "members", "stage"],
     (a) => call("community.journey.move_stage", a, { members: a.members, stage: a.stage })),

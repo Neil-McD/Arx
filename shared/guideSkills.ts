@@ -40,6 +40,7 @@ export const MEMBER_BOARD_SKILL_MD = [
   "- Also check builder/community.json when you need to know the community's current plan tier (free, guide, or chief_of_staff) and whether hosted AI is turned on.",
   "- Never guess a person's handle, a stage key, or a draft id; copy them from builder/journey.json, builder/suggestions.json, or the members listing.",
   "- When the host asks for a specific update (move someone to a stage, pin or reset a status, check off a milestone, log a win, save a coaching note, approve/dismiss a stage move, or skip a waiting draft), do it directly and report back using names and stage titles rather than raw keys.",
+  "- When the host replies to a morning brief or asks you to handle waiting Home actions (for example, 'can you do it', 'advance all 11', or 'move them'), read builder/suggestions.json first. Batch stage moves heading to the same destination stage in a single polynet_move_member_stage call (up to 50 members per call) instead of calling polynet_decide_stage_move one by one. For waiting check-in or reply drafts, use polynet_send_guide_draft (which asks Yes or No before messaging members).",
   "- To rename, reorder, or add stages or checkpoints, pass the full ordered list to polynet_update_journey_stages and keep every existing stage key.",
   "- Removing a stage uses polynet_remove_journey_stage, and sending a waiting Guide check-in or channel reply draft uses polynet_send_guide_draft; both always ask Yes or No first.",
   "- On Chief of Staff communities, Stage 1 of the Member Board drives automated Day-0 member onboarding (using Stage 1's goal, checkpoints, handbook, starter course, and connected app), followed by Day 2+ newcomer and stage check-ins. Connected software products can also check off custom Member Board milestones automatically via POST /apps/v1/milestones.",
@@ -56,7 +57,7 @@ export const GUIDE_SKILLS: readonly GuideSkill[] = [
   },
   {
     name: "member-board",
-    about: "inspecting and updating the Member Board (stages, checkpoints, statuses, wins, and coaching notes).",
+    about: "inspecting and updating the Member Board (stages, checkpoints, statuses, wins, coaching notes, and acting on waiting Home suggestions or morning briefs).",
     tool: "polynet_move_member_stage",
     loadedOn: ["members"],
     text: MEMBER_BOARD_SKILL_MD,

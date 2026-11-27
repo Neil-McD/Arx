@@ -69,6 +69,9 @@ export type FounderBriefSnapshot = {
   // Fresh Chief of Staff morning brief surfaced directly on Home for the owner
   // (never populated on member Home snapshots or non-Chief-of-Staff communities).
   founderBrief?: HomeFounderBrief | null;
+  // True on owner Home when Chief of Staff proactive automation is live
+  // (used to retire duplicate legacy deterministic reminders).
+  proactiveAgentActive?: boolean;
 };
 
 export type FounderBrief = {
@@ -638,12 +641,9 @@ async function readFreshHomeFounderBrief(
   ctx: any,
   communityId: any,
   nowMs: number,
+  proactiveActive: boolean,
 ): Promise<HomeFounderBrief | null> {
-  const [agentOn, proactiveTier] = await Promise.all([
-    communityAgentIsOn(ctx, communityId),
-    communityHasProactiveAgentTier(ctx, communityId, nowMs),
-  ]);
-  if (!agentOn || !proactiveTier) return null;
+  if (!proactiveActive) return null;
   const latest = await ctx.db
     .query("communityFounderBriefs")
     .withIndex("by_community_status_windowEnd", (q: any) =>
@@ -686,12 +686,21 @@ export const getCommunityHomeSnapshot = query({
     if (!community || String(community.ownerId) !== String(userId)) throw new Error("community_home_owner_required");
     if (!communityIsActive(community)) return null;
     const nowMs = Date.now();
-    const [snapshot, founderBrief] = await Promise.all([
+    const [agentOn, proactiveTier, snapshot] = await Promise.all([
+      communityAgentIsOn(ctx, args.communityId),
+      communityHasProactiveAgentTier(ctx, args.communityId, nowMs),
       buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs),
-      readFreshHomeFounderBrief(ctx, args.communityId, nowMs),
     ]);
+    const proactiveAgentActive = agentOn && proactiveTier;
+    const founderBrief = await readFreshHomeFounderBrief(
+      ctx,
+      args.communityId,
+      nowMs,
+      proactiveAgentActive,
+    );
     return {
       ...snapshot,
+      proactiveAgentActive,
       ...(founderBrief ? { founderBrief } : {}),
     };
   },
