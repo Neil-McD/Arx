@@ -49,6 +49,15 @@ export type CloudMemberJourneyCard = {
   checkpoints_total: number;
   outcomes: CloudMemberJourneyOutcome[];
   latest_outcome: { text: string; at: string } | null;
+  completed_milestones?: Array<{
+    key: string;
+    label: string;
+    completed_at: string;
+    source: JourneyMilestoneSource;
+  }>;
+  active_mrr_base_units?: number;
+  mrr_currency?: string | null;
+  mrr_currency_decimals?: number;
   joined_at: string | null;
   last_active_at: string | null;
   last_app_active_at?: string | null;
@@ -61,11 +70,21 @@ export type CloudDiscoveredAppMilestone = {
   last_seen_at: string | null;
 };
 
+export type CloudStageMrrSummary = {
+  mrr_base_units: number;
+  currency: string | null;
+  currency_decimals: number;
+  mixed_currency: boolean;
+  paid_count: number;
+};
+
 export type CloudMemberJourneyBoard = {
   stages: JourneyStageDefinition[];
   auto_advance_enabled: boolean;
   cards: CloudMemberJourneyCard[];
   discovered_app_milestones?: CloudDiscoveredAppMilestone[];
+  stage_mrr?: Record<string, CloudStageMrrSummary>;
+  total_mrr?: CloudStageMrrSummary;
   total_active_members: number;
   capped: boolean;
   hosted_ai_tier?: "free" | "guide" | "chief_of_staff";

@@ -382,6 +382,7 @@
 
 .app .views{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .app .r5.h-only{width:max(440px,var(--rail-w))}
+.app .rec{display:contents}.app .r5 .rec>*{flex:none}
 .app label.trow{cursor:pointer}
 .app .trow.th .ic{width:12px;height:12px;vertical-align:-2px;opacity:.7}
 .app .plan{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--s1);font-size:13px}

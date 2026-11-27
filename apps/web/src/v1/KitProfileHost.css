@@ -39,6 +39,23 @@
 .pfh-sec[data-focus] { scroll-margin-top: 12px; }
 .pfh-line { display: grid; grid-template-columns: 84px 1fr; gap: 10px; margin: 0; color: var(--ink); font-size: 13px; line-height: 1.45; }
 .pfh-line > span { color: var(--ink3); }
+.pfh-saved-pill {
+  display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid rgba(92, 191, 134, .35); background: rgba(92, 191, 134, .1);
+  color: #5cbf86; font-style: normal; font-size: 11px; font-weight: 500;
+}
+.pfh-subh { color: var(--ink3); font-size: 11px; font-weight: 500; letter-spacing: .02em; text-transform: uppercase; }
+.pfh-timeline { padding-top: 8px; border-top: 1px solid var(--line); }
+.pfh-timeline ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.pfh-timeline li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; line-height: 1.4; color: var(--ink2); }
+.pfh-timeline li.is-ai span { color: color-mix(in srgb, #a78bfa 78%, var(--ink)); }
+.pfh-timeline li.is-saved span { color: #5cbf86; }
+.pfh-timeline li em { flex: none; color: var(--ink3); font-style: normal; font-size: 11px; white-space: nowrap; }
+.pfh-timeline-more {
+  align-self: flex-start; padding: 2px 0; border: 0; background: none;
+  color: var(--ink3); font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.pfh-timeline-more:hover { color: var(--ink); }
 
 /* The AI's line: purple, like everything the AI did; a way in when it waits on you. */
 .pfh-did { display: flex; align-items: center; gap: 7px; margin: 0; color: color-mix(in srgb, #a78bfa 80%, var(--ink)); font-size: 13px; }

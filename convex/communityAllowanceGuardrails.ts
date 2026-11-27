@@ -171,7 +171,7 @@ async function readCompactReengagement30d(
   const latestActivityByMember = new Map<string, number | null>();
   await Promise.all(
     [...uniqueMembers.entries()].map(async ([key, memberUserId]) => {
-      const [latestRoot, latestReply, latestLesson, agentChannel] = await Promise.all([
+      const [latestRoot, latestReply, latestLesson, agentChannel, journeyCard] = await Promise.all([
         ctx.db
           .query("communityInteractionRoots")
           .withIndex("by_community_actorUser_createdAt", (q: any) =>
@@ -199,12 +199,19 @@ async function readCompactReengagement30d(
             q.eq("ownerId", memberUserId).eq("scopeKey", "community").eq("communityId", communityId),
           )
           .unique(),
+        ctx.db
+          .query("communityMemberJourneyCards")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", communityId).eq("userId", memberUserId),
+          )
+          .unique(),
       ]);
       const best = Math.max(
         latestRoot?.status === "live" ? Number(latestRoot.createdAt ?? 0) : 0,
         latestReply?.status === "live" ? Number(latestReply.createdAt ?? 0) : 0,
         Number(latestLesson?.completedAt ?? 0),
         Number(agentChannel?.updatedAt ?? 0),
+        typeof journeyCard?.lastAppActivityAt === "number" ? journeyCard.lastAppActivityAt : 0,
       );
       latestActivityByMember.set(key, best > 0 ? best : null);
     }),

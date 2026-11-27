@@ -24,6 +24,7 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { verifiedUserIdForEmail } from "./communityCheckoutBuyer";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { factVisibleToHost, moneyFor, planFor } from "../shared/communityMemberRecords";
+import { aggregateStageMrr, monthlyMrrForPricePoint } from "../shared/memberRevenueLedger";
 import type { CommunityMemberJourneySelfSummary } from "../shared/communityMemberSelfContext";
 import {
   DEFAULT_JOURNEY_STAGES,
@@ -110,7 +111,7 @@ async function readStagesForCommunity(ctx: any, communityId: any): Promise<{
   };
 }
 
-async function readMemberParticipationSignals(
+export async function readMemberParticipationSignals(
   ctx: any,
   communityId: any,
   userId: any,
@@ -583,6 +584,18 @@ async function computeCommunityMemberJourneyBoard(
       const plan = planFor({ isOwner: false, accessSource: membership.accessSource, pricePoint: point });
       const money = moneyFor({ membershipState: membership.state, subscription });
       const moneyKind = money?.kind === "on_hold" || money?.kind === "cancelling" ? money.kind : null;
+      const subActiveForMrr = Boolean(
+        subscription &&
+          subscription.status !== "ended" &&
+          subscription.riskAccessState !== "revoked" &&
+          point &&
+          membership.revokedReason !== "subscription_refunded" &&
+          membership.revokedReason !== "subscription_dispute_opened" &&
+          membership.revokedReason !== "subscription_dispute_lost",
+      );
+      const activeMrrBaseUnits = subActiveForMrr ? monthlyMrrForPricePoint(point) : 0;
+      const mrrCurrency = subActiveForMrr && activeMrrBaseUnits > 0 ? String(point?.currency ?? "").trim().toUpperCase() || null : null;
+      const mrrCurrencyDecimals = subActiveForMrr && point ? Math.max(0, Math.floor(Number(point.currencyDecimals ?? 2))) : 2;
 
       const joinedAtMs = typeof membership.createdAt === "number" ? membership.createdAt : null;
       const lastAppAt =
@@ -696,6 +709,22 @@ async function computeCommunityMemberJourneyBoard(
       const latestOutcome = outcomesView[0]
         ? { text: outcomesView[0].text, at: outcomesView[0].at }
         : null;
+      const rawCompletedMilestones = Array.isArray(storedCard?.completedMilestones)
+        ? storedCard.completedMilestones
+        : [];
+      const completedMilestonesView = [...rawCompletedMilestones]
+        .sort((a: any, b: any) => Number(b.completedAt ?? 0) - Number(a.completedAt ?? 0))
+        .slice(0, 12)
+        .map((row: any) => ({
+          key: String(row.key),
+          label: String(row.label ?? String(row.key).replace(/_/g, " "))
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, MAX_CHECKPOINT_LABEL_CHARS),
+          completed_at: iso(row.completedAt) ?? new Date(nowMs).toISOString(),
+          source: (row.source ?? "founder") as JourneyMilestoneSource,
+        }))
+        .filter((row) => Boolean(row.key && row.label));
 
       return {
         membership_id: String(membership._id),
@@ -729,6 +758,10 @@ async function computeCommunityMemberJourneyBoard(
         checkpoints_total: checkpointsView.length,
         outcomes: outcomesView,
         latest_outcome: latestOutcome,
+        completed_milestones: completedMilestonesView,
+        active_mrr_base_units: activeMrrBaseUnits,
+        mrr_currency: mrrCurrency,
+        mrr_currency_decimals: mrrCurrencyDecimals,
         joined_at: iso(joinedAtMs),
         last_active_at: iso(lastActiveAtMs),
         last_app_active_at: iso(lastAppAt > 0 ? lastAppAt : null),
@@ -749,6 +782,8 @@ async function computeCommunityMemberJourneyBoard(
       last_seen_at: iso(entry.lastSeenAtMs > 0 ? entry.lastSeenAtMs : null),
     }));
 
+  const mrrRollup = aggregateStageMrr(cards);
+
   const totalActiveMembers = Math.max(
     cards.length,
     (readCommunityActiveMemberCount(community) ?? cards.length) - 1,
@@ -759,6 +794,8 @@ async function computeCommunityMemberJourneyBoard(
     auto_advance_enabled: autoAdvanceEnabled,
     cards,
     discovered_app_milestones: discoveredAppMilestones,
+    stage_mrr: mrrRollup.byStage,
+    total_mrr: mrrRollup.total,
     total_active_members: totalActiveMembers,
     capped,
   };
@@ -796,6 +833,8 @@ export const getCommunityMemberJourneyBoard = query({
         ({ db_user_id: _dbUserId, stage_name: _stageName, dismissed_advance_for_stage_key: _dismissed, ...card }) => card,
       ),
       discovered_app_milestones: board.discovered_app_milestones,
+      stage_mrr: board.stage_mrr,
+      total_mrr: board.total_mrr,
       total_active_members: board.total_active_members,
       capped: board.capped,
       hosted_ai_tier: (fundingAdmission.ok ? fundingAdmission.planTier : "free") as "free" | "guide" | "chief_of_staff",
@@ -936,6 +975,13 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
         ...(card.agent_outcome ? { agent_outcome: card.agent_outcome } : {}),
         ...(card.working_on ? { working_on: card.working_on } : {}),
         ...(card.activity_summary ? { activity_summary: card.activity_summary } : {}),
+        ...(card.active_mrr_base_units > 0 && card.mrr_currency
+          ? {
+              active_mrr_base_units: card.active_mrr_base_units,
+              mrr_currency: card.mrr_currency,
+              mrr_currency_decimals: card.mrr_currency_decimals,
+            }
+          : {}),
         joined_at: card.joined_at,
         last_active_at: card.last_active_at,
         ...(card.last_app_active_at ? { last_app_active_at: card.last_app_active_at } : {}),
@@ -957,6 +1003,9 @@ export const readCommunityMemberJourneyBoardForTrustedManagerInternal = internal
       stages: board.stages,
       ...(board.discovered_app_milestones.length
         ? { discovered_app_milestones: board.discovered_app_milestones }
+        : {}),
+      ...(board.total_mrr.paid_count > 0
+        ? { stage_mrr: board.stage_mrr, total_mrr: board.total_mrr }
         : {}),
       summary: {
         total_active_members: board.total_active_members,

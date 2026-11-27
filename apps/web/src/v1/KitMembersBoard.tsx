@@ -30,6 +30,7 @@ import {
   type JourneyStageDefinition,
 } from "../../../../shared/communityMemberJourney";
 import type { CloudMemberJourneyBoard, CloudMemberJourneyCard } from "../../../../shared/cloudCommunityMemberJourneyGateway";
+import { aggregateStageMrr, formatCompactMrr } from "../../../../shared/memberRevenueLedger";
 import { cx, usePhoneLayout } from "./kit";
 import { Face } from "./KitMembersTable";
 import "./KitMembersBoard.css";
@@ -421,6 +422,15 @@ export function KitMembersBoard(props: {
     () => allCards.reduce((sum, card) => sum + (card.outcomes?.length ?? 0), 0),
     [allCards],
   );
+  const visibleMrr = useMemo(() => aggregateStageMrr(visibleCards), [visibleCards]);
+  const boardTotalMrr = useMemo(
+    () => props.board?.total_mrr ?? aggregateStageMrr(allCards).total,
+    [props.board?.total_mrr, allCards],
+  );
+  const boardTotalMrrLabel =
+    !boardTotalMrr.mixed_currency
+      ? formatCompactMrr(boardTotalMrr.mrr_base_units, boardTotalMrr.currency, boardTotalMrr.currency_decimals)
+      : null;
 
   const handleDropOnStage = async (stageKey: string) => {
     const membershipId = draggingId;
@@ -501,6 +511,7 @@ export function KitMembersBoard(props: {
           </button>
           <span className="members-board-pulse" aria-label="Board summary">
             <strong>{activatedPercent}%</strong> activated
+            {boardTotalMrrLabel ? <> · <strong>{boardTotalMrrLabel}</strong></> : null}
             {totalLoggedWins > 0 ? <> · <strong>{totalLoggedWins}</strong> {totalLoggedWins === 1 ? "win" : "wins"}</> : null}
           </span>
         </div>
@@ -634,6 +645,21 @@ export function KitMembersBoard(props: {
                     </button>
                   )}
                   <span className="members-board-col-count">{stageCards.length}</span>
+                  {(() => {
+                    const mrr = visibleMrr.byStage[stage.key];
+                    const label =
+                      mrr && !mrr.mixed_currency
+                        ? formatCompactMrr(mrr.mrr_base_units, mrr.currency, mrr.currency_decimals)
+                        : null;
+                    return label ? (
+                      <span
+                        className="members-board-col-mrr"
+                        title={`Active monthly recurring revenue in ${stage.name}`}
+                      >
+                        {label}
+                      </span>
+                    ) : null;
+                  })()}
                   <div className="members-board-col-menu-wrap" ref={menuOpen || cpOpen ? popoverRef : undefined}>
                     <button
                       type="button"

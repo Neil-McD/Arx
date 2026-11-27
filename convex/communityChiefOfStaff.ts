@@ -221,7 +221,7 @@ async function readQuietPayingMembers(
 
   const quietIds: any[] = [];
   for (const row of paidActive) {
-    const [latestRoot, latestReply, latestLesson] = await Promise.all([
+    const [latestRoot, latestReply, latestLesson, journeyCard] = await Promise.all([
       ctx.db
         .query("communityInteractionRoots")
         .withIndex("by_community_actorUser_createdAt", (q: any) =>
@@ -243,11 +243,21 @@ async function readQuietPayingMembers(
         )
         .order("desc")
         .first(),
+      ctx.db
+        .query("communityMemberJourneyCards")
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", community._id).eq("userId", row.userId),
+        )
+        .unique(),
     ]);
     const latestRootAt = latestRoot?.status === "live" ? Number(latestRoot.createdAt ?? 0) : 0;
     const latestReplyAt = latestReply?.status === "live" ? Number(latestReply.createdAt ?? 0) : 0;
     const latestLessonAt = Number(latestLesson?.completedAt ?? 0);
-    const lastActiveAt = Math.max(latestRootAt, latestReplyAt, latestLessonAt);
+    const latestAppAt =
+      typeof journeyCard?.lastAppActivityAt === "number" && Number.isFinite(journeyCard.lastAppActivityAt)
+        ? journeyCard.lastAppActivityAt
+        : 0;
+    const lastActiveAt = Math.max(latestRootAt, latestReplyAt, latestLessonAt, latestAppAt);
     if (lastActiveAt < cutoffMs) quietIds.push(row.userId);
   }
 

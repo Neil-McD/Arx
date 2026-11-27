@@ -19,6 +19,8 @@ import {
   type JourneyCardStatus,
   type JourneyStageDefinition,
 } from "../../../../shared/communityMemberJourney";
+import { formatPrice } from "../../../../shared/communityMemberRecords";
+import { formatCompactMrr } from "../../../../shared/memberRevenueLedger";
 import { Btn, cx } from "./kit";
 import { cardReason, guideDidShort } from "./KitMembersBoard";
 import { paymentText } from "./memberTime";
@@ -106,17 +108,28 @@ export function HostSummary(props: { host: ProfileHost; now: number; state: Prof
   const status = card ? reason ?? JOURNEY_CARD_STATUS_LABELS[card.status] : null;
   const needsLook = card ? card.status === "needs_you" || card.status === "stuck" : false;
   const next = nextStageFor(host);
-  // "Last here Tuesday", unless the status already says how long they've been away.
+  // "Last here Tuesday" (or "Active in app today"), unless status already says away.
   const away = /quiet|hasn't answered/i.test(reason ?? "");
-  const lastDay = lastHereDay(record.last_active_at, now);
-  const last = lastDay && !away ? `Last here ${lastDay}` : null;
+  const effectiveLastAt = card?.last_active_at ?? record.last_active_at;
+  const effectiveAppAt = card?.last_app_active_at ?? record.last_app_active_at ?? null;
+  const appFreshest = Boolean(
+    effectiveAppAt &&
+      (!effectiveLastAt || Date.parse(effectiveAppAt) >= Date.parse(effectiveLastAt)),
+  );
+  const lastDay = lastHereDay(effectiveLastAt, now);
+  const last = lastDay && !away ? `${appFreshest ? "Active in app" : "Last here"} ${lastDay}` : null;
   const plan = record.plan.kind === "owner" ? null : record.plan.label;
+  const revenue = record.revenue;
+  const ltvSummary =
+    revenue && !revenue.mixed_currency && revenue.realized_ltv_base_units > 0 && revenue.currency
+      ? `${formatPrice(revenue.realized_ltv_base_units, revenue.currency, revenue.currency_decimals)} LTV${revenue.months_retained >= 1 ? ` · ${revenue.months_retained} mo` : ""}`
+      : null;
   return (
     <div className="pfh-sum" aria-label="For hosts">
       <p>
         {record.out ? <span className="pfh-sum-status"><i aria-hidden="true" />{record.out.text}</span> : null}
         {status ? <span className={needsLook ? "pfh-sum-status is-look" : "pfh-sum-status"}><i aria-hidden="true" />{status}</span> : null}
-        {[stage?.name, plan, last].filter(Boolean).map((part) => <span key={part}>{part}</span>)}
+        {[stage?.name, plan, ltvSummary, last].filter(Boolean).map((part) => <span key={part}>{part}</span>)}
       </p>
       {next && host.onUpdateJourney ? (
         <button type="button" className="pfh-move" disabled={state.busy}
@@ -239,7 +252,87 @@ export function HostPart(props: { host: ProfileHost; now: number; state: Profile
   useEffect(() => {
     if (wantsProgress) progressRef.current?.scrollIntoView({ block: "nearest" });
   }, [wantsProgress, record.membership_id]);
+  const [showAllTimeline, setShowAllTimeline] = useState(false);
+  useEffect(() => { setShowAllTimeline(false); }, [record.membership_id]);
   const latestPayment = [...(host.payments?.events ?? [])].sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))[0] ?? null;
+  const revenue = record.revenue;
+  const revenueLine =
+    revenue && !revenue.mixed_currency && revenue.realized_ltv_base_units > 0 && revenue.currency
+      ? [
+          `${formatPrice(revenue.realized_ltv_base_units, revenue.currency, revenue.currency_decimals)} realized`,
+          revenue.months_retained >= 1
+            ? `${revenue.months_retained} ${revenue.months_retained === 1 ? "month" : "months"}`
+            : `${Math.max(1, revenue.tenure_days)} ${revenue.tenure_days === 1 ? "day" : "days"}`,
+          formatCompactMrr(revenue.active_mrr_base_units, revenue.currency, revenue.currency_decimals),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
+
+  type TimelineItem = {
+    id: string;
+    at: string;
+    text: string;
+    tone: "default" | "ai" | "saved";
+  };
+  const timeline: TimelineItem[] = [];
+  if (record.verified_save?.saved) {
+    const savedAmt = formatCompactMrr(
+      record.verified_save.saved_mrr_base_units,
+      record.verified_save.currency,
+      record.verified_save.currency_decimals,
+    );
+    timeline.push({
+      id: `verified-save:${record.verified_save.verified_at}`,
+      at: record.verified_save.verified_at,
+      text: `Chief of Staff rescue verified · renewed after check-in${savedAmt ? ` (${savedAmt})` : ""}`,
+      tone: "saved",
+    });
+  }
+  for (const ev of record.coach_events ?? []) {
+    timeline.push({
+      id: `coach:${ev.id}`,
+      at: ev.at,
+      text: guideDidShort(ev.text) ?? ev.text,
+      tone: "ai",
+    });
+  }
+  for (const ms of card?.completed_milestones ?? []) {
+    timeline.push({
+      id: `ms:${ms.key}:${ms.completed_at}`,
+      at: ms.completed_at,
+      text: `${ms.label}${ms.source === "app" ? " · in app" : ""}`,
+      tone: "default",
+    });
+  }
+  for (const win of card?.outcomes ?? []) {
+    timeline.push({
+      id: `win:${win.id}`,
+      at: win.at,
+      text: `Win: ${win.text}${win.source === "app" ? " · in app" : ""}`,
+      tone: "default",
+    });
+  }
+  for (const pay of host.payments?.events ?? []) {
+    timeline.push({
+      id: `pay:${pay.id}`,
+      at: pay.occurred_at,
+      text: paymentText(pay),
+      tone: "default",
+    });
+  }
+  for (const ev of record.events ?? []) {
+    if (!ev.at) continue;
+    timeline.push({
+      id: `rec:${ev.kind}:${ev.at}:${ev.text}`,
+      at: ev.at,
+      text: ev.text,
+      tone: "default",
+    });
+  }
+  timeline.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const visibleTimeline = showAllTimeline ? timeline.slice(0, 20) : timeline.slice(0, 5);
+
   return (
     <section className="pfh" aria-label="Only hosts see this">
       <div className="pfh-h"><Lock size={12} strokeWidth={1.8} aria-hidden="true" />Only hosts see this</div>
@@ -257,27 +350,62 @@ export function HostPart(props: { host: ProfileHost; now: number; state: Profile
         )
       ) : null}
 
-      {card ? (
+      {card || revenueLine || record.attribution ? (
         <div className="pfh-sec" ref={progressRef} data-focus={host.focus === "progress" ? "" : undefined}>
-          {card.checkpoints.length ? (
+          {record.attribution?.source_label ? (
+            <p className="pfh-line"><span>Source</span>{record.attribution.source_label}</p>
+          ) : null}
+          {revenueLine ? (
+            <p className="pfh-line">
+              <span>Value</span>
+              <span>
+                {revenueLine}
+                {record.verified_save?.saved ? <em className="pfh-saved-pill">Saved &amp; renewed</em> : null}
+              </span>
+            </p>
+          ) : null}
+          {card && card.checkpoints.length ? (
             <p className="pfh-line"><span>Done</span>{done.length ? done.map((cp) => cp.label).join(", ") : "Nothing yet"}</p>
           ) : null}
-          {left.length ? <p className="pfh-line"><span>Next</span>{left.map((cp) => cp.label).join(", ")}</p> : null}
+          {card && left.length ? <p className="pfh-line"><span>Next</span>{left.map((cp) => cp.label).join(", ")}</p> : null}
           {latestPayment ? <p className="pfh-line"><span>Payment</span>{paymentText(latestPayment)}</p> : null}
-          {card.outcomes.length ? (
+          {card && card.outcomes.length ? (
             <p className="pfh-line"><span>Wins</span>{card.outcomes.slice(0, 3).map((item) => item.text).join(" · ")}</p>
           ) : null}
           {state.writing === "win" ? (
             <WriteBox label={`A win for ${first}`} placeholder={`What did ${first} achieve?`} max={MAX_OUTCOME_TEXT_CHARS} busy={state.busy}
               onCancel={close} onSave={(text) => { if (text) state.run(host.onUpdateJourney?.({ addOutcomeText: text }), "That win didn't save. Try again.", close); }} />
           ) : null}
-          {card.founder_instruction && state.writing !== "guide" ? (
+          {card && card.founder_instruction && state.writing !== "guide" ? (
             <p className="pfh-line"><span>To the guide</span>{card.founder_instruction}</p>
           ) : null}
           {state.writing === "guide" ? (
             <WriteBox label={`Your note to the guide about ${first}`} placeholder={`e.g. "Point ${first} at Friday's call"`}
-              initial={card.founder_instruction ?? ""} max={MAX_FOUNDER_INSTRUCTION_CHARS} busy={state.busy}
+              initial={card?.founder_instruction ?? ""} max={MAX_FOUNDER_INSTRUCTION_CHARS} busy={state.busy}
               onCancel={close} onSave={(text) => state.run(host.onUpdateJourney?.({ founderInstruction: text }), "Your note to the guide didn't save. Try again.", close)} />
+          ) : null}
+        </div>
+      ) : null}
+
+      {visibleTimeline.length > 0 ? (
+        <div className="pfh-sec pfh-timeline" aria-label="Member timeline">
+          <div className="pfh-subh">Timeline</div>
+          <ul>
+            {visibleTimeline.map((item) => (
+              <li key={item.id} className={item.tone !== "default" ? `is-${item.tone}` : undefined}>
+                <span>{item.text}</span>
+                <em>{host.timeFor(item.at, now)}</em>
+              </li>
+            ))}
+          </ul>
+          {timeline.length > 5 ? (
+            <button
+              type="button"
+              className="pfh-timeline-more"
+              onClick={() => setShowAllTimeline((prev) => !prev)}
+            >
+              {showAllTimeline ? "Show less" : `Show all (${Math.min(20, timeline.length)})`}
+            </button>
           ) : null}
         </div>
       ) : null}
