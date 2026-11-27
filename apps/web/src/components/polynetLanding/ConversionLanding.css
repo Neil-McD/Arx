@@ -1034,3 +1034,20 @@
   .pn-landing .rpw *::-webkit-scrollbar, .pn-landing .gsc *::-webkit-scrollbar,
   .pn-landing .bsc *::-webkit-scrollbar, .pn-landing .rp *::-webkit-scrollbar { display: none; }
 }
+
+/* Under the hero's buttons: the AIs the setup prompt works with, small and
+   quiet, in one row (KitAiHarnessLogos, whose app styles the site doesn't load). */
+.pn-landing .hero-text .ai-harness-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin: 18px auto 0; max-width: 560px; }
+.pn-landing .hero-text .ai-harness-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12.5px; opacity: .8; }
+.pn-landing .hero-text .ai-harness-icon { display: inline-grid; place-items: center; width: 14px; height: 14px; }
+.pn-landing .hero-text .ai-harness-icon svg { width: 14px; height: 14px; }
+.pn-landing button.cta-quiet { padding: 0; border: 0; background: none; font-family: inherit; cursor: pointer; }
+@media (max-width: 900px) {
+  /* Phones: the same row, tighter, so the seven fit on one line. */
+  .pn-landing .hero-text .ai-harness-strip { flex-wrap: nowrap; gap: 0 7px; max-width: 100%; }
+  .pn-landing .hero-text .ai-harness-chip { gap: 3px; font-size: 10px; letter-spacing: -.01em; white-space: nowrap; }
+  .pn-landing .hero-text .ai-harness-icon, .pn-landing .hero-text .ai-harness-icon svg { width: 10px; height: 10px; }
+}
+@media (max-width: 400px) {
+  .pn-landing .hero-text .ai-harness-strip { flex-wrap: wrap; gap: 4px 8px; }
+}
