@@ -688,7 +688,7 @@ test("POST /apps/v1/milestones supports pairwise user_id, daily active pings, id
     outcome: "Sent first outbound campaign",
   });
 
-  // Repeating the same idempotency_key deduplicates cleanly without creating a second outcome.
+  // Repeating the same idempotency_key from the SAME app deduplicates cleanly without creating a second outcome.
   const dupKey = await postMilestone(appA.secret, {
     user_id: oauthUser.id,
     outcome: "Different text that should be ignored on duplicate key",
@@ -697,7 +697,20 @@ test("POST /apps/v1/milestones supports pairwise user_id, daily active pings, id
   expect(dupKey.status).toBe(200);
   expect(await dupKey.json()).toMatchObject({ recorded: true, deduplicated: true });
 
-  // Daily active ping on the same UTC day deduplicates cleanly and does not rewrite updatedAt.
+  // A DIFFERENT connected app in the same community reusing the same local idempotency_key is NOT suppressed.
+  const sameKeyOtherApp = await postMilestone(appB.secret, {
+    email: "maya-chief_of_staff@example.com",
+    outcome: "Completed setup in Other App",
+    idempotency_key: "evt_camp_1",
+  });
+  expect(sameKeyOtherApp.status).toBe(200);
+  expect(await sameKeyOtherApp.json()).toMatchObject({
+    recorded: true,
+    outcome: "Completed setup in Other App",
+  });
+
+  // Daily active ping on the same UTC day deduplicates cleanly, AND if it carries a new idempotency_key
+  // that key is remembered so a retry after UTC midnight cannot falsely refresh lastAppActivityAt.
   const cardBeforePing: any = await t.run((ctx) =>
     ctx.db
       .query("communityMemberJourneyCards")
@@ -705,14 +718,36 @@ test("POST /apps/v1/milestones supports pairwise user_id, daily active pings, id
       .unique(),
   );
   expect(typeof cardBeforePing?.lastAppActivityAt).toBe("number");
-  expect(cardBeforePing?.outcomes).toHaveLength(1);
+  expect(cardBeforePing?.outcomes).toHaveLength(2);
 
   const sameDayPing = await postMilestone(appA.secret, {
     user_id: oauthUser.id,
     active: true,
+    idempotency_key: "ping_today_1",
   });
   expect(sameDayPing.status).toBe(200);
   expect(await sameDayPing.json()).toMatchObject({ recorded: true, deduplicated: true, active: true });
+
+  // Simulate moving past UTC midnight (previous activity was 2 days ago) and retrying the same keyed ping:
+  // it must still deduplicate and NOT overwrite lastAppActivityAt.
+  const staleActivityAt = Date.now() - 2 * 86_400_000;
+  await t.run(async (ctx) => {
+    await ctx.db.patch(cardBeforePing._id, { lastAppActivityAt: staleActivityAt });
+  });
+  const retryPingNextDay = await postMilestone(appA.secret, {
+    user_id: oauthUser.id,
+    active: true,
+    idempotency_key: "ping_today_1",
+  });
+  expect(retryPingNextDay.status).toBe(200);
+  expect(await retryPingNextDay.json()).toMatchObject({ recorded: true, deduplicated: true, active: true });
+  const cardAfterMidnightRetry: any = await t.run((ctx) => ctx.db.get(cardBeforePing._id));
+  expect(cardAfterMidnightRetry?.lastAppActivityAt).toBe(staleActivityAt);
+
+  // Restore fresh activity timestamp for the Board assertions below.
+  await t.run(async (ctx) => {
+    await ctx.db.patch(cardBeforePing._id, { lastAppActivityAt: cardBeforePing.lastAppActivityAt });
+  });
 
   // Member Board surfaces the unmapped milestone for 1-click tracking AND exposes last_app_active_at.
   const boardBefore = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {

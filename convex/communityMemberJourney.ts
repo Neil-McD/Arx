@@ -1719,7 +1719,7 @@ async function applyCardPatchForMember(
 
   let nextAppEventKeys: string[] | undefined = undefined;
   if (args.recordAppEventKey) {
-    const cleanKey = args.recordAppEventKey.trim().slice(0, 128);
+    const cleanKey = args.recordAppEventKey.trim().slice(0, 192);
     if (cleanKey) {
       const prevKeys = Array.isArray(existing?.appEventKeys) ? existing.appEventKeys.map(String) : [];
       const deduped = prevKeys.filter((k: string) => k !== cleanKey);
@@ -1877,8 +1877,9 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
       });
     };
 
-    const idempotencyKey =
+    const rawIdempotencyKey =
       typeof args.idempotencyKey === "string" ? args.idempotencyKey.trim().slice(0, 128) : "";
+    const idempotencyKey = rawIdempotencyKey ? `${args.appId ?? "app"}:${rawIdempotencyKey}` : "";
     if (
       idempotencyKey &&
       Array.isArray(existingCard?.appEventKeys) &&
@@ -1895,9 +1896,21 @@ export const recordConnectedAppMilestoneInternal = internalMutation({
       };
     }
 
-    // Pure daily active ping: deduplicate to at most one write per UTC day.
+    // Pure daily active ping: deduplicate to at most one activity timestamp write per UTC day.
+    // If a new idempotency_key is provided, remember it without changing lastAppActivityAt so
+    // retries across UTC midnight remain deduplicated and cannot falsely refresh recency.
     if (!rawMilestone && !rawOutcome && isActivePing) {
       if (existingCard && sameUtcDay(existingCard.lastAppActivityAt, nowMs)) {
+        if (idempotencyKey) {
+          const prevKeys = Array.isArray(existingCard.appEventKeys) ? existingCard.appEventKeys.map(String) : [];
+          const nextKeys = [...prevKeys.filter((k: string) => k !== idempotencyKey), idempotencyKey].slice(
+            -MAX_APP_EVENT_KEYS,
+          );
+          await ctx.db.patch(existingCard._id, {
+            appEventKeys: nextKeys,
+            updatedAt: nowMs,
+          });
+        }
         const stageKey = await currentStageKeyForDedupe();
         const stageObj = stages.find((entry) => entry.key === stageKey) ?? null;
         return {
