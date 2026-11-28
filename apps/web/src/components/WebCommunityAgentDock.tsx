@@ -2,6 +2,7 @@ import { GuideVoice } from "../../../../shared/entityChipsUi";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -17,6 +18,8 @@ import {
 } from "react";
 import { WebCommunityHomeSection, type WebCommunityHomeSectionProps } from "./WebCommunityHomeSection";
 import {
+  Check,
+  Copy,
   LoaderCircle,
   MessageSquarePlus,
   Sparkles,
@@ -81,6 +84,60 @@ import { communityAgentSessionKey } from "../../../../shared/communityAgentPageS
 type CommunityAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
 };
+
+const GUIDE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function guideLocalDayKey(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatGuideDayLabel(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const dayMs = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (dayMs === todayMs) return "Today";
+  if (dayMs === todayMs - GUIDE_DAY_MS) return "Yesterday";
+  return date.toLocaleDateString(
+    [],
+    date.getFullYear() === now.getFullYear()
+      ? { month: "short", day: "numeric" }
+      : { month: "short", day: "numeric", year: "numeric" },
+  );
+}
+
+function CopyGuideReplyButton(props: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  }, []);
+  const handleCopy = () => {
+    void navigator.clipboard?.writeText(props.text).then(() => {
+      setCopied(true);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopied(false), 1600);
+    }).catch(() => undefined);
+  };
+  return (
+    <div className={cx("talk-acts")}>
+      <button
+        type="button"
+        className={cx("talk-copy", copied && "is-copied")}
+        onClick={handleCopy}
+        aria-label={copied ? "Copied reply" : "Copy reply"}
+      >
+        {copied ? <Check size={12} strokeWidth={2} aria-hidden="true" /> : <Copy size={12} strokeWidth={1.8} aria-hidden="true" />}
+        <span>{copied ? "Copied" : "Copy"}</span>
+      </button>
+    </div>
+  );
+}
 
 type AgentScope = {
   userId: string | null;
@@ -227,6 +284,7 @@ function WebCommunityAgentDock(props, ref) {
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
+  const [talkFromBrief, setTalkFromBrief] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] = useState<InferenceIssueModalState | null>(null);
   const [sendingByThread, setSendingByThread] = useState<Record<string, boolean>>({});
@@ -1027,24 +1085,35 @@ function WebCommunityAgentDock(props, ref) {
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
   // Everything said with the guide, live turn included. On Home on the kit it
-  // is drawn as the mock's conversation (yours on the right, the guide's in
-  // its serif voice); everywhere else, as the dock's messages.
-  const conversation = (kit: boolean) => (
-    <>
+  // is drawn as the mock's conversation (yours on the right, the guide's on the left).
+  const conversation = (kit: boolean) => {
+    let previousDayKey = "";
+    return (
+      <>
           {visibleMessages.map((message) => {
             const text = extractTextFromContentJson(message.content_json);
             const messageAttachments = parseMessageAttachments(message.content_json);
             if (kit) {
-              return message.role === "assistant" ? (
-                <Theirs key={message.id}>
-                  {text ? <GuideVoice>{renderMarkdown(text)}</GuideVoice> : null}
-                  <CommunityAgentAttachmentViews attachments={messageAttachments} />
-                </Theirs>
-              ) : (
-                <Mine key={message.id}>
-                  {text}
-                  <CommunityAgentAttachmentViews attachments={messageAttachments} />
-                </Mine>
+              const dayKey = guideLocalDayKey(message.created_at);
+              const showDay = Boolean(dayKey && dayKey !== previousDayKey);
+              if (dayKey) previousDayKey = dayKey;
+              const dayLabel = showDay ? formatGuideDayLabel(message.created_at) : "";
+              return (
+                <Fragment key={message.id}>
+                  {dayLabel ? <div className={cx("day")}>{dayLabel}</div> : null}
+                  {message.role === "assistant" ? (
+                    <Theirs>
+                      {text ? <GuideVoice>{renderMarkdown(text)}</GuideVoice> : null}
+                      <CommunityAgentAttachmentViews attachments={messageAttachments} />
+                      {text ? <CopyGuideReplyButton text={text} /> : null}
+                    </Theirs>
+                  ) : (
+                    <Mine>
+                      {text}
+                      <CommunityAgentAttachmentViews attachments={messageAttachments} />
+                    </Mine>
+                  )}
+                </Fragment>
               );
             }
             return (
@@ -1117,8 +1186,9 @@ function WebCommunityAgentDock(props, ref) {
               ) : null}
             </div>
           ) : null}
-    </>
-  );
+      </>
+    );
+  };
 
   // A turn under way, an approval waiting or an error opens the conversation
   // by itself, so nothing that needs you is hidden behind Home at rest.
@@ -1139,17 +1209,22 @@ function WebCommunityAgentDock(props, ref) {
   askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
   const kitHomeIsHost = props.home?.audience === "host";
   // Opening the conversation is a step Back returns from.
-  const openTalk = () => {
+  const openTalk = (options?: { fromBrief?: boolean }) => {
     followConversationRef.current = true;
+    setTalkFromBrief(Boolean(options?.fromBrief));
     writeRouteDetail("homeView", "talk");
   };
   const closeTalk = () => {
     followConversationRef.current = false;
+    setTalkFromBrief(false);
     writeRouteDetail("homeView", null);
     scrollRef.current?.scrollTo({ top: 0 });
   };
   const kitSubmit = (event: FormEvent) => {
-    if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) openTalk();
+    if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) {
+      setTalkFromBrief(false);
+      openTalk();
+    }
     void submit(event);
   };
   const sendSuggestion = (text: string) => {
@@ -1160,6 +1235,10 @@ function WebCommunityAgentDock(props, ref) {
     window.requestAnimationFrame(() => composerFormRef.current?.requestSubmit());
   };
   sendSuggestionRef.current = sendSuggestion;
+  const kitComposerPlaceholder =
+    (kitTalking || conversationNeedsYou) && talkFromBrief
+      ? "Ask about today's brief, or tell your guide what to handle…"
+      : presentation.composerLabel;
   const kitBody = kitHome && props.home ? (
     <section className={`community-agent-dock-panel has-home-rail is-kit-home${kitTalking || conversationNeedsYou ? " is-guide-talking" : ""}`} aria-label={presentation.title}>
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
@@ -1177,18 +1256,6 @@ function WebCommunityAgentDock(props, ref) {
                 "Home"
               )
             }
-            actions={
-              (kitTalking || conversationNeedsYou) && props.onOpenSoulAndMemory ? (
-                <button
-                  type="button"
-                  className="kit-home-back"
-                  onClick={props.onOpenSoulAndMemory}
-                  title="View or edit your guide's Soul and Memory"
-                >
-                  Soul &amp; Memory
-                </button>
-              ) : null
-            }
           />
           <Scroll ref={scrollRef}>
             <WebCommunityHomeSection
@@ -1203,8 +1270,8 @@ function WebCommunityAgentDock(props, ref) {
                 talking: kitTalking || conversationNeedsYou,
                 hasConversation: visibleMessages.length > 0,
                 talk: <Talk>{conversation(true)}</Talk>,
-                onTalkItOver: () => {
-                  openTalk();
+                onTalkItOver: (options) => {
+                  openTalk(options);
                   kitInputRef.current?.focus();
                 },
               }}
@@ -1257,8 +1324,8 @@ function WebCommunityAgentDock(props, ref) {
                   }
                 }}
                 onPaste={handleAttachmentPaste}
-                placeholder={presentation.composerLabel}
-                aria-label={presentation.composerLabel}
+                placeholder={kitComposerPlaceholder}
+                aria-label={kitComposerPlaceholder}
                 disabled={isPreparing || isStartingNewChat}
               />
               {/* A picture for the guide to look at, or to put in a post for you. Dropping or pasting one worked already; this is the way in you can see. */}
