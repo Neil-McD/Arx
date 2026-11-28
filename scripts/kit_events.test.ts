@@ -4,9 +4,14 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { eventPlaceWord, eventSoonWord, KitEventsList } = await import("../apps/web/src/v1/KitEventsList");
+const { eventPlaceWord, eventSoonWord, EventsCalendarPanel, KitEventsList } = await import("../apps/web/src/v1/KitEventsList");
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { eventRepeatWord } = await import("../apps/web/src/components/communityEventsList");
+const {
+  buildRollingEventsCalendar,
+  formatCalendarDayHeading,
+  localEventDayKey,
+} = await import("../apps/web/src/components/communityEventsCalendar");
 const { readFileSync } = await import("node:fs");
 
 test("a place says only what the host said", () => {
@@ -108,4 +113,149 @@ test("KitEventsList shows an inline cancelled notice in the Next card when an ea
   expect(html).toContain("Cancelled");
   expect(html).toContain("Friday");
   expect(html).toContain("Group Call");
+});
+
+test("buildRollingEventsCalendar builds a 5-week grid across a month boundary with repeating and cancelled dates", () => {
+  const nowDate = new Date(2026, 10, 27, 15, 0, 0); // Fri, Nov 27, 2026 local
+  const now = nowDate.getTime();
+  const makeOcc = (id: string, monthIndex: number, day: number, hour: number, status = "scheduled") => ({
+    id,
+    starts_at: new Date(2026, monthIndex, day, hour, 0, 0).toISOString(),
+    ends_at: new Date(2026, monthIndex, day, hour + 1, 0, 0).toISOString(),
+    status,
+  });
+
+  const cal = buildRollingEventsCalendar([
+    makeOcc("ev:nov24", 10, 24, 10, "scheduled"), // past earlier this week
+    makeOcc("ev:dec4", 11, 4, 10, "scheduled"),
+    makeOcc("ev:dec4", 11, 4, 10, "scheduled"), // duplicate id ignored
+    makeOcc("ev:dec11", 11, 11, 10, "scheduled"),
+    makeOcc("ev:dec15", 11, 15, 10, "cancelled"),
+    makeOcc("ev:dec18", 11, 18, 10, "scheduled"),
+    makeOcc("ev:dec18b", 11, 18, 14, "cancelled"),
+  ], now);
+
+  expect(cal.days).toHaveLength(35);
+  expect(cal.days[0]!.date.getDay()).toBe(0); // Sunday of current week (Nov 22)
+  expect(cal.todayKey).toBe(localEventDayKey(nowDate));
+  expect(cal.rangeLabel).toBe("Nov – Dec");
+  expect(cal.upcomingCount30d).toBe(3); // Dec 4, Dec 11, Dec 18
+  expect(cal.cancelledCount30d).toBe(2); // Dec 15, Dec 18b
+
+  const nov24 = cal.days.find((d) => d.dayKey === "2026-11-24")!;
+  expect(nov24.isPast).toBe(true);
+  expect(nov24.liveCount).toBe(1);
+
+  const nov27 = cal.days.find((d) => d.dayKey === "2026-11-27")!;
+  expect(nov27.isToday).toBe(true);
+  expect(nov27.isPast).toBe(false);
+
+  const dec1 = cal.days.find((d) => d.dayKey === "2026-12-01")!;
+  expect(dec1.isMonthStart).toBe(true);
+  expect(dec1.monthShort).toBe("Dec");
+
+  const dec11 = cal.days.find((d) => d.dayKey === "2026-12-11")!;
+  expect(dec11.liveCount).toBe(1);
+  expect(dec11.cancelledCount).toBe(0);
+
+  const dec15 = cal.days.find((d) => d.dayKey === "2026-12-15")!;
+  expect(dec15.liveCount).toBe(0);
+  expect(dec15.cancelledCount).toBe(1);
+
+  const dec18 = cal.days.find((d) => d.dayKey === "2026-12-18")!;
+  expect(dec18.liveCount).toBe(1);
+  expect(dec18.cancelledCount).toBe(1);
+  expect(dec18.events.map((e) => e.id)).toEqual(["ev:dec18", "ev:dec18b"]);
+
+  expect(formatCalendarDayHeading("2026-11-27", now)).toMatch(/^Today · /);
+  expect(formatCalendarDayHeading("2026-11-28", now)).toMatch(/^Tomorrow · /);
+  expect(formatCalendarDayHeading("2026-12-04", now)).toBe("Fri, Dec 4");
+
+  // On Saturday, a 5-week grid starting on the preceding Sunday only covers 29
+  // upcoming dates, so the calendar expands to 6 weeks to include day #30.
+  const satNow = new Date(2026, 10, 28, 12, 0, 0).getTime(); // Sat, Nov 28, 2026
+  const satCal = buildRollingEventsCalendar([
+    makeOcc("ev:dec27", 11, 27, 10, "scheduled"), // 30th day (today + 29)
+  ], satNow);
+  expect(satCal.days).toHaveLength(42);
+  expect(satCal.upcomingCount30d).toBe(1);
+  const dec27 = satCal.days.find((d) => d.dayKey === "2026-12-27");
+  expect(dec27?.inNext30Days).toBe(true);
+  expect(dec27?.liveCount).toBe(1);
+});
+
+test("EventsCalendarPanel renders the rolling 30-day grid, selected-day events, and host add-event shortcut", () => {
+  const now = new Date(2026, 10, 27, 15, 0, 0).getTime();
+  const baseEvent = {
+    community_id: "comm_1",
+    parent_event_id: "ev_series",
+    title: "Group Call",
+    description_md: null,
+    starts_at: new Date(2026, 11, 4, 10, 0, 0).toISOString(),
+    ends_at: new Date(2026, 11, 4, 11, 0, 0).toISOString(),
+    timezone: "America/New_York",
+    location_type: "online" as const,
+    location_label: "Zoom",
+    url: "https://zoom.us/j/123",
+    recurrence_frequency: "weekly" as const,
+    visibility: "members" as const,
+    status: "scheduled" as const,
+    pod_channel_id: null,
+    pod_name: null,
+    cancellation_scope: null,
+    cancellation_note: null,
+    created_at: "2026-11-01T00:00:00.000Z",
+    updated_at: "2026-11-01T00:00:00.000Z",
+  };
+  const occurrences = [
+    { ...baseEvent, id: "ev_series:dec4" },
+    {
+      ...baseEvent,
+      id: "ev_series:dec11",
+      starts_at: new Date(2026, 11, 11, 10, 0, 0).toISOString(),
+      ends_at: new Date(2026, 11, 11, 11, 0, 0).toISOString(),
+    },
+  ];
+
+  // Resting view: summary + every future repeating date marked in the grid.
+  const restingHtml = renderToStaticMarkup(React.createElement(EventsCalendarPanel, {
+    events: occurrences,
+    now,
+    canManage: true,
+    selectedDayKey: null,
+    onSelectDay: () => {},
+    onPickEvent: () => {},
+    onNewForDay: () => {},
+  }));
+  expect(restingHtml).toContain("Next 30 days");
+  expect(restingHtml).toContain("Nov – Dec");
+  expect(restingHtml).toContain("2 events in the next 30 days");
+  expect(restingHtml).toContain("Fri, Dec 11 · 1 event");
+
+  // Selected day with an event: shows that date's event row + host shortcut.
+  const pickedDayHtml = renderToStaticMarkup(React.createElement(EventsCalendarPanel, {
+    events: occurrences,
+    now,
+    canManage: true,
+    selectedDayKey: "2026-12-11",
+    onSelectDay: () => {},
+    onPickEvent: () => {},
+    onNewForDay: () => {},
+  }));
+  expect(pickedDayHtml).toContain("Fri, Dec 11");
+  expect(pickedDayHtml).toContain("Group Call");
+  expect(pickedDayHtml).toContain("Add an event for Dec 11");
+
+  // Selected empty future day for a member: no host add button.
+  const memberEmptyDayHtml = renderToStaticMarkup(React.createElement(EventsCalendarPanel, {
+    events: occurrences,
+    now,
+    canManage: false,
+    selectedDayKey: "2026-12-09",
+    onSelectDay: () => {},
+    onPickEvent: () => {},
+    onNewForDay: () => {},
+  }));
+  expect(memberEmptyDayHtml).toContain("Nothing scheduled.");
+  expect(memberEmptyDayHtml).not.toContain("Add an event for");
 });

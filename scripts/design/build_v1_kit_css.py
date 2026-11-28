@@ -669,6 +669,39 @@ css += """
 .app .evseg button.on{background:rgba(var(--w),.09);color:var(--ink)}
 .app.part.rail-part:has(>.rail>.evp){display:flex;flex-direction:column}
 .app.part.rail-part>.rail:has(>.evp){flex:1}
+/* Events right-panel 30-day rolling calendar: five compact Sun–Sat weeks,
+   subtle dots for upcoming and cancelled dates, and the selected day below. */
+.app .evcal{display:flex;flex-direction:column;gap:22px;min-width:0}
+.app .evcal-grid-wrap{display:flex;flex-direction:column;gap:4px}
+.app .evcal-dow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center;font-size:11px;font-weight:500;color:var(--ink3);padding-bottom:2px}
+.app .evcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.app .evcal-day{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:42px;padding:3px 0;border-radius:8px;border:1px solid transparent;font-size:12.5px;font-weight:450;font-variant-numeric:tabular-nums;color:var(--ink1);cursor:pointer;transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+.app .evcal-day:hover{background:var(--s1);color:var(--ink)}
+.app .evcal-day:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.app .evcal-day.past{color:var(--ink3);opacity:.52}
+.app .evcal-day.past:hover{opacity:.85}
+.app .evcal-day.has{color:var(--ink);font-weight:550}
+.app .evcal-day.today{background:var(--s1);border-color:var(--line2);color:var(--ink);font-weight:600}
+.app .evcal-day.on{background:var(--s2);border-color:rgba(var(--w),.26);color:var(--ink);font-weight:600;opacity:1}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .evcal-day.on{border-color:rgba(13,17,23,.26)}
+.app .evcal-day.mstart{padding-top:9px}
+.app .evcal-mon{position:absolute;top:2px;left:0;right:0;text-align:center;font-size:8.5px;font-weight:600;letter-spacing:.02em;line-height:1;color:var(--ink3);pointer-events:none}
+.app .evcal-num{line-height:1}
+.app .evcal-dots{display:flex;align-items:center;justify-content:center;gap:3px;height:5px}
+.app .evcal-dots i{width:4px;height:4px;border-radius:50%;background:var(--aurora-ink)}
+.app .evcal-dots i.bad{background:var(--bad,#f38b8b)}
+.app .evcal-summary{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink3)}
+.app .evcal-list{display:flex;flex-direction:column;gap:2px}
+.app .evcal-item{display:flex;align-items:center;gap:10px;width:calc(100% + 16px);margin:0 -8px;padding:7px 8px;border-radius:8px;text-align:left;cursor:pointer;transition:background .14s var(--ease)}
+.app .evcal-item:hover{background:var(--s1)}
+.app .evcal-item-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.app .evcal-item-t b{display:flex;align-items:center;gap:6px;min-width:0;font-size:13.5px;font-weight:550;color:var(--ink)}
+.app .evcal-item-t b>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .evcal-item.cancelled .evcal-item-t b>span:first-child{color:var(--ink2)}
+.app .evcal-item-t small{font-size:12px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .evcal-item-go{flex:none;color:var(--ink3)}
+.app .evcal-empty{margin:0;font-size:13px;line-height:1.45;color:var(--ink3)}
+.app .evcal-add{align-self:flex-start;margin-top:2px}
 @media (max-width:700px){.app .evnext{grid-template-columns:60px minmax(0,1fr);gap:0 14px;padding:16px}.app .evnext .evday{width:60px;height:60px}.app .evnext .evday b{font-size:22px}.app .evnext h2{font-size:18px}.app .evnext-acts{grid-column:1/-1}.app .evnext-acts .btn{flex:1;height:38px;justify-content:center}.app .evtop{flex-wrap:wrap}}
 :where(:root[data-layout="phone"]) .app .evnext{grid-template-columns:60px minmax(0,1fr);gap:0 14px;padding:16px}
 :where(:root[data-layout="phone"]) .app .evnext .evday{width:60px;height:60px}:where(:root[data-layout="phone"]) .app .evnext .evday b{font-size:22px}

@@ -9,15 +9,21 @@
 // Nobody is asked whether they are coming (Neil, Nov 14 and Nov 15: not
 // needed). Who came and recaps are not shown either: calls happen off
 // Polynet, so it can't know.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CalendarPlus, ChevronDown, ChevronRight, MapPin, Plus, Repeat, Video, X } from "lucide-react";
 import type {
   CloudCommunityEvent,
   CloudCommunityEventCancelOptions,
 } from "../../../../shared/cloudCommunityEventsGateway";
+import { communityEventPhase } from "../../../../shared/communityEventLifecycle";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { eventAddressKey, eventIdFromAddressKey } from "../../../../shared/webAppRouteState";
 import { registerMobilePageBack } from "../components/CommunityPageHeader";
+import {
+  buildRollingEventsCalendar,
+  formatCalendarDayHeading,
+  formatCalendarDayShort,
+} from "../components/communityEventsCalendar";
 import {
   earlierCancelledOccurrencesForEvent,
   eventDateBlock,
@@ -26,7 +32,7 @@ import {
   featuredEventLabel,
 } from "../components/communityEventsList";
 import { Btn, cx, Icon, KitApp, Rail, useMinWidth, usePhoneLayout } from "./kit";
-import { PanelPart } from "./KitPanel";
+import { PanelAction, PanelPart } from "./KitPanel";
 
 // "1:00 pm", as the mock has it (the reader's own time).
 export function eventClock(startsAtIso: string): string {
@@ -56,11 +62,148 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 // The page says once that times are yours, so a time doesn't repeat it.
 const yours = (primary: string) => primary.replace(/\s*·\s*your time$/i, "");
 
+const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"] as const;
+
+export function EventsCalendarPanel(props: {
+  events: readonly CloudCommunityEvent[];
+  now: number;
+  loading?: boolean;
+  canManage: boolean;
+  formOpen?: boolean;
+  selectedDayKey: string | null;
+  onSelectDay: (dayKey: string | null) => void;
+  onPickEvent: (eventId: string) => void;
+  onNewForDay: (dayKey: string) => void;
+}) {
+  const calendar = useMemo(
+    () => buildRollingEventsCalendar(props.events, props.now),
+    [props.events, props.now],
+  );
+  const selectedDay = props.selectedDayKey
+    ? calendar.days.find((day) => day.dayKey === props.selectedDayKey) ?? null
+    : null;
+  const summaryText = (() => {
+    if (props.loading) return null;
+    if (calendar.upcomingCount30d === 0 && calendar.cancelledCount30d === 0) {
+      return props.canManage
+        ? "Nothing scheduled in the next 30 days. Pick any day to add one."
+        : "Nothing scheduled in the next 30 days.";
+    }
+    const parts: string[] = [];
+    if (calendar.upcomingCount30d > 0) {
+      parts.push(`${calendar.upcomingCount30d} ${calendar.upcomingCount30d === 1 ? "event" : "events"} in the next 30 days`);
+    }
+    if (calendar.cancelledCount30d > 0) {
+      parts.push(`${calendar.cancelledCount30d} cancelled`);
+    }
+    return `${parts.join(" · ")}. Pick a day to view it.`;
+  })();
+
+  return (
+    <div className={cx("evcal")}>
+      <PanelPart label="Next 30 days" fact={calendar.rangeLabel}>
+        <div className={cx("evcal-grid-wrap")}>
+          <div className={cx("evcal-dow")} aria-hidden="true">
+            {CALENDAR_WEEKDAYS.map((weekday, index) => <span key={index}>{weekday}</span>)}
+          </div>
+          <div className={cx("evcal-grid")} role="grid" aria-label="Next 30 days calendar">
+            {calendar.days.map((day) => {
+              const selected = selectedDay?.dayKey === day.dayKey;
+              const statusParts: string[] = [];
+              if (day.liveCount > 0) statusParts.push(`${day.liveCount} ${day.liveCount === 1 ? "event" : "events"}`);
+              if (day.cancelledCount > 0) statusParts.push(`${day.cancelledCount} cancelled`);
+              const dayAria = `${formatCalendarDayHeading(day.dayKey, props.now)}${statusParts.length ? ` · ${statusParts.join(", ")}` : " · Nothing scheduled"}`;
+              return (
+                <button
+                  key={day.dayKey}
+                  type="button"
+                  className={cx(
+                    "evcal-day",
+                    day.isPast && "past",
+                    day.isToday && "today",
+                    day.liveCount > 0 && "has",
+                    day.isMonthStart && "mstart",
+                    selected && "on",
+                  )}
+                  aria-label={dayAria}
+                  aria-pressed={selected}
+                  onClick={() => props.onSelectDay(selected ? null : day.dayKey)}
+                >
+                  {day.isMonthStart ? <span className={cx("evcal-mon")} aria-hidden="true">{day.monthShort}</span> : null}
+                  <span className={cx("evcal-num")}>{day.dayNumber}</span>
+                  <span className={cx("evcal-dots")} aria-hidden="true">
+                    {day.liveCount > 0 ? <i /> : null}
+                    {day.cancelledCount > 0 ? <i className={cx("bad")} /> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </PanelPart>
+      {selectedDay ? (
+        <PanelPart
+          label={formatCalendarDayHeading(selectedDay.dayKey, props.now)}
+          action={<PanelAction onClick={() => props.onSelectDay(null)}>Clear</PanelAction>}
+        >
+          {selectedDay.events.length > 0 ? (
+            <div className={cx("evcal-list")}>
+              {selectedDay.events.map((event) => {
+                const cancelled = event.status === "cancelled";
+                const meta = [
+                  eventClock(event.starts_at),
+                  cancelled ? (event.cancellation_note || "Cancelled") : eventPlaceWord(event),
+                ].filter(Boolean).join(" · ");
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    className={cx("evcal-item", cancelled && "cancelled")}
+                    onClick={() => props.onPickEvent(event.id)}
+                  >
+                    <span className={cx("evcal-item-t")}>
+                      <b>
+                        <span>{event.title}</span>
+                        {cancelled ? <span className={cx("evtag bad")}>Cancelled</span> : null}
+                      </b>
+                      <small>{meta}</small>
+                    </span>
+                    <ChevronRight size={14} strokeWidth={1.8} aria-hidden="true" className={cx("evcal-item-go")} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className={cx("evcal-empty")}>Nothing scheduled.</p>
+          )}
+          {props.canManage && !selectedDay.isPast ? (
+            <button
+              type="button"
+              className={cx("la evcal-add")}
+              disabled={Boolean(props.formOpen)}
+              onClick={() => props.onNewForDay(selectedDay.dayKey)}
+            >
+              <Plus size={13} aria-hidden="true" />Add an event for {formatCalendarDayShort(selectedDay.dayKey)}
+            </button>
+          ) : null}
+        </PanelPart>
+      ) : summaryText ? (
+        <p className={cx("evcal-summary")}>{summaryText}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function KitEventsList(props: {
   featured: CloudCommunityEvent | null;
   comingUp: CloudCommunityEvent[];
   cancelled?: CloudCommunityEvent[];
   past: CloudCommunityEvent[];
+  // Full un-deduplicated occurrences for the 30-day right-panel calendar
+  // (so every future date of a repeating series appears on its own day).
+  calendarEvents?: CloudCommunityEvent[];
+  loading?: boolean;
+  skeleton?: ReactNode;
   now: number;
   canManage: boolean;
   communityName: string | null;
@@ -71,7 +214,7 @@ export function KitEventsList(props: {
   form: ReactNode | null;
   onCloseForm?: () => void;
   editingId: string | null;
-  onNew: () => void;
+  onNew: (dayKey?: string | null) => void;
   onEdit: (event: CloudCommunityEvent) => void;
   onCancel: (event: CloudCommunityEvent, options?: CloudCommunityEventCancelOptions) => Promise<unknown> | void;
   onRestore?: (event: CloudCommunityEvent) => Promise<unknown> | void;
@@ -83,6 +226,7 @@ export function KitEventsList(props: {
   // Back and a link keep it; picking one is a step back can return from.
   const pickedId = eventIdFromAddressKey(useRouteDetail("event"));
   const setPickedId = (id: string | null) => writeRouteDetail("event", id ? eventAddressKey(id) : null);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [cancelNote, setCancelNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -93,8 +237,12 @@ export function KitEventsList(props: {
   const upcoming = [featured, ...props.comingUp].filter((event): event is CloudCommunityEvent => Boolean(event));
   const cancelledList = props.cancelled ?? [];
   const all = [...upcoming, ...cancelledList, ...props.past];
-  const picked = all.find((event) => event.id === pickedId) ?? null;
-  const isPast = (event: CloudCommunityEvent) => props.past.some((row) => row.id === event.id);
+  const calendarSource = props.calendarEvents ?? all;
+  const picked = all.find((event) => event.id === pickedId)
+    ?? calendarSource.find((event) => event.id === pickedId)
+    ?? null;
+  const isPast = (event: CloudCommunityEvent) =>
+    props.past.some((row) => row.id === event.id) || communityEventPhase(event, props.now) === "past";
   const isCancelled = (event: CloudCommunityEvent) => event.status === "cancelled";
   const isSeries = (event: CloudCommunityEvent) => event.recurrence_frequency !== "none";
   // An event that is gone (past or not in the months shown) is simply
@@ -282,13 +430,31 @@ export function KitEventsList(props: {
     </div>
   ) : null;
 
+  // Default right panel on desktop: a rolling 5-week (next 30 days) calendar.
+  // Clicking any day inspects its events right below the grid without leaving
+  // the calendar; clicking an event opens its full details in this same panel.
+  const calendarPanel = (
+    <EventsCalendarPanel
+      events={calendarSource}
+      now={props.now}
+      loading={props.loading}
+      canManage={props.canManage}
+      formOpen={Boolean(props.form)}
+      selectedDayKey={selectedDayKey}
+      onSelectDay={setSelectedDayKey}
+      onPickEvent={(id) => setPickedId(id)}
+      onNewForDay={(dayKey) => props.onNew(dayKey)}
+    />
+  );
+
   // The right column holds the form while a host is adding or changing an
-  // event, else the event picked, else nothing. Narrower than 1024px there
-  // is no column, so it takes the list's place, with a way back.
+  // event, else the event picked, else the rolling 30-day calendar on desktop.
+  // Narrower than 1024px there is no column, so only a form or picked event
+  // takes the list's place, with a way back.
   const wide = useMinWidth(1024);
   const isPhone = usePhoneLayout();
-  const side = props.form ?? detail;
-  const hasNarrowSide = !wide && Boolean(side);
+  const activeSide = props.form ?? detail;
+  const hasNarrowSide = !wide && Boolean(activeSide);
   const narrowBackRef = useRef<() => void>(() => setPickedId(null));
   narrowBackRef.current = () => {
     if (props.form && props.onCloseForm) {
@@ -301,17 +467,19 @@ export function KitEventsList(props: {
     if (!hasNarrowSide) return;
     return registerMobilePageBack(() => narrowBackRef.current());
   }, [hasNarrowSide]);
-  const rail = side ? (
+  const railContent = activeSide ?? calendarPanel;
+  const railLabel = props.form ? "Event" : detail ? "This event" : "Next 30 days";
+  const rail = (
     <KitApp view="events" host={props.canManage} part="rail" className="kit-page-rail">
-      <Rail index={4} label={props.form ? "Event" : "This event"}>{side}</Rail>
+      <Rail index={4} label={railLabel}>{railContent}</Rail>
     </KitApp>
-  ) : null;
-  if (!wide && side) {
+  );
+  if (!wide && activeSide) {
     return (
       <KitApp view="events" host={props.canManage} part="flow">
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           {props.form || isPhone ? null : <button type="button" className={cx("btn sm txt")} style={{ marginLeft: -10 }} onClick={() => setPickedId(null)}><Icon name="back" />Events</button>}
-          <div className={cx("evlayer")}>{side}</div>
+          <div className={cx("evlayer")}>{activeSide}</div>
         </div>
       </KitApp>
     );
@@ -358,6 +526,15 @@ export function KitEventsList(props: {
     return `${lead} — ${note}`;
   })();
 
+  if (props.loading) {
+    return (
+      <>
+        {props.skeleton ?? null}
+        {wide ? props.renderRail(rail) : null}
+      </>
+    );
+  }
+
   return (
     <>
       <KitApp view="events" host={props.canManage} part="flow">
@@ -382,7 +559,7 @@ export function KitEventsList(props: {
               </p>
             </div>
             {/* One form at a time: a second would replace what is being saved. */}
-            {props.canManage ? <button type="button" className={cx(props.form ? "btn" : "btn go")} disabled={Boolean(props.form)} onClick={props.onNew}><Plus size={14} aria-hidden="true" />Add an event</button> : null}
+            {props.canManage ? <button type="button" className={cx(props.form ? "btn" : "btn go")} disabled={Boolean(props.form)} onClick={() => props.onNew(null)}><Plus size={14} aria-hidden="true" />Add an event</button> : null}
           </div>
 
           {featured && label && featuredBlock ? (

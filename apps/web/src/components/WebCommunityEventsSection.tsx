@@ -190,6 +190,18 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     return upcoming.length ? Math.min(...upcoming) : null;
   }, [state.events]);
   useEffect(() => {
+    if (paused) return;
+    const nowDate = new Date();
+    const nextMidnightMs = new Date(
+      nowDate.getFullYear(),
+      nowDate.getMonth(),
+      nowDate.getDate() + 1,
+    ).getTime();
+    const untilMidnight = Math.max(500, nextMidnightMs - nowDate.getTime() + 500);
+    const timer = window.setTimeout(() => setMinuteNow(Date.now()), untilMidnight);
+    return () => window.clearTimeout(timer);
+  }, [paused, minuteNow]);
+  useEffect(() => {
     if (paused || nextStart === null) return;
     const untilCountdown = nextStart - 60 * 60_000 - Date.now();
     const tick = () => setMinuteNow(Date.now());
@@ -343,14 +355,15 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       ) : null}
 
       <div className="community-events-content" aria-busy={state.isLoadingEvents}>
-        {showInitialEventsLoading ? (
-          <EventListSkeleton />
-        ) : state.eventsError && state.events.length === 0 ? null : (
+        {state.eventsError && state.events.length === 0 ? null : (
           <KitEventsList
             featured={listParts.featured}
             comingUp={listParts.comingUp}
             cancelled={listParts.cancelled}
             past={listParts.past}
+            calendarEvents={state.events}
+            loading={showInitialEventsLoading}
+            skeleton={<EventListSkeleton />}
             now={listNow}
             canManage={capabilities.hasActiveCommunity && capabilities.canManageEvents}
             communityName={capabilities.activeCommunityName}
@@ -359,7 +372,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
             form={eventForm}
             onCloseForm={closeDraft}
             editingId={editingEventId}
-            onNew={() => openNewEvent(null)}
+            onNew={(dayKey) => openNewEvent(dayKey ?? null)}
             onEdit={openEditEvent}
             onCancel={async (event, options) => {
               if (await actions.cancelEvent(event.parent_event_id, currentRange, options)) {
@@ -385,7 +398,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                 event.parent_event_id,
               )
             }
-            renderRail={(rail) => <CommunityPageRail label="This event">{rail}</CommunityPageRail>}
+            renderRail={(rail) => <CommunityPageRail label="Events">{rail}</CommunityPageRail>}
           />
         )}
       </div>
