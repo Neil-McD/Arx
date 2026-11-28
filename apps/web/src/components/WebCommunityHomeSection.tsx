@@ -85,7 +85,7 @@ export type WebCommunityHomeSectionProps = {
   // The dock supplies the conversation and whether it is open.
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
-  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
+  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: (options?: { fromBrief?: boolean }) => void; hasConversation?: boolean } | null;
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
   // Off: no brief and nothing "for you"; a host's noticed rows say what a
   // guide would do, and the first offers to turn it on.
@@ -624,6 +624,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             {founderBrief.nextStep ? (
               <p className={cx("hbrief-next")}><strong>Next:</strong> {founderBrief.nextStep}</p>
             ) : null}
+            <div className={cx("hline")} style={{ marginTop: 14 }} />
             <div className={cx("hbrief-foot")}>
               <em>Morning brief{founderAge ? ` · ${founderAge}` : ""}</em>
               <div className={cx("hbrief-actions")}>
@@ -632,7 +633,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
                     {founderBriefOpen ? "Show less" : "Full brief"}
                   </button>
                 ) : null}
-                <button type="button" onClick={kit.onTalkItOver}>Talk it over</button>
+                <button type="button" onClick={() => kit.onTalkItOver({ fromBrief: true })}>Talk it over</button>
               </div>
             </div>
           </div>

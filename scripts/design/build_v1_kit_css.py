@@ -197,8 +197,29 @@ css += """
 .app.part.on-v-home .eyebrow{margin-top:20px}
 .app.part.on-v-home .dock{position:relative;padding-top:4px;background:var(--surface-raised,var(--panel,var(--bg)))}
 .app.part.on-v-home .dock::before{content:"";position:absolute;left:0;right:0;top:-20px;height:20px;pointer-events:none;background:linear-gradient(180deg,transparent 0%,var(--surface-raised,var(--panel,var(--bg))) 100%)}
-.app.part.on-v-home .link{color:var(--accent,var(--blue-ink));font-weight:500}
+.app.part.on-v-home .link{color:var(--ink2);font-weight:500}
 .app.part.on-v-home .link:hover{color:var(--ink)}
+.app.part.on-v-home.on-t-on .v0{position:relative}
+.app.part.on-v-home.on-t-on .eyebrow,.app.part.on-v-home.on-t-on .hello{display:none}
+.app.part.on-v-home.on-t-on .scroll>.home{padding-bottom:calc(var(--kit-home-dock-height,148px) + 16px)}
+.app.part.on-v-home.on-t-on .talk{margin-top:20px;gap:22px}
+.app.part.on-v-home.on-t-on .talk .mine:not(.re){max-width:min(76%,520px);padding:10px 14px;font-size:14.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.app.part.on-v-home.on-t-on .talk .theirs{gap:12px}
+.app.part.on-v-home.on-t-on .talk .theirs>div{flex:1;min-width:0;font-size:14.5px;line-height:1.6;color:var(--ink1)}
+.app.part.on-v-home.on-t-on .talk .theirs>div p{font-size:14.5px;line-height:1.6;color:var(--ink1);margin:0 0 10px}
+.app.part.on-v-home.on-t-on .talk .theirs>div p:last-of-type{margin-bottom:0}
+.app.part.on-v-home.on-t-on .talk .theirs>div :is(ul,ol){margin:8px 0 10px;padding-left:20px;display:grid;gap:5px}
+.app.part.on-v-home.on-t-on .talk .theirs>div :is(h1,h2,h3,h4){margin:14px 0 6px;font-size:14.5px;font-weight:600;color:var(--ink)}
+.app.part.on-v-home.on-t-on .talk .theirs>div :is(h1,h2,h3,h4):first-child{margin-top:0}
+.app.part.on-v-home.on-t-on .talk-acts{display:flex;align-items:center;gap:6px;margin-top:6px;opacity:0;transition:opacity .15s var(--ease)}
+.app.part.on-v-home.on-t-on .talk .theirs:hover .talk-acts,.app.part.on-v-home.on-t-on .talk .theirs:focus-within .talk-acts,.app.part.on-v-home.on-t-on .talk-acts:has(.is-copied){opacity:1}
+@media (hover:none){.app.part.on-v-home.on-t-on .talk-acts{opacity:.72}}
+.app.part.on-v-home.on-t-on .talk-copy{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;margin-left:-7px;border-radius:6px;font-size:12px;font-weight:500;color:var(--ink3);transition:color .14s var(--ease),background .14s var(--ease)}
+.app.part.on-v-home.on-t-on .talk-copy:hover{color:var(--ink);background:var(--s2)}
+.app.part.on-v-home.on-t-on .talk-copy.is-copied{color:var(--ink1)}
+.app.part.on-v-home.on-t-on .dock{position:absolute;left:0;right:0;bottom:0;z-index:2;padding-top:34px;pointer-events:none;background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--surface-raised,var(--panel,var(--bg))) 70%,transparent) 38%,var(--surface-raised,var(--panel,var(--bg))) 66%,var(--surface-raised,var(--panel,var(--bg))) 100%)}
+.app.part.on-v-home.on-t-on .dock::before{content:none}
+.app.part.on-v-home.on-t-on .dock>*{pointer-events:auto}
 .app .day::before{background:linear-gradient(90deg,transparent 0%,transparent 8%,var(--line2) 100%)}
 .app .day::after{background:linear-gradient(90deg,var(--line2) 0%,transparent 92%,transparent 100%)}
 /* A part that flows inside the app's own scrolling box (a channel's feed):
@@ -818,11 +839,11 @@ css += """
 .app .hbrief .hbrief-next strong{font-weight:600;color:var(--ink)}
 .app .hbrief>span{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:10px;font-size:12.5px;color:var(--ink3)}
 .app .hbrief em{font-style:normal}
-.app .hbrief>span button{color:var(--accent,var(--blue-ink));font-weight:500;cursor:pointer}.app .hbrief>span button:hover{color:var(--ink)}
-.app .hbrief-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink3)}
-.app .hbrief-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
-.app .hbrief-actions button{color:var(--accent,var(--blue-ink));font-weight:500;padding:2px 4px;margin:-2px -4px;border-radius:5px;cursor:pointer;transition:color .15s var(--ease),background .15s var(--ease)}
-.app .hbrief-actions button:hover{color:var(--ink);background:var(--s2)}
+.app .hbrief>span button{color:var(--ink2);font-weight:500;cursor:pointer}.app .hbrief>span button:hover{color:var(--ink)}
+.app .hbrief-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:10px;font-size:12.5px;color:var(--ink3)}
+.app .hbrief-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.app .hbrief-actions button{color:var(--ink2);font-weight:500;padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--s1);cursor:pointer;transition:color .15s var(--ease),background .15s var(--ease),border-color .15s var(--ease)}
+.app .hbrief-actions button:hover{color:var(--ink);border-color:var(--line2);background:var(--s2)}
 .app .hbrief-actions button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .app .hnone{margin:16px 0 0;font-size:15px;color:var(--ink2)}
 .app.on-t-on .hbrief,.app.on-t-on .hnone{display:none}

@@ -350,9 +350,9 @@ export function Theirs(props: { children: ReactNode }) {
   );
 }
 
-export function Dock(props: { children: ReactNode }) {
-  return <div className={cx("dock")}>{props.children}</div>;
-}
+export const Dock = forwardRef<HTMLDivElement, { children: ReactNode }>(function Dock(props, ref) {
+  return <div className={cx("dock")} ref={ref}>{props.children}</div>;
+});
 
 export function Chips(props: { chips: string[]; hostOnly?: boolean; memberOnly?: boolean; onChip?: (chip: string) => void }) {
   return (
