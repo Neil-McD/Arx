@@ -568,6 +568,8 @@
 .app.part.on-v-home .dock::before{content:"";position:absolute;left:0;right:0;top:-20px;height:20px;pointer-events:none;background:linear-gradient(180deg,transparent 0%,var(--surface-raised,var(--panel,var(--bg))) 100%)}
 .app.part.on-v-home .link{color:var(--accent,var(--blue-ink));font-weight:500}
 .app.part.on-v-home .link:hover{color:var(--ink)}
+.app .day::before{background:linear-gradient(90deg,transparent 0%,transparent 8%,var(--line2) 100%)}
+.app .day::after{background:linear-gradient(90deg,var(--line2) 0%,transparent 92%,transparent 100%)}
 /* A part that flows inside the app's own scrolling box (a channel's feed):
    it sits at the bottom of the box, as the newest message should. */
 .app.part.flow-part{height:auto;margin-top:auto;overflow:visible;display:block;flex:none}
