@@ -764,7 +764,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               </CommunityChannelSessionContext.Provider>
             </div>
           ) : null}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="community-dm-kit-head">
             {/* Narrower windows and phones show Inbox as layers: back to the list. */}
             {props.onBackToInbox ? (
               <button
@@ -839,7 +839,6 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             )}
             {optionsMenu}
           </div>
-          <div className={cx("sep")} style={{ marginTop: -8 }} />
           <div ref={messagesRef} className={`${cx("dm")} community-dm-kit-thread`} aria-live="polite" onScroll={(event) => {
             const target = event.currentTarget;
             const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
@@ -904,7 +903,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               })
             )}
           </div>
-          <div ref={composerFloatRef} style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div ref={composerFloatRef} className="community-dm-kit-composer">
             {typingLabel ? <span className={cx("sub")} aria-live="polite">{typingLabel}</span> : null}
             {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
             {isPeerBlocked ? (

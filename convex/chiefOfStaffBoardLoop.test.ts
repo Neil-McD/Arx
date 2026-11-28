@@ -376,7 +376,7 @@ describe("Chief of Staff Home stage-move proposals & Daily Brief Board Pulse", (
     expect(md).toContain("Member Board: 1 member ready to advance (Sam (Getting started → Active)).");
     expect(md).toContain("Recent member wins: Sam — Shipped first landing page.");
     expect(md).toContain("Member Board: 1 member stuck or needing attention: Jules.");
-    expect(brief.nextStep).toContain("Review 1 stage move ready on Home.");
+    expect(brief.nextStep).toContain("Approve 1 stage move ready below.");
     // Privacy wall: private 1:1 messages and private host notes NEVER leak into the brief snapshot or markdown.
     expect(JSON.stringify(briefRead)).not.toContain("SUPER_PRIVATE_SAM_CONFESSION_NEVER_LEAK");
     expect(JSON.stringify(briefRead)).not.toContain("PRIVATE_HOST_NOTE_NEVER_IN_BRIEF");

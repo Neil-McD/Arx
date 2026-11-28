@@ -624,15 +624,17 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             {founderBrief.nextStep ? (
               <p className={cx("hbrief-next")}><strong>Next:</strong> {founderBrief.nextStep}</p>
             ) : null}
-            <span>
+            <div className={cx("hbrief-foot")}>
               <em>Morning brief{founderAge ? ` · ${founderAge}` : ""}</em>
-              {founderBriefCanExpand ? (
-                <button type="button" aria-expanded={founderBriefOpen} onClick={() => setFounderBriefOpen((open) => !open)}>
-                  {founderBriefOpen ? "Show less" : "Full brief"}
-                </button>
-              ) : null}
-              <button type="button" onClick={kit.onTalkItOver}>Talk it over</button>
-            </span>
+              <div className={cx("hbrief-actions")}>
+                {founderBriefCanExpand ? (
+                  <button type="button" aria-expanded={founderBriefOpen} onClick={() => setFounderBriefOpen((open) => !open)}>
+                    {founderBriefOpen ? "Show less" : "Full brief"}
+                  </button>
+                ) : null}
+                <button type="button" onClick={kit.onTalkItOver}>Talk it over</button>
+              </div>
+            </div>
           </div>
         ) : ready && brief ? (
           <div className={cx("hbrief")}>
