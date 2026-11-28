@@ -27,6 +27,7 @@ import { usePointerSortableList } from "./usePointerSortableList";
 import type { PodsDot } from "./podsAttentionDot";
 import { knowledgeAttentionDot } from "./knowledgeAttentionDot.ts";
 import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
+import { buildPolynetOutboundAppUrl } from "./distributionAttribution";
 import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve, recallChannelRows, recallNavRows, rememberChannelRows, rememberNavRows } from "./channelRowsMemory";
 
 type CommunityNavCommunityLike = {
@@ -901,8 +902,9 @@ export const CommunityNav = memo(function CommunityNav({
             ) : null}
             {(appLinks ?? []).map((app, index) => {
               const launchLabel = /^launch\b/i.test(app.name) ? app.name : `Launch ${app.name}`;
+              const href = buildPolynetOutboundAppUrl(app.url, activeCommunity?.slug);
               return (
-                <a className="nav-item nav-item-app" key={`${app.url}:${app.name}:${index}`} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
+                <a className="nav-item nav-item-app" key={`${app.url}:${app.name}:${index}`} href={href} target="_blank" rel="noreferrer" title={launchLabel}>
                   <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
                   <span className="nav-item-label">{launchLabel}</span>
                 </a>
@@ -928,8 +930,9 @@ export const CommunityNav = memo(function CommunityNav({
         <div className="community-nav-footer">
           {(appLinks ?? []).map((app, index) => {
             const launchLabel = /^launch\b/i.test(app.name) ? app.name : `Launch ${app.name}`;
+            const href = buildPolynetOutboundAppUrl(app.url, activeCommunity?.slug);
             return (
-              <a className="nav-item nav-item-app" key={`${app.url}:${app.name}:${index}`} href={app.url} target="_blank" rel="noreferrer" title={launchLabel}>
+              <a className="nav-item nav-item-app" key={`${app.url}:${app.name}:${index}`} href={href} target="_blank" rel="noreferrer" title={launchLabel}>
                 <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
                 <span className="nav-item-label">{launchLabel}</span>
               </a>

@@ -420,4 +420,215 @@ describe("Slice 3: end-to-end Distribution Engineer coupling across joins, appro
     expect(guestPayload.metadata.de_aid).toBeUndefined();
     expect(guestPayload.metadata.de_cid).toBeUndefined();
   });
+
+  it("persists UTM, referral, and referrer attribution across open, approval, and paid joins and surfaces on Member Records without firing DE", async () => {
+    const t = convexTest(schema, modules);
+    const NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
+
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await seedUser(ctx, "owner_utm", "owner-utm@example.com");
+      const openUserId = await seedUser(ctx, "member_utm_open", "open@example.com");
+      const approvalUserId = await seedUser(ctx, "member_utm_app", "approval@example.com");
+      const paidUserId = await seedUser(ctx, "member_utm_paid", "paid@example.com");
+      await ctx.db.insert("userStripeConnectAccounts", {
+        userId: ownerId,
+        stripeAccountId: "acct_utm_paid_123",
+        accountType: "express",
+        status: "ready",
+        detailsSubmitted: true,
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        requirementsCurrentlyDue: [],
+        requirementsEventuallyDue: [],
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      const openCommunityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "utm-open",
+        name: "UTM Open",
+        visibility: "published",
+        entryPolicy: "open",
+        inferenceFundingPolicy: "managed_required",
+        lifecycleStatus: "active",
+        lifecycleGeneration: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      const approvalCommunityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "utm-approval",
+        name: "UTM Approval",
+        visibility: "published",
+        entryPolicy: "approval",
+        inferenceFundingPolicy: "managed_required",
+        lifecycleStatus: "active",
+        lifecycleGeneration: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      const paidCommunityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "utm-paid",
+        name: "UTM Paid",
+        visibility: "published",
+        entryPolicy: "paid_subscription",
+        inferenceFundingPolicy: "managed_required",
+        lifecycleStatus: "active",
+        lifecycleGeneration: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      await ctx.db.insert("communityPricePoints", {
+        communityId: paidCommunityId,
+        billingPeriod: "monthly",
+        name: "Pro",
+        amountBaseUnits: 4900,
+        currency: "usd",
+        currencyDecimals: 2,
+        providerAccountId: "acct_utm_paid_123",
+        isCurrent: true,
+        providerPriceId: "price_utm_pro_1",
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      return {
+        ownerId,
+        openUserId,
+        approvalUserId,
+        paidUserId,
+        openCommunityId,
+        approvalCommunityId,
+        paidCommunityId,
+      };
+    });
+
+    const asOwner = t.withIdentity({ subject: "owner_utm" });
+    const asOpen = t.withIdentity({ subject: "member_utm_open" });
+    const asApproval = t.withIdentity({ subject: "member_utm_app" });
+    const asPaid = t.withIdentity({ subject: "member_utm_paid" });
+
+    // 1. Open join stamps UTM campaign and appears on Member Record without firing DE.
+    await asOpen.mutation(api.communityLanding.joinCommunityFromLanding, {
+      authSubject: "member_utm_open",
+      communitySlug: "utm-open",
+      distributionAttribution: {
+        utmSource: "youtube",
+        utmMedium: "video",
+        utmCampaign: "spring-launch",
+      },
+    });
+    const openMem = await t.run(async (ctx) =>
+      ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.openCommunityId).eq("userId", fixture.openUserId),
+        )
+        .unique(),
+    );
+    expect(openMem?.attributionUtmSource).toBe("youtube");
+    expect(openMem?.attributionUtmCampaign).toBe("spring-launch");
+    const openRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner_utm",
+      communityId: fixture.openCommunityId,
+      membershipId: openMem!._id,
+    });
+    expect(openRecord?.attribution).toMatchObject({
+      source_label: "YouTube · spring-launch",
+      click_id: null,
+    });
+
+    // 2. Approval request preserves referral code until manager approval.
+    await asApproval.mutation(api.communityLanding.joinCommunityFromLanding, {
+      authSubject: "member_utm_app",
+      communitySlug: "utm-approval",
+      distributionAttribution: { referralCode: "alex" },
+    });
+    const reqRow = await t.run(async (ctx) =>
+      ctx.db
+        .query("communityJoinRequests")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.approvalCommunityId).eq("userId", fixture.approvalUserId),
+        )
+        .unique(),
+    );
+    expect(reqRow?.attributionReferralCode).toBe("alex");
+    await asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
+      authSubject: "owner_utm",
+      requestId: reqRow!._id,
+    });
+    const approvalMem = await t.run(async (ctx) =>
+      ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.approvalCommunityId).eq("userId", fixture.approvalUserId),
+        )
+        .unique(),
+    );
+    expect(approvalMem?.attributionReferralCode).toBe("alex");
+    const approvalRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner_utm",
+      communityId: fixture.approvalCommunityId,
+      membershipId: approvalMem!._id,
+    });
+    expect(approvalRecord?.attribution).toMatchObject({
+      source_label: "Referral · alex",
+      click_id: null,
+    });
+
+    // 3. Paid checkout preserves external referrerHost onto checkoutSessions -> membership,
+    // without putting non-DE keys into Stripe metadata.
+    createCheckoutSessionMock.mockClear();
+    const started = await asPaid.action(api.communityLanding.startCommunityLandingCheckout, {
+      authSubject: "member_utm_paid",
+      communitySlug: "utm-paid",
+      billingPeriod: "monthly",
+      distributionAttribution: { referrerHost: "mycoolapp.com" },
+    });
+    const [stripePayload] = createCheckoutSessionMock.mock.calls[0]!;
+    expect(stripePayload.metadata.de_aid).toBeUndefined();
+    expect(stripePayload.metadata.de_cid).toBeUndefined();
+
+    const sessionRow = await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", started.session_id))
+        .unique();
+      await ctx.db.patch(row!._id, {
+        status: "complete",
+        communitySubscriptionStatus: "active",
+        providerSubscriptionId: "sub_utm_paid_1",
+        updatedAt: NOW + 1000,
+      });
+      return await ctx.db.get(row!._id);
+    });
+    expect(sessionRow?.attributionReferrerHost).toBe("mycoolapp.com");
+    await t.run(async (ctx) => {
+      await grantCommunityCheckout({ ctx, checkoutSession: sessionRow, nowMs: NOW + 2000 });
+    });
+    const paidMem = await t.run(async (ctx) =>
+      ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.paidCommunityId).eq("userId", fixture.paidUserId),
+        )
+        .unique(),
+    );
+    expect(paidMem?.attributionReferrerHost).toBe("mycoolapp.com");
+    const paidRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner_utm",
+      communityId: fixture.paidCommunityId,
+      membershipId: paidMem!._id,
+    });
+    expect(paidRecord?.attribution).toMatchObject({
+      source_label: "mycoolapp.com",
+      click_id: null,
+    });
+
+    // Zero DE deliveries were enqueued for non-DE sources.
+    const deliveries = await t.run(async (ctx) =>
+      ctx.db.query("distributionAttributionDeliveries").collect(),
+    );
+    expect(deliveries).toHaveLength(0);
+  });
 });

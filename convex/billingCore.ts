@@ -11,6 +11,10 @@ import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import {
+  extractCommunityAcquisitionAttributionFromRow,
+  type CommunityAcquisitionAttribution,
+} from "./distributionAttributionCore";
 import { memberAccessChanged } from "./communityPlanPods";
 import {
   communityIsActive,
@@ -182,7 +186,7 @@ export async function ensureCommunityMembership(args: {
   userId: any;
   pricePointId?: any;
   accessSourceOverride?: "free_grant" | "manual_grant" | "paid_subscription";
-  distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
+  distributionAttribution?: CommunityAcquisitionAttribution | null;
   nowMs: number;
 }): Promise<{ membership: CommunityMembershipLike; accessGranted: boolean }> {
   const defaultAccessSource = "paid_subscription";
@@ -385,13 +389,7 @@ export async function grantCommunityCheckout(args: {
     communityId: session.communityId,
     userId,
   });
-  const checkoutAttribution =
-    session.attributionAnonymousId || session.attributionClickId
-      ? {
-          ...(session.attributionAnonymousId ? { anonymousId: session.attributionAnonymousId } : {}),
-          ...(session.attributionClickId ? { clickId: session.attributionClickId } : {}),
-        }
-      : undefined;
+  const checkoutAttribution = extractCommunityAcquisitionAttributionFromRow(session) ?? undefined;
   const { membership, accessGranted } = await ensureCommunityMembership({
     ctx: args.ctx,
     community,

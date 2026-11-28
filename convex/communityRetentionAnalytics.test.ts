@@ -589,4 +589,78 @@ describe("Slice 4A: getCommunityRetentionAnalytics Convex query", () => {
     expect(analytics.saved_revenue.saved_members_30d).toBe(1);
     expect(analytics.saved_revenue.saved_mrr_30d_base_units).toBe(4900);
   });
+
+  it("breaks down By acquisition source across Distribution Engineer, UTM campaigns, referrals, external sites, and direct", async () => {
+    const LIVE_NOW = Date.now();
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await ctx.db.insert("users", {
+        authSubject: "owner_sources",
+        email: "owner-sources@example.com",
+        normalizedEmail: "owner-sources@example.com",
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+      const communityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: "sources-club",
+        name: "Sources Club",
+        visibility: "published",
+        entryPolicy: "open",
+        inferenceFundingPolicy: "managed_required",
+        createdAt: LIVE_NOW - 60 * DAY_MS,
+        updatedAt: LIVE_NOW - 60 * DAY_MS,
+      });
+
+      const seeds: Array<{
+        sub: string;
+        active: boolean;
+        patch: Record<string, unknown>;
+      }> = [
+        { sub: "m_yt_1", active: true, patch: { attributionUtmSource: "youtube", attributionUtmCampaign: "ep-1" } },
+        { sub: "m_yt_2", active: true, patch: { attributionReferrerHost: "youtube.com" } },
+        { sub: "m_de_1", active: true, patch: { attributionClickId: "883c5850-e04d-4c60-9869-024102985541" } },
+        { sub: "m_ref_1", active: false, patch: { attributionReferralCode: "alex" } },
+        { sub: "m_site_1", active: true, patch: { attributionReferrerHost: "mycoolapp.com" } },
+        { sub: "m_direct_1", active: true, patch: {} },
+      ];
+
+      for (const seed of seeds) {
+        const userId = await ctx.db.insert("users", {
+          authSubject: seed.sub,
+          email: `${seed.sub}@example.com`,
+          normalizedEmail: `${seed.sub}@example.com`,
+          createdAt: LIVE_NOW - 10 * DAY_MS,
+          updatedAt: LIVE_NOW - 10 * DAY_MS,
+        });
+        await ctx.db.insert("communityMemberships", {
+          communityId,
+          userId,
+          role: "member",
+          accessSource: "free_grant",
+          state: seed.active ? "active" : "left",
+          activatedAt: LIVE_NOW - 10 * DAY_MS,
+          createdAt: LIVE_NOW - 10 * DAY_MS,
+          updatedAt: LIVE_NOW - 5 * DAY_MS,
+          ...seed.patch,
+        } as any);
+      }
+      return { communityId };
+    });
+
+    const apiRefs = api as any;
+    const asOwner = t.withIdentity({ subject: "owner_sources" });
+    const analytics = await asOwner.query(
+      apiRefs.communityRetentionAnalytics.getCommunityRetentionAnalytics,
+      { authSubject: "owner_sources", communityId: fixture.communityId, range: "all" },
+    );
+
+    expect(analytics.by_source.map((r: any) => ({ source: r.source, label: r.label, members: r.members }))).toEqual([
+      { source: "youtube", label: "YouTube", members: 2 },
+      { source: "distribution_engineer", label: "Distribution Engineer", members: 1 },
+      { source: "site:mycoolapp.com", label: "mycoolapp.com", members: 1 },
+      { source: "referral", label: "Referral", members: 1 },
+      { source: "direct", label: "Direct & organic", members: 1 },
+    ]);
+  });
 });

@@ -8,7 +8,7 @@
 import { internal } from "./_generated/api";
 import { buildLandingCheckoutReturnQuery } from "./communityLanding";
 import { startCommunityJoinCheckoutCore } from "./communityCommerce";
-import { normalizeDistributionAttributionTracking } from "./distributionAttributionCore";
+import { normalizeCommunityAcquisitionAttribution } from "./distributionAttributionCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 export const COMMUNITY_LANDING_GUEST_CHECKOUT_PATH = "/runtime/landing/guest-checkout";
@@ -42,7 +42,7 @@ export function registerCommunityLandingRoutes(args: { http: any; httpAction: an
       const period = body?.billingPeriod;
       const plan = typeof body?.plan === "string" && body.plan ? body.plan : null;
       const requestedAppId = typeof body?.appId === "string" && /^app_[a-f0-9]{20}$/.test(body.appId.trim()) ? body.appId.trim() : null;
-      const distributionAttribution = normalizeDistributionAttributionTracking(body?.distributionAttribution);
+      const distributionAttribution = normalizeCommunityAcquisitionAttribution(body?.distributionAttribution);
       const visitorHash = typeof body?.visitorHash === "string" ? body.visitorHash : "";
       if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug) || (period !== "monthly" && period !== "annual")) return reply(400, { ok: false, code: "invalid_request" });
       if (plan !== null && (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(plan) || period !== "monthly")) return reply(400, { ok: false, code: "invalid_request" });

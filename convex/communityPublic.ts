@@ -26,7 +26,10 @@ import {
   ensurePendingCommunityJoinRequest,
   getCurrentCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
-import { normalizeDistributionAttributionTracking } from "./distributionAttributionCore";
+import {
+  normalizeCommunityAcquisitionAttribution,
+  type CommunityAcquisitionAttribution,
+} from "./distributionAttributionCore";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   communityMembershipRequiresManagerReapproval,
@@ -384,13 +387,13 @@ export async function joinPublicCommunityInternal(args: {
   community: CommunityLike;
   userId: any;
   nowMs: number;
-  distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
+  distributionAttribution?: CommunityAcquisitionAttribution | null;
 }): Promise<{
   outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
   community_id: string;
   reapply_at?: string | null;
 }> {
-  const attribution = normalizeDistributionAttributionTracking(args.distributionAttribution);
+  const attribution = normalizeCommunityAcquisitionAttribution(args.distributionAttribution);
   await acceptCommunityJoin(args.ctx, args.userId, args.nowMs);
   await requireAccountSetupCompleteForUser(args.ctx, args.userId);
 

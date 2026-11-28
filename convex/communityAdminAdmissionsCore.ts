@@ -14,6 +14,7 @@ import {
 } from "./communityJoinRequestCore";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import { extractCommunityAcquisitionAttributionFromRow } from "./distributionAttributionCore";
 
 export function resolveCommunityJoinRequestDecision(
   request: CommunityJoinRequestLike,
@@ -57,17 +58,7 @@ export async function approveCommunityJoinRequestForFreeAccess(args: {
     existingMembership?.accessSource === "manual_grant"
       ? existingMembership.accessSource
       : "free_grant";
-  const requestAttribution =
-    args.request.attributionAnonymousId || args.request.attributionClickId
-      ? {
-          ...(args.request.attributionAnonymousId
-            ? { anonymousId: args.request.attributionAnonymousId }
-            : {}),
-          ...(args.request.attributionClickId
-            ? { clickId: args.request.attributionClickId }
-            : {}),
-        }
-      : undefined;
+  const requestAttribution = extractCommunityAcquisitionAttributionFromRow(args.request);
   const activation = await activateCommunityMembershipCore({
     ctx: args.ctx,
     communityId: args.request.communityId,

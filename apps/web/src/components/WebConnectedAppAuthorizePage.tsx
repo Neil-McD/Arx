@@ -14,6 +14,7 @@ import {
   sanitizeOAuthAuthorizeReturnPath,
   stripShellVariantFromPathname,
 } from "../../../../shared/webAppRouteState";
+import { bindGlobalAttributionToCommunity } from "../../../../shared/distributionAttribution";
 import "./WebCommunityLandingPage.css";
 
 export function isConnectedAppAuthorizePathname(pathname: string): boolean {
@@ -133,7 +134,10 @@ export function WebConnectedAppAuthorizePage() {
       .then((next) => {
         if (cancelled) return;
         setContext(next);
-        if (next.ok) document.title = `Sign in to ${next.app.name} · Polynet`;
+        if (next.ok) {
+          document.title = `Sign in to ${next.app.name} · Polynet`;
+          bindGlobalAttributionToCommunity(next.community.slug);
+        }
       })
       .catch(() => {
         if (cancelled) return;

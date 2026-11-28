@@ -82,6 +82,12 @@ export type CommunityMembershipLike = {
   revokedReason?: string;
   attributionAnonymousId?: string;
   attributionClickId?: string;
+  attributionUtmSource?: string;
+  attributionUtmMedium?: string;
+  attributionUtmCampaign?: string;
+  attributionUtmContent?: string;
+  attributionReferrerHost?: string;
+  attributionReferralCode?: string;
   attributedAt?: number;
   createdAt: number;
   updatedAt: number;

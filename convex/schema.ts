@@ -591,9 +591,15 @@ export default defineSchema({
     // Who started a checkout before signing in, as a keyed hash of their
     // address (from the edge): the per-visitor limit counts these.
     buyerVisitorHash: v.optional(v.string()),
-    // Distribution Engineer origin captured when starting a community checkout.
+    // Acquisition & Distribution Engineer origin captured when starting a community checkout.
     attributionAnonymousId: v.optional(v.string()),
     attributionClickId: v.optional(v.string()),
+    attributionUtmSource: v.optional(v.string()),
+    attributionUtmMedium: v.optional(v.string()),
+    attributionUtmCampaign: v.optional(v.string()),
+    attributionUtmContent: v.optional(v.string()),
+    attributionReferrerHost: v.optional(v.string()),
+    attributionReferralCode: v.optional(v.string()),
     // community_join held before it was granted (a payment made before signing
     // in has no subscription row yet): never grants while held. A refund is
     // final; only a dispute's hold lifts (when the dispute is won).
@@ -1131,9 +1137,15 @@ export default defineSchema({
     // History only: when and why a membership last ended. Never decides access.
     revokedAt: v.optional(v.number()),
     revokedReason: v.optional(v.string()),
-    // First-touch Distribution Engineer origin stamped for this community membership.
+    // First-touch acquisition & Distribution Engineer origin stamped for this community membership.
     attributionAnonymousId: v.optional(v.string()),
     attributionClickId: v.optional(v.string()),
+    attributionUtmSource: v.optional(v.string()),
+    attributionUtmMedium: v.optional(v.string()),
+    attributionUtmCampaign: v.optional(v.string()),
+    attributionUtmContent: v.optional(v.string()),
+    attributionReferrerHost: v.optional(v.string()),
+    attributionReferralCode: v.optional(v.string()),
     attributedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1257,6 +1269,12 @@ export default defineSchema({
     reapplyAt: v.optional(v.number()),
     attributionAnonymousId: v.optional(v.string()),
     attributionClickId: v.optional(v.string()),
+    attributionUtmSource: v.optional(v.string()),
+    attributionUtmMedium: v.optional(v.string()),
+    attributionUtmCampaign: v.optional(v.string()),
+    attributionUtmContent: v.optional(v.string()),
+    attributionReferrerHost: v.optional(v.string()),
+    attributionReferralCode: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
