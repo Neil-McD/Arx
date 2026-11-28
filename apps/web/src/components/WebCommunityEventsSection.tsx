@@ -190,6 +190,18 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     return upcoming.length ? Math.min(...upcoming) : null;
   }, [state.events]);
   useEffect(() => {
+    if (paused) return;
+    const nowDate = new Date();
+    const nextMidnightMs = new Date(
+      nowDate.getFullYear(),
+      nowDate.getMonth(),
+      nowDate.getDate() + 1,
+    ).getTime();
+    const untilMidnight = Math.max(500, nextMidnightMs - nowDate.getTime() + 500);
+    const timer = window.setTimeout(() => setMinuteNow(Date.now()), untilMidnight);
+    return () => window.clearTimeout(timer);
+  }, [paused, minuteNow]);
+  useEffect(() => {
     if (paused || nextStart === null) return;
     const untilCountdown = nextStart - 60 * 60_000 - Date.now();
     const tick = () => setMinuteNow(Date.now());

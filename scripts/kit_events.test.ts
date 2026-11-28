@@ -170,6 +170,18 @@ test("buildRollingEventsCalendar builds a 5-week grid across a month boundary wi
   expect(formatCalendarDayHeading("2026-11-27", now)).toMatch(/^Today · /);
   expect(formatCalendarDayHeading("2026-11-28", now)).toMatch(/^Tomorrow · /);
   expect(formatCalendarDayHeading("2026-12-04", now)).toBe("Fri, Dec 4");
+
+  // On Saturday, a 5-week grid starting on the preceding Sunday only covers 29
+  // upcoming dates, so the calendar expands to 6 weeks to include day #30.
+  const satNow = new Date(2026, 10, 28, 12, 0, 0).getTime(); // Sat, Nov 28, 2026
+  const satCal = buildRollingEventsCalendar([
+    makeOcc("ev:dec27", 11, 27, 10, "scheduled"), // 30th day (today + 29)
+  ], satNow);
+  expect(satCal.days).toHaveLength(42);
+  expect(satCal.upcomingCount30d).toBe(1);
+  const dec27 = satCal.days.find((d) => d.dayKey === "2026-12-27");
+  expect(dec27?.inNext30Days).toBe(true);
+  expect(dec27?.liveCount).toBe(1);
 });
 
 test("EventsCalendarPanel renders the rolling 30-day grid, selected-day events, and host add-event shortcut", () => {

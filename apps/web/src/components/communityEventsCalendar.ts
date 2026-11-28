@@ -33,8 +33,7 @@ export type RollingEventsCalendar<T extends CalendarEventLike> = {
 };
 
 const DAY_MS = 86_400_000;
-const ROLLING_WEEKS = 5;
-const ROLLING_DAYS = ROLLING_WEEKS * 7;
+const NEXT_DAYS_WINDOW = 30;
 
 export function localEventDayKey(date: Date): string {
   const year = date.getFullYear();
@@ -71,10 +70,14 @@ export function buildRollingEventsCalendar<T extends CalendarEventLike>(
   const today = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
   const todayMs = today.getTime();
   const todayKey = localEventDayKey(today);
-  const next30End = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
+  const next30End = new Date(today.getFullYear(), today.getMonth(), today.getDate() + NEXT_DAYS_WINDOW);
   const next30EndMs = next30End.getTime();
 
-  const gridStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+  const leadingDays = today.getDay();
+  const gridStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - leadingDays);
+  // Cover all 30 upcoming dates (today + next 29 days) in whole Sun–Sat rows:
+  // 5 weeks Sunday–Friday, expanding to a 6th week on Saturday.
+  const totalGridDays = Math.ceil((leadingDays + NEXT_DAYS_WINDOW) / 7) * 7;
 
   const byDay = new Map<string, T[]>();
   const seenIds = new Set<string>();
@@ -105,7 +108,7 @@ export function buildRollingEventsCalendar<T extends CalendarEventLike>(
   }
 
   const days: RollingCalendarDay<T>[] = [];
-  for (let index = 0; index < ROLLING_DAYS; index += 1) {
+  for (let index = 0; index < totalGridDays; index += 1) {
     const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
     const dayKey = localEventDayKey(date);
     const dayMs = date.getTime();
