@@ -193,10 +193,10 @@ css += """
 .app.part.rail-part{height:auto;min-height:100%;overflow:visible}
 .app.part>.rail{width:auto;flex:1;border-left:0}
 .app.part .scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.app.part .scroll>.home{padding-bottom:52px}
+.app.part .scroll>.home{padding-bottom:56px}
 .app.part.on-v-home .eyebrow{margin-top:20px}
 .app.part.on-v-home .dock{position:relative;padding-top:4px;background:var(--surface-raised,var(--panel,var(--bg)))}
-.app.part.on-v-home .dock::before{content:"";position:absolute;left:0;right:0;top:-40px;height:40px;pointer-events:none;background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--surface-raised,var(--panel,var(--bg))) 72%,transparent) 58%,var(--surface-raised,var(--panel,var(--bg))) 100%)}
+.app.part.on-v-home .dock::before{content:"";position:absolute;left:0;right:0;top:-20px;height:20px;pointer-events:none;background:linear-gradient(180deg,transparent 0%,var(--surface-raised,var(--panel,var(--bg))) 100%)}
 .app.part.on-v-home .link{color:var(--accent,var(--blue-ink));font-weight:500}
 .app.part.on-v-home .link:hover{color:var(--ink)}
 /* A part that flows inside the app's own scrolling box (a channel's feed):
@@ -807,12 +807,12 @@ css += """
 .app .hbrief{margin-top:18px;max-width:640px}
 .app .hbrief.hbrief-founder{max-width:none;width:100%}
 .app .hbrief p{margin:0;font-size:15.5px;line-height:1.58;color:var(--ink)}
-.app .hbrief-founder .hbrief-head{font-size:15.5px;font-weight:600;letter-spacing:-.012em;line-height:1.4}
-.app .hbrief-list,.app .hbrief-sec ul{margin:10px 0 0;padding-left:18px;display:grid;gap:6px;font-size:14px;line-height:1.5;color:var(--ink2)}
+.app .hbrief-founder .hbrief-head{font-size:15.5px;font-weight:600;letter-spacing:-.012em;line-height:1.4;color:var(--ink)}
+.app .hbrief-list,.app .hbrief-sec ul{margin:10px 0 0;padding-left:18px;display:grid;gap:6px;font-size:14.5px;line-height:1.55;color:var(--ink1)}
 .app .hbrief-sections{margin-top:12px;display:grid;gap:12px}
 .app .hbrief-sec h4{margin:0;font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:.01em}
 .app .hbrief-sec ul{margin-top:4px}
-.app .hbrief .hbrief-next{margin-top:12px;font-size:14px;line-height:1.5;color:var(--ink2)}
+.app .hbrief .hbrief-next{margin-top:12px;font-size:14.5px;line-height:1.55;color:var(--ink1)}
 .app .hbrief .hbrief-next strong{font-weight:600;color:var(--ink)}
 .app .hbrief>span{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:10px;font-size:12.5px;color:var(--ink3)}
 .app .hbrief em{font-style:normal}
