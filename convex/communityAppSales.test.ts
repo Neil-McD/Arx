@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { requireCommunityChatAccess } from "./communityCore";
@@ -197,5 +197,236 @@ test("someone who left comes back on their app purchase by joining, without payi
       expect(joined.outcome).toBe("paid_plan_required");
       expect(await canEnter(t, ids.communityId, userId)).toBe(false);
     }
+  }
+});
+
+test("external app sales carry attribution & DE lead handoff (including pre-signup) and report outside-app revenue without inflating verified saves", async () => {
+  vi.stubEnv("ARX_DB_KEY", "test-db-encryption-key-for-slice-2-sales");
+  try {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const AID = "6df50193-e11a-49cf-91e7-18e09ede226f";
+  const CID = "883c5850-e04d-4c60-9869-024102985541";
+  const DE_ACCOUNT = "2d6f6736-3df3-49b7-b84c-c82db2d5f412";
+  const asOwner = t.withIdentity({ subject: "owner-subject" });
+
+  // Connect Distribution Engineer workspace for this community.
+  await asOwner.mutation(api.distributionAttribution.saveCommunityDistributionConnection, {
+    communityId: ids.communityId,
+    accountId: DE_ACCOUNT,
+    webhookKey: "whk_secret_sales_test_key_123456",
+  });
+
+  // 1. Existing Polynet user buys on the founder's outside Stripe with DE tags + revenue.
+  const existingBuyer = await newUser(t, "ext_buyer");
+  const res1 = await report(t, ids.app.secret, {
+    email: "ext_buyer@example.com",
+    active: true,
+    tier: "setter",
+    external_ref: "sub_ext_1",
+    attribution: {
+      de_aid: AID,
+      de_cid: CID,
+      utm_source: "youtube",
+      utm_campaign: "demo-video",
+    },
+    revenue: {
+      amount_base_units: 9900,
+      currency: "USD",
+      billing_interval: "monthly",
+    },
+  });
+  expect(res1.status).toBe(200);
+  expect(await res1.json()).toEqual({ outcome: "in" });
+
+  const mem1 = await membership(t, existingBuyer);
+  expect(mem1).toMatchObject({
+    state: "active",
+    accessSource: "app_grant",
+    attributionAnonymousId: AID,
+    attributionClickId: CID,
+    attributionUtmSource: "youtube",
+    attributionUtmCampaign: "demo-video",
+  });
+
+  // DE lead delivery was enqueued automatically for the outside-Stripe buyer!
+  const deliveries1 = await t.run((ctx) => ctx.db.query("distributionAttributionDeliveries").collect());
+  expect(deliveries1.some((d: any) => String(d.userId) === String(existingBuyer) && d.clickId === CID)).toBe(true);
+
+  // Member Record shows source AND outside-app revenue labeled includes_external_app_sales.
+  const record1 = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+    authSubject: "owner-subject",
+    communityId: ids.communityId,
+    membershipId: mem1._id,
+  });
+  expect(record1?.attribution).toMatchObject({
+    source_label: "Distribution Engineer · demo-video",
+    click_id: CID,
+  });
+  expect(record1?.revenue).toMatchObject({
+    active_mrr_base_units: 9900,
+    realized_ltv_base_units: 9900,
+    currency: "USD",
+    includes_external_app_sales: true,
+  });
+
+  // First-touch honesty: a later external sale report with different UTMs never overwrites original source.
+  await report(t, ids.app.secret, {
+    email: "ext_buyer@example.com",
+    active: true,
+    tier: "cris",
+    attribution: { utm_source: "newsletter", utm_campaign: "later-blast" },
+    revenue: { amount_base_units: 19900, currency: "USD", billing_interval: "monthly" },
+  });
+  const mem1After = await membership(t, existingBuyer);
+  expect(mem1After.attributionUtmSource).toBe("youtube");
+  expect(mem1After.attributionUtmCampaign).toBe("demo-video");
+
+  // 2. Pre-signup buyer: attribution & revenue wait on the grant and attach when verified email signs in!
+  const res2 = await report(t, ids.app.secret, {
+    email: "pre_signup@example.com",
+    active: true,
+    tier: "setter",
+    attribution: { utm_source: "newsletter", utm_campaign: "issue-12" },
+    revenue: { amount_base_units: 120000, currency: "USD", billing_interval: "annual" },
+  });
+  expect(await res2.json()).toEqual({ outcome: "waiting_for_account" });
+  const preUser = await newUser(t, "pre_signup", true);
+  await t.run((ctx) => attachPaidCheckoutsForVerifiedEmail(ctx, preUser, "pre_signup@example.com", NOW));
+  const mem2 = await membership(t, preUser);
+  expect(mem2).toMatchObject({
+    state: "active",
+    accessSource: "app_grant",
+    attributionUtmSource: "newsletter",
+    attributionUtmCampaign: "issue-12",
+  });
+
+  // 3. Analytics includes outside-app LTV by source, while Verified Saved Revenue stays strictly 0!
+  await t.run(async (ctx) => {
+    // Even if Chief of Staff sent an at-risk check-in to ext_buyer, outside-app revenue must NOT count as a Stripe verified save.
+    await ctx.db.insert("communityMemberCoachDrafts", {
+      communityId: ids.communityId,
+      memberUserId: existingBuyer,
+      reason: "quiet_member",
+      status: "sent",
+      signalSummary: "Quiet",
+      sentText: "Checking in!",
+      dedupeKey: "ext-buyer-checkin-1",
+      sentAt: NOW - 5 * 24 * 60 * 60_000,
+      createdAt: NOW - 5 * 24 * 60 * 60_000,
+      updatedAt: NOW - 5 * 24 * 60 * 60_000,
+    });
+  });
+  const analytics = await asOwner.query(api.communityRetentionAnalytics.getCommunityRetentionAnalytics, {
+    authSubject: "owner-subject",
+    communityId: ids.communityId,
+    range: "all",
+  });
+  const deRow = analytics.by_source.find((row: any) => row.source === "distribution_engineer");
+  const nlRow = analytics.by_source.find((row: any) => row.source === "newsletter");
+  expect(deRow).toMatchObject({ members: 1, paid_members: 1, avg_realized_ltv_base_units: 19900 });
+  expect(nlRow).toMatchObject({ members: 1, paid_members: 1, avg_realized_ltv_base_units: 120000 });
+  expect(analytics.saved_revenue.saved_members_30d).toBe(0);
+  expect(analytics.saved_revenue.saved_mrr_30d_base_units).toBe(0);
+
+  // 4. Malformed & non-primitive optional attribution/revenue fields are safely ignored and NEVER break granting access.
+  const safeUser = await newUser(t, "safe_buyer");
+  const resBadOptional = await report(t, ids.app.secret, {
+    email: "safe_buyer@example.com",
+    active: true,
+    tier: "setter",
+    attribution: { de_aid: { toString: null }, referrer_host: "javascript:alert(1)" },
+    revenue: {
+      amount_base_units: { toString: null },
+      currency: "USD",
+      currency_decimals: { valueOf: null },
+      billing_interval: { toString: null },
+    },
+  });
+  expect(resBadOptional.status).toBe(200);
+  expect(await resBadOptional.json()).toEqual({ outcome: "in" });
+  expect(await canEnter(t, ids.communityId, safeUser)).toBe(true);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test("external app revenue preserves historical plan prices across upgrades and excludes canceled gaps on resubscribe", async () => {
+  const jan1 = Date.UTC(2026, 0, 1, 12, 0, 0);
+  const jan20 = Date.UTC(2026, 0, 20, 12, 0, 0);
+  const apr1 = Date.UTC(2026, 3, 1, 12, 0, 0);
+  const jun1 = Date.UTC(2026, 5, 1, 12, 0, 0);
+  const dateNowSpy = vi.spyOn(Date, "now");
+  try {
+    const t = convexTest(schema, modules);
+    dateNowSpy.mockReturnValue(jan1);
+    const ids = await setup(t);
+    const asOwner = t.withIdentity({ subject: "owner-subject" });
+
+    // A: $10/mo in Jan, Feb, Mar -> upgrades to $20/mo on Apr 1 -> realized LTV must be $50 (not $80).
+    const upgrader = await newUser(t, "upgrader");
+    await report(t, ids.app.secret, {
+      email: "upgrader@example.com",
+      active: true,
+      tier: "setter",
+      revenue: { amount_base_units: 1000, currency: "USD", billing_interval: "monthly" },
+    });
+    dateNowSpy.mockReturnValue(apr1);
+    await report(t, ids.app.secret, {
+      email: "upgrader@example.com",
+      active: true,
+      tier: "cris",
+      revenue: { amount_base_units: 2000, currency: "USD", billing_interval: "monthly" },
+    });
+    const upMem = await membership(t, upgrader);
+    const upRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner-subject",
+      communityId: ids.communityId,
+      membershipId: upMem._id,
+    });
+    expect(upRecord?.revenue).toMatchObject({
+      active_mrr_base_units: 2000,
+      realized_ltv_base_units: 5000,
+      billing_cycles_paid: 4,
+      currency: "USD",
+      includes_external_app_sales: true,
+    });
+
+    // B: $10/mo on Jan 1 -> cancels Jan 20 -> resubscribes Jun 1 -> realized LTV must be $20 (2 cycles, not $60).
+    dateNowSpy.mockReturnValue(jan1);
+    const returner = await newUser(t, "returner");
+    await report(t, ids.app.secret, {
+      email: "returner@example.com",
+      active: true,
+      tier: "setter",
+      revenue: { amount_base_units: 1000, currency: "USD", billing_interval: "monthly" },
+    });
+    dateNowSpy.mockReturnValue(jan20);
+    await report(t, ids.app.secret, {
+      email: "returner@example.com",
+      active: false,
+    });
+    dateNowSpy.mockReturnValue(jun1);
+    await report(t, ids.app.secret, {
+      email: "returner@example.com",
+      active: true,
+      tier: "setter",
+      revenue: { amount_base_units: 1000, currency: "USD", billing_interval: "monthly" },
+    });
+    const retMem = await membership(t, returner);
+    const retRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner-subject",
+      communityId: ids.communityId,
+      membershipId: retMem._id,
+    });
+    expect(retRecord?.revenue).toMatchObject({
+      active_mrr_base_units: 1000,
+      realized_ltv_base_units: 2000,
+      billing_cycles_paid: 2,
+      currency: "USD",
+      includes_external_app_sales: true,
+    });
+  } finally {
+    dateNowSpy.mockRestore();
   }
 });

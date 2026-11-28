@@ -612,7 +612,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `operatorAccess`, `operatorEntitlementsCore`,
   `operatorGrantUsageCore`,
   `communityAnalyticsRollups` (daily community analytics rollups, live billing summaries, and 15-minute paginated Discover activity stats refresh for published communities with a 25-minute read-cache TTL in `communityPublic.listPublicDiscoverCommunities`),
-  `communityRetentionAnalytics` (bounded manager-only Retention & LTV Analytics: activation rate, median TTFV, milestone-to-retention lift, acquisition source LTV comparison, and Chief of Staff verified saved MRR),
+  `communityRetentionAnalytics` (bounded manager-only Retention & LTV Analytics: activation rate, median TTFV, milestone-to-retention lift, multi-source acquisition LTV comparison including optional external-app sales revenue, and Chief of Staff verified saved MRR backed strictly by Stripe renewals),
   `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (per-community
   Distribution Engineer workspace connections encrypted at rest in Settings → Your app,
   community-scoped join/approval/checkout/OAuth acquisition attribution stamping across

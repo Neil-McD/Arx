@@ -26,6 +26,15 @@ import { markCommunityBillingSummaryStale } from "./communityAnalyticsRollups";
 import { memberAccessChanged } from "./communityPlanPods";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { adjustCommunityActiveMemberCountForMembershipTransition } from "./communityCore";
+import { enqueueCommunityMemberIdentify } from "./distributionAttribution";
+import {
+  acquisitionAttributionRowPatch,
+  communityAcquisitionAttributionValidator,
+  extractCommunityAcquisitionAttributionFromRow,
+  hasAnyAttributionOnRow,
+  normalizeCommunityAcquisitionAttribution,
+  normalizeDistributionAttributionTracking,
+} from "./distributionAttributionCore";
 
 const EXTERNAL_REF_MAX = 120;
 
@@ -64,8 +73,37 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId, userId });
   const active = await activeAppGrants(ctx, communityId, userId);
   if (active.length) {
+    const attributedGrant = [...active]
+      .sort((a: any, b: any) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
+      .find((row: any) => hasAnyAttributionOnRow(row));
+    const grantAttribution = attributedGrant
+      ? extractCommunityAcquisitionAttributionFromRow(attributedGrant)
+      : null;
+
     if (membership && communityMembershipRowIsActive(membership)) {
-      // Already in: their tier may have changed.
+      // Already in: stamp first-touch attribution if none was recorded yet (never overwrite).
+      if (!hasAnyAttributionOnRow(membership) && grantAttribution) {
+        await ctx.db.patch(membership._id, {
+          ...acquisitionAttributionRowPatch(grantAttribution),
+          attributedAt: nowMs,
+          updatedAt: nowMs,
+        });
+        const deTracking = normalizeDistributionAttributionTracking(grantAttribution);
+        if (membership.role === "member" && deTracking) {
+          try {
+            await enqueueCommunityMemberIdentify({
+              ctx,
+              communityId,
+              userId,
+              tracking: deTracking,
+              nowMs,
+            });
+          } catch {
+            // Best-effort: never block external sale sync.
+          }
+        }
+      }
+      // Their tier or outside-app revenue may have changed.
       await markCommunityBillingSummaryStale(ctx, communityId, nowMs);
       await memberAccessChanged(ctx, communityId, userId);
       return "in";
@@ -73,7 +111,15 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
     const state = membership ? communityMembershipState(membership) : null;
     // Left or removed by choice, on hold over a payment, or blocked: not put back.
     if ((state && state !== "lapsed") || await blocked(ctx, communityId, userId) || String(community.ownerId) === String(userId)) return "kept_out";
-    await activateCommunityMembershipCore({ ctx, communityId, userId, accessSource: "app_grant" as any, activationReason: "connected_app_sale", nowMs });
+    await activateCommunityMembershipCore({
+      ctx,
+      communityId,
+      userId,
+      accessSource: "app_grant" as any,
+      activationReason: "connected_app_sale",
+      ...(grantAttribution ? { distributionAttribution: grantAttribution } : {}),
+      nowMs,
+    });
     await markCommunityBillingSummaryStale(ctx, communityId, nowMs);
     return "in";
   }
@@ -109,6 +155,15 @@ export const recordAppSaleInternal = internalMutation({
     active: v.boolean(),
     tierKey: v.optional(v.string()),
     externalRef: v.optional(v.string()),
+    attribution: v.optional(communityAcquisitionAttributionValidator),
+    revenue: v.optional(
+      v.object({
+        amountBaseUnits: v.number(),
+        currency: v.string(),
+        currencyDecimals: v.optional(v.number()),
+        billingInterval: v.union(v.literal("monthly"), v.literal("annual"), v.literal("one_time")),
+      }),
+    ),
   },
   handler: async (ctx, args): Promise<{ outcome: AppSaleOutcome }> => {
     const email = args.email.trim().toLowerCase();
@@ -120,11 +175,130 @@ export const recordAppSaleInternal = internalMutation({
       if (!tier) throw new Error("community_tier_not_found");
     }
     const externalRef = args.externalRef ? args.externalRef.trim().slice(0, EXTERNAL_REF_MAX) : undefined;
+    const normalizedAttribution = normalizeCommunityAcquisitionAttribution(args.attribution);
+    const normalizedRevenue = (() => {
+      if (!args.revenue) return null;
+      const amount = args.revenue.amountBaseUnits;
+      const currency = String(args.revenue.currency ?? "").trim().toUpperCase();
+      if (!Number.isSafeInteger(amount) || amount < 1 || amount > 100_000_000) return null;
+      if (!/^[A-Z]{3}$/.test(currency)) return null;
+      const rawDecimals = args.revenue.currencyDecimals ?? 2;
+      const currencyDecimals =
+        Number.isSafeInteger(rawDecimals) && rawDecimals >= 0 && rawDecimals <= 4 ? rawDecimals : 2;
+      return {
+        amountBaseUnits: amount,
+        currency,
+        currencyDecimals,
+        billingInterval: args.revenue.billingInterval,
+      };
+    })();
     const nowMs = Date.now();
     const userId = await verifiedUserIdForEmail(ctx, email);
     const existing = await ctx.db.query("communityAppGrants")
       .withIndex("by_app_email", (q: any) => q.eq("appId", args.appId).eq("email", email)).first();
-    const fields = { active: args.active, tierKey, ...(externalRef ? { externalRef } : {}), ...(userId ? { userId } : {}), updatedAt: nowMs };
+    const shouldWriteAttribution = Boolean(normalizedAttribution && (!existing || !hasAnyAttributionOnRow(existing)));
+    const attributionPatch = shouldWriteAttribution ? acquisitionAttributionRowPatch(normalizedAttribution) : {};
+
+    const MAX_REVENUE_HISTORY = 40;
+    const DAY_MS = 24 * 60 * 60_000;
+    const existingHistory = Array.isArray(existing?.revenueHistory) ? existing.revenueHistory : [];
+    const existingHasRevenue = Boolean(
+      existing &&
+        typeof existing.amountBaseUnits === "number" &&
+        existing.amountBaseUnits > 0 &&
+        typeof existing.currency === "string" &&
+        existing.currency.trim(),
+    );
+    const makeClosedSegment = (endMs: number) => ({
+      amountBaseUnits: existing!.amountBaseUnits!,
+      currency: existing!.currency!,
+      ...(typeof existing!.currencyDecimals === "number" ? { currencyDecimals: existing!.currencyDecimals } : {}),
+      billingInterval: (existing!.billingInterval ?? "monthly") as "monthly" | "annual" | "one_time",
+      startedAt:
+        typeof existing!.startedAt === "number" && existing!.startedAt > 0
+          ? existing!.startedAt
+          : existing!.createdAt,
+      endedAt: Math.max(
+        typeof existing!.startedAt === "number" && existing!.startedAt > 0
+          ? existing!.startedAt
+          : existing!.createdAt,
+        endMs,
+      ),
+    });
+
+    let revenuePatch: Record<string, unknown> = {};
+    if (args.active) {
+      const wasCanceled = Boolean(existing && !existing.active);
+      if (wasCanceled && existingHasRevenue) {
+        // Preserve the completed prior subscription interval and start a fresh one on resubscribe
+        // so canceled gap months are never counted as paid cycles.
+        const archived = [
+          ...existingHistory,
+          makeClosedSegment(existing!.endedAt ?? existing!.updatedAt ?? nowMs),
+        ].slice(-MAX_REVENUE_HISTORY);
+        revenuePatch = {
+          revenueHistory: archived,
+          ...(normalizedRevenue
+            ? {
+                amountBaseUnits: normalizedRevenue.amountBaseUnits,
+                currency: normalizedRevenue.currency,
+                currencyDecimals: normalizedRevenue.currencyDecimals,
+                billingInterval: normalizedRevenue.billingInterval,
+              }
+            : {}),
+          startedAt: nowMs,
+          endedAt: undefined,
+        };
+      } else if (normalizedRevenue) {
+        const existingStart =
+          typeof existing?.startedAt === "number" && existing.startedAt > 0
+            ? existing.startedAt
+            : existing?.createdAt ?? nowMs;
+        const planChanged =
+          existingHasRevenue &&
+          (existing!.amountBaseUnits !== normalizedRevenue.amountBaseUnits ||
+            existing!.currency !== normalizedRevenue.currency ||
+            (existing!.billingInterval ?? "monthly") !== normalizedRevenue.billingInterval);
+        if (planChanged && nowMs - existingStart >= DAY_MS) {
+          // Close the prior price/interval segment before starting the new plan so upgrades/downgrades
+          // never retroactively reprice earlier billing periods.
+          const archived = [...existingHistory, makeClosedSegment(nowMs)].slice(-MAX_REVENUE_HISTORY);
+          revenuePatch = {
+            revenueHistory: archived,
+            amountBaseUnits: normalizedRevenue.amountBaseUnits,
+            currency: normalizedRevenue.currency,
+            currencyDecimals: normalizedRevenue.currencyDecimals,
+            billingInterval: normalizedRevenue.billingInterval,
+            startedAt: nowMs,
+            endedAt: undefined,
+          };
+        } else {
+          revenuePatch = {
+            amountBaseUnits: normalizedRevenue.amountBaseUnits,
+            currency: normalizedRevenue.currency,
+            currencyDecimals: normalizedRevenue.currencyDecimals,
+            billingInterval: normalizedRevenue.billingInterval,
+            startedAt: existing?.startedAt ?? nowMs,
+            endedAt: undefined,
+          };
+        }
+      } else if (wasCanceled) {
+        revenuePatch = { startedAt: nowMs, endedAt: undefined };
+      } else if (existing?.endedAt !== undefined) {
+        revenuePatch = { endedAt: undefined };
+      }
+    } else if (existing) {
+      revenuePatch = { endedAt: existing.endedAt ?? nowMs };
+    }
+    const fields = {
+      active: args.active,
+      tierKey,
+      ...(externalRef ? { externalRef } : {}),
+      ...(userId ? { userId } : {}),
+      ...attributionPatch,
+      ...revenuePatch,
+      updatedAt: nowMs,
+    };
     if (existing) await ctx.db.patch(existing._id, fields);
     else await ctx.db.insert("communityAppGrants", { appId: args.appId, communityId: args.communityId, email, createdAt: nowMs, ...fields } as any);
     if (!userId) return { outcome: args.active ? "waiting_for_account" : "ended" };

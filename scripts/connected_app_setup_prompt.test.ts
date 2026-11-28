@@ -179,4 +179,7 @@ test("both setup prompts dynamically include configured Member Board custom mile
   expect(existing).toContain("`booked_first_call` — Booked first call (Stage: Active)");
   expect(existing).toContain("POST https://example.convex.site/apps/v1/milestones");
   expect(existing).toContain('"active": true');
+  expect(existing).toContain("polynet_community");
+  expect(existing).toContain("amount_base_units");
+  expect(unified).toContain("Preserve marketing & Distribution Engineer attribution");
 });

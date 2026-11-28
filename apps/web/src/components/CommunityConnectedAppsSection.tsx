@@ -116,8 +116,15 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
   };
   const copyPrompt = (app: CloudConnectedApp) => {
     const prompt = buildConnectedAppSetupPrompt({
-      communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
-      hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide, communityUrl, hasAppLink: Boolean(app.app_url),
+      communityName: props.communityName ?? "your community",
+      communitySlug: props.communitySlug ?? null,
+      appName: app.name,
+      appId: app.app_id,
+      apiOrigin: origin,
+      hasWebhook: Boolean(app.webhook_url),
+      guide: connectYourAppGuide,
+      communityUrl,
+      hasAppLink: Boolean(app.app_url),
       tiers: activeTiers,
       milestones: customMilestones,
     });
@@ -330,8 +337,8 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
             <Fragment key={app.app_id}>
               {communityUrl ? (
                 <SettingsRow
-                  label={apps.length > 1 ? `Unified gate prompt for ${app.name}` : "New app (Sign in with Polynet)"}
-                  help="Building a new app with no separate login or Stripe? Paste this into your AI to wire up Sign in with Polynet, live grant checks, and direct checkout links."
+                  label={apps.length > 1 ? `Native to Polynet prompt (${app.name})` : "Native to Polynet (single sign-in & checkout)"}
+                  help="Building a new app or moving checkout to Polynet? Paste this into your AI to wire Sign in with Polynet, live grant checks, attribution pass-through, and direct checkout links (2.9% fee on all transactions)."
                 >
                   <SettingsButton variant="primary" onClick={() => copyUnifiedGatePrompt(app)}>
                     {copied === `unified:${app.app_id}` ? "Copied" : "Copy unified gate prompt"}
@@ -339,8 +346,8 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
                 </SettingsRow>
               ) : null}
               <SettingsRow
-                label={apps.length > 1 ? `Existing app prompt for ${app.name}` : "Existing app (keep your own login & billing)"}
-                help="Already have login and Stripe? Paste this into Claude Code, Cursor or Codex to sync sales and read Polynet grants."
+                label={apps.length > 1 ? `Native to your app prompt (${app.name})` : "Native to your app (keep your own login & Stripe)"}
+                help="Already have login and outside Stripe? Paste this into Claude Code, Cursor, or Codex to keep 0% fee on your own sales, route Polynet-originated upgrades through Polynet checkout (2.9%), and sync sales, attribution, revenue, and milestones."
               >
                 <SettingsButton onClick={() => copyPrompt(app)}>{copied === app.app_id ? "Copied" : "Copy prompt"}</SettingsButton>
               </SettingsRow>

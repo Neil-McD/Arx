@@ -264,6 +264,7 @@ export function HostPart(props: { host: ProfileHost; now: number; state: Profile
             ? `${revenue.months_retained} ${revenue.months_retained === 1 ? "month" : "months"}`
             : `${Math.max(1, revenue.tenure_days)} ${revenue.tenure_days === 1 ? "day" : "days"}`,
           formatCompactMrr(revenue.active_mrr_base_units, revenue.currency, revenue.currency_decimals),
+          revenue.includes_external_app_sales ? "billed in app" : null,
         ]
           .filter(Boolean)
           .join(" · ")

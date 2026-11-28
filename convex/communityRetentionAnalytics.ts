@@ -75,6 +75,7 @@ export const getCommunityRetentionAnalytics = query({
       journeyCards,
       subscriptions,
       podPayments,
+      appGrants,
       sentCoachDrafts90d,
       presenceRows,
       courseRows,
@@ -100,6 +101,10 @@ export const getCommunityRetentionAnalytics = query({
       ctx.db
         .query("communityPodPayments")
         .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .take(MAX_AUX_ROWS),
+      ctx.db
+        .query("communityAppGrants")
+        .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId))
         .take(MAX_AUX_ROWS),
       ctx.db
         .query("communityMemberCoachDrafts")
@@ -217,6 +222,15 @@ export const getCommunityRetentionAnalytics = query({
       const list = podsByUser.get(key) ?? [];
       list.push(pod);
       podsByUser.set(key, list);
+    }
+
+    const appGrantsByUser = new Map<string, any[]>();
+    for (const grant of appGrants) {
+      if (!grant.userId) continue;
+      const key = String(grant.userId);
+      const list = appGrantsByUser.get(key) ?? [];
+      list.push(grant);
+      appGrantsByUser.set(key, list);
     }
 
     const presenceByUser = new Map<string, any>();
@@ -377,6 +391,19 @@ export const getCommunityRetentionAnalytics = query({
           refundDue: Boolean(pod.refundDue),
         }));
 
+        const userAppGrants = (appGrantsByUser.get(userKey) ?? []).map((grant: any) => ({
+          active: Boolean(grant.active),
+          amountBaseUnits: grant.amountBaseUnits,
+          currency: grant.currency,
+          currencyDecimals: grant.currencyDecimals,
+          billingInterval: grant.billingInterval,
+          createdAt: Number(grant.createdAt ?? 0),
+          startedAt: grant.startedAt ?? null,
+          endedAt: grant.endedAt ?? null,
+          updatedAt: grant.updatedAt ?? null,
+          revenueHistory: grant.revenueHistory ?? null,
+        }));
+
         const revenue = computeMemberRevenueSummary({
           membership: {
             state: membership.state,
@@ -388,6 +415,7 @@ export const getCommunityRetentionAnalytics = query({
           subscriptions: userSubs,
           subscriptionAuditEvents: auditByUser.get(userKey) ?? [],
           podPayments: userPods,
+          externalAppGrants: userAppGrants,
           nowMs,
         });
 
@@ -496,7 +524,8 @@ export const getCommunityRetentionAnalytics = query({
     const hasPaidPlans =
       resolveCommunityEntryPolicy(community) === "paid_subscription" ||
       subscriptions.length > 0 ||
-      podPayments.some((p) => typeof p.grantedAt === "number");
+      podPayments.some((p) => typeof p.grantedAt === "number") ||
+      appGrants.some((g) => typeof g.amountBaseUnits === "number" && g.amountBaseUnits > 0);
 
     return computeCommunityRetentionAnalytics({
       range,

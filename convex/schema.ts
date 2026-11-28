@@ -1635,6 +1635,35 @@ export default defineSchema({
     tierKey: v.string(),
     active: v.boolean(),
     externalRef: v.optional(v.string()),
+    // Optional first-touch acquisition & DE origin reported with an outside-Stripe sale.
+    attributionAnonymousId: v.optional(v.string()),
+    attributionClickId: v.optional(v.string()),
+    attributionUtmSource: v.optional(v.string()),
+    attributionUtmMedium: v.optional(v.string()),
+    attributionUtmCampaign: v.optional(v.string()),
+    attributionUtmContent: v.optional(v.string()),
+    attributionReferrerHost: v.optional(v.string()),
+    attributionReferralCode: v.optional(v.string()),
+    // Optional founder-reported outside-app billing for Member Records & Analytics LTV
+    // (never touches Polynet payouts/fees or Chief of Staff verified saved revenue).
+    amountBaseUnits: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    currencyDecimals: v.optional(v.number()),
+    billingInterval: v.optional(v.union(v.literal("monthly"), v.literal("annual"), v.literal("one_time"))),
+    startedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    revenueHistory: v.optional(
+      v.array(
+        v.object({
+          amountBaseUnits: v.number(),
+          currency: v.string(),
+          currencyDecimals: v.optional(v.number()),
+          billingInterval: v.union(v.literal("monthly"), v.literal("annual"), v.literal("one_time")),
+          startedAt: v.number(),
+          endedAt: v.number(),
+        }),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

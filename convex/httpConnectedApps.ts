@@ -3,6 +3,7 @@
 // these: no CORS, and nothing here takes a Polynet session.
 import { internal } from "./_generated/api";
 import { sha256Hex } from "./communityCheckoutBuyer";
+import { normalizeCommunityAcquisitionAttribution } from "./distributionAttributionCore";
 
 export const CONNECTED_APP_ACCESS_PATH = "/apps/v1/access";
 export const CONNECTED_APP_SALES_PATH = "/apps/v1/sales";
@@ -39,22 +40,113 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
   });
 
   // A sale the app made through its own checkout (no fee), or its end:
-  // { email, active, tier?, external_ref? }. The latest report per email wins.
+  // { email, active, tier?, external_ref?, attribution?, revenue? }. The latest report per email wins.
   args.http.route({
     path: CONNECTED_APP_SALES_PATH,
     method: "POST",
     handler: args.httpAction(async (ctx: any, req: Request) => {
       const app = await requireApp(ctx, req);
       if (app instanceof Response) return app;
+      const raw = await req.text();
+      if (raw.length > 4_000) return json(413, { error: "payload_too_large" });
       let body: any = null;
-      try { body = JSON.parse((await req.text()).slice(0, 4_000)); } catch { body = null; }
+      try { body = JSON.parse(raw); } catch { body = null; }
       const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
       if (!email || email.length > 320 || !email.includes("@") || typeof body?.active !== "boolean") return json(400, { error: "email_and_active_required" });
+
+      // Optional acquisition & DE attribution (malformed optional fields are ignored so billing never breaks).
+      let attribution: ReturnType<typeof normalizeCommunityAcquisitionAttribution> = null;
+      try {
+        const rawAttr =
+          body?.attribution && typeof body.attribution === "object" && !Array.isArray(body.attribution)
+            ? body.attribution
+            : null;
+        if (rawAttr) {
+          attribution = normalizeCommunityAcquisitionAttribution({
+            anonymousId: rawAttr.de_aid ?? rawAttr.anonymous_id ?? rawAttr.anonymousId,
+            clickId: rawAttr.de_cid ?? rawAttr.click_id ?? rawAttr.clickId,
+            utmSource: rawAttr.utm_source ?? rawAttr.utmSource,
+            utmMedium: rawAttr.utm_medium ?? rawAttr.utmMedium,
+            utmCampaign: rawAttr.utm_campaign ?? rawAttr.utmCampaign,
+            utmContent: rawAttr.utm_content ?? rawAttr.utmContent,
+            referrerHost: rawAttr.referrer_host ?? rawAttr.referrer ?? rawAttr.referrerHost,
+            referralCode: rawAttr.referral_code ?? rawAttr.ref ?? rawAttr.referralCode,
+          });
+        }
+      } catch {
+        attribution = null;
+      }
+
+      // Optional founder-reported outside-app revenue for Analytics & Member Records (0% Polynet fee).
+      let revenue:
+        | {
+            amountBaseUnits: number;
+            currency: string;
+            currencyDecimals?: number;
+            billingInterval: "monthly" | "annual" | "one_time";
+          }
+        | undefined;
+      try {
+        const rawRev =
+          body?.revenue && typeof body.revenue === "object" && !Array.isArray(body.revenue)
+            ? body.revenue
+            : null;
+        if (rawRev) {
+          const rawAmountVal = rawRev.amount_base_units ?? rawRev.amountBaseUnits;
+          const rawCurrencyVal = rawRev.currency;
+          const rawDecimalsVal = rawRev.currency_decimals ?? rawRev.currencyDecimals;
+          const rawIntervalVal = rawRev.billing_interval ?? rawRev.billingInterval;
+          const rawAmount = typeof rawAmountVal === "number" ? rawAmountVal : NaN;
+          const rawCurrency = typeof rawCurrencyVal === "string" ? rawCurrencyVal.trim().toUpperCase() : "";
+          const rawInterval =
+            rawIntervalVal === undefined || rawIntervalVal === null
+              ? "monthly"
+              : typeof rawIntervalVal === "string"
+                ? rawIntervalVal.trim().toLowerCase()
+                : "";
+          const billingInterval: "monthly" | "annual" | "one_time" | null =
+            rawInterval === "monthly"
+              ? "monthly"
+              : rawInterval === "annual" || rawInterval === "yearly"
+                ? "annual"
+                : rawInterval === "one_time"
+                  ? "one_time"
+                  : null;
+          if (
+            Number.isSafeInteger(rawAmount) &&
+            rawAmount >= 1 &&
+            rawAmount <= 100_000_000 &&
+            /^[A-Z]{3}$/.test(rawCurrency) &&
+            billingInterval
+          ) {
+            const parsedDecimals =
+              rawDecimalsVal === undefined || rawDecimalsVal === null
+                ? undefined
+                : typeof rawDecimalsVal === "number" &&
+                    Number.isSafeInteger(rawDecimalsVal) &&
+                    rawDecimalsVal >= 0 &&
+                    rawDecimalsVal <= 4
+                  ? rawDecimalsVal
+                  : undefined;
+            revenue = {
+              amountBaseUnits: rawAmount,
+              currency: rawCurrency,
+              ...(parsedDecimals !== undefined ? { currencyDecimals: parsedDecimals } : {}),
+              billingInterval,
+            };
+          }
+        }
+      } catch {
+        revenue = undefined;
+      }
+
       try {
         const result = await ctx.runMutation(internal.communityAppSales.recordAppSaleInternal, {
           appId: app.appId, communityId: app.communityId, email, active: body.active,
           ...(typeof body.tier === "string" && body.tier ? { tierKey: body.tier } : {}),
           ...(typeof body.external_ref === "string" && body.external_ref ? { externalRef: body.external_ref } : {}),
+          ...(attribution ? { attribution } : {}),
+          ...(revenue ? { revenue } : {}),
         });
         return json(200, result);
       } catch (error) {

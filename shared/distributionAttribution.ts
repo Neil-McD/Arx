@@ -49,12 +49,14 @@ type PersistedAttributionRecord = DistributionAttributionContext & {
 };
 
 function uuid(value: unknown): string | undefined {
-  const normalized = String(value ?? '').trim();
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
   return UUID_RE.test(normalized) ? normalized.toLowerCase() : undefined;
 }
 
 function normalizeCommunitySlug(value: unknown): string | undefined {
-  const normalized = String(value ?? '').trim().toLowerCase();
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
   return COMMUNITY_SLUG_RE.test(normalized) ? normalized : undefined;
 }
 

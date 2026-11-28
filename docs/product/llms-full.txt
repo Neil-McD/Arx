@@ -1438,13 +1438,41 @@ POST {POLYNET_API_ORIGIN}/apps/v1/sales
 Authorization: Bearer {POLYNET_APP_SECRET}
 Content-Type: application/json
 
-{ "email": "buyer@example.com", "active": true, "tier": "pro", "external_ref": "sub_123" }
+{
+  "email": "buyer@example.com",
+  "active": true,
+  "tier": "pro",
+  "external_ref": "sub_123",
+  "attribution": {
+    "de_aid": "optional-uuid",
+    "de_cid": "optional-uuid",
+    "utm_source": "youtube",
+    "utm_campaign": "spring-launch"
+  },
+  "revenue": {
+    "amount_base_units": 4900,
+    "currency": "USD",
+    "billing_interval": "monthly"
+  }
+}
 ```
 
 - `active`: `true` while they should have access (Stripe `active`, `trialing`,
   `past_due`), `false` once it ends (`canceled`, `unpaid`, `incomplete_expired`).
 - `tier`: the plan key in Polynet. Leave it out for the base membership.
 - `external_ref`: optional, your own subscription id, for tracing.
+- `attribution`: optional first-touch acquisition and Distribution Engineer tags
+  (`de_aid`, `de_cid`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
+  `referrer_host`, `referral_code`). Stored on the grant until the buyer signs
+  in, stamped onto their membership (without overwriting an existing source),
+  and automatically delivered to your connected Distribution Engineer workspace
+  when `de_aid`/`de_cid` are present.
+- `revenue`: optional outside-app plan price (`amount_base_units`, 3-letter ISO
+  `currency`, optional `currency_decimals`, and `billing_interval`: `"monthly"`,
+  `"annual"`, or `"one_time"`). Populates Member Records (labeled *billed in
+  app*) and Analytics LTV by source with **0% Polynet fee**. Never counts toward
+  Chief of Staff Verified Saved Revenue. Malformed optional `attribution` or
+  `revenue` fields are safely ignored and never block access grants.
 
 The response says what happened: `in`, `waiting_for_account` (no Polynet account
 with that verified email yet; they're let in when they sign up with it),
