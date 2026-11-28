@@ -1287,6 +1287,16 @@
 :root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-reply-list {
   padding: 0 12px 24px;
 }
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-drawer-scroll:has(> .community-interaction-drawer-empty) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-drawer-empty {
+  flex: 1 1 auto;
+  min-height: 160px;
+  padding: 24px 20px;
+}
 :root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor {
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 12px;
@@ -1717,6 +1727,13 @@
   justify-content: flex-end;
   flex: 1 0 auto;
   margin-top: 0;
+}
+
+/* Empty channels, empty pod rooms, and feed error states sit calmly centered
+   in the room rather than anchored onto the bottom composer. */
+:root[data-design="v1"] .community-interaction-feed-scroll > .kit-channel-feed-part > .community-interaction-empty,
+:root[data-design="v1"] .community-interaction-feed-scroll > .kit-channel-feed-part > .community-interaction-state {
+  margin: auto 0;
 }
 
 /* The feed fills that box and grows with its posts (never squeezed into it:
@@ -2406,6 +2423,43 @@
   min-height: 0;
   overflow-y: auto;
   padding: 16px 24px calc(var(--community-dm-composer-float-height, 136px) + 12px);
+}
+
+:root[data-design="v1"] .community-dm-kit-thread:has(> .community-dm-kit-empty) {
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-design="v1"] .community-dm-kit-thread > .community-dm-kit-empty {
+  margin: auto 0;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+:root[data-design="v1"] .community-dm-kit-thread > .community-dm-kit-empty svg {
+  color: var(--text-faint);
+}
+
+:root[data-design="v1"] .community-dm-kit-thread > .community-dm-kit-empty span {
+  max-width: 260px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .community-dm-inbox-empty {
+  padding: 40px 16px;
+  color: var(--text-faint);
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 :root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-thread {
@@ -4239,11 +4293,19 @@
   max-width: 680px;
 }
 
-/* Events, Knowledge and Analytics fill their full shell column on desktop
-   (like Members, Inbox and channels), whether or not a right panel is open.
-   Open courses (.knowledge-course-cols) and the brain map (.kit-brain-fill)
-   keep their own rules below. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.community-events-panel, .community-knowledge-page, .analytics-v1) {
+/* Community pages fill their full shell column on desktop (like Members,
+   Inbox and channels), whether or not a right panel is open. Settings keeps
+   its narrow centered column (.settings-page-v1) truly centered inside that
+   full-width shell; open courses (.knowledge-course-cols) and the brain map
+   (.kit-brain-fill) keep their own rules below. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(
+  .community-events-panel,
+  .community-knowledge-page,
+  .analytics-v1,
+  .community-pods-panel,
+  .community-discover-panel,
+  .settings-page-v1
+) {
   max-width: none;
 }
 

@@ -1559,8 +1559,8 @@
 :where(:root[data-layout="phone"]) .app .klist.solo{max-width:100%;box-sizing:border-box}
 :where(:root[data-layout="phone"]) .app .kresrow.edit em{max-width:110px}
 :where(:root[data-layout="phone"]) .app .kunsaved{flex-wrap:wrap;justify-content:flex-end}
-.app .disc{max-width:1120px}
-.app .discgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.app .disc{max-width:none}
+.app .discgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
 .app .disccard{display:flex;flex-direction:column;text-align:left;padding:0;overflow:hidden;border-radius:10px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);text-decoration:none;cursor:pointer;transition:border-color .16s var(--ease),background .16s var(--ease)}
 .app .disccard:hover{border-color:rgba(var(--w),.22);background:var(--s2)}
 .app .discban{position:relative;display:block;width:100%;aspect-ratio:16/6.4;overflow:hidden;border-bottom:1px solid var(--line);background:var(--s2)}
@@ -1587,7 +1587,6 @@
 .app .discin .chip .discchip-mark.discchip-mark-fb{background:var(--s3);color:var(--ink2);font-family:inherit;font-size:9px;font-weight:700;letter-spacing:normal}
 .app .discfoot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:36px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--ink2)}
 .app .discfind{display:flex;margin:0;width:264px;height:32px}
-@media (max-width:1100px){.app .discgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:700px){.app .discgrid{grid-template-columns:1fr;gap:14px}}
 :where(:root[data-layout="phone"]) .app .discgrid{grid-template-columns:1fr;gap:14px}
 :where(:root[data-layout="phone"]) .app .discfind{width:100%;margin-bottom:14px}

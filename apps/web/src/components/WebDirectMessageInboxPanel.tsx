@@ -389,9 +389,9 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                       <p>Join a community and everyone in it becomes one tap away. Your messages live here.</p>
                     </div>
                   ) : (
-                    <p className={cx("sub")} style={{ marginTop: 6 }}>
+                    <div className="community-dm-inbox-empty">
                       {activeFilter === "reply" ? "You're all caught up." : "No messages yet. Start one with New message."}
-                    </p>
+                    </div>
                   )
                 ) : null}
               </div>

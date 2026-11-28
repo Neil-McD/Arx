@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, Bell, BellOff, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
+import { ArrowLeft, Ban, Bell, BellOff, MessageSquare, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import type { ChangeEvent, ClipboardEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -853,7 +853,11 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             {props.isLoading ? (
               <ChannelFeedSkeleton rows={3} />
             ) : props.messages.length === 0 ? (
-              <span className={cx("sub")}>Say hello to {peerLabel}.</span>
+              <div className="community-dm-kit-empty">
+                <MessageSquare size={22} aria-hidden="true" />
+                <div>No messages yet</div>
+                <span>Say hello to {peerLabel}.</span>
+              </div>
             ) : (
               threadEntries.map(({ message, isNewDay, isClusterEnd }) => {
                 const isOwn = message.sender_user_id === props.sessionUserId;
