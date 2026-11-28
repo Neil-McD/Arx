@@ -38,8 +38,10 @@ import { communitySubscriptionStatusFields } from "./communitySubscriptionLifecy
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import {
+  acquisitionAttributionRowPatch,
   distributionAttributionStripeMetadata,
-  normalizeDistributionAttributionTracking,
+  normalizeCommunityAcquisitionAttribution,
+  type CommunityAcquisitionAttribution,
 } from "./distributionAttributionCore";
 import {
   attachCommunityCheckoutToUser,
@@ -807,6 +809,12 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     buyerVisitorHash: v.optional(v.string()),
     attributionAnonymousId: v.optional(v.string()),
     attributionClickId: v.optional(v.string()),
+    attributionUtmSource: v.optional(v.string()),
+    attributionUtmMedium: v.optional(v.string()),
+    attributionUtmCampaign: v.optional(v.string()),
+    attributionUtmContent: v.optional(v.string()),
+    attributionReferrerHost: v.optional(v.string()),
+    attributionReferralCode: v.optional(v.string()),
     expiresAt: v.number(),
     nowMs: v.optional(v.number()),
   },
@@ -846,8 +854,18 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       ownerUserId: args.ownerUserId,
       buyerSecretHash: args.buyerSecretHash,
       buyerVisitorHash: args.buyerVisitorHash,
-      ...(args.attributionAnonymousId ? { attributionAnonymousId: args.attributionAnonymousId } : {}),
-      ...(args.attributionClickId ? { attributionClickId: args.attributionClickId } : {}),
+      ...acquisitionAttributionRowPatch(
+        normalizeCommunityAcquisitionAttribution({
+          anonymousId: args.attributionAnonymousId,
+          clickId: args.attributionClickId,
+          utmSource: args.attributionUtmSource,
+          utmMedium: args.attributionUtmMedium,
+          utmCampaign: args.attributionUtmCampaign,
+          utmContent: args.attributionUtmContent,
+          referrerHost: args.attributionReferrerHost,
+          referralCode: args.attributionReferralCode,
+        }),
+      ),
       status: "pending",
       expiresAt: args.expiresAt,
       createdAt: nowMs,
@@ -1204,12 +1222,12 @@ export async function startCommunityJoinCheckoutCore(
     visitorHash?: string;
     // A tier of the membership (one door); missing means the base price.
     tierKey?: string;
-    // Distribution Engineer tracking captured for this community.
-    distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
+    // Acquisition & Distribution Engineer tracking captured for this community.
+    distributionAttribution?: CommunityAcquisitionAttribution | null;
   },
 ): Promise<{ ok: true; session_id: string; checkout_url: string; buyer_secret?: string }> {
   const nowMs = Date.now();
-  const normalizedAttribution = normalizeDistributionAttributionTracking(args.distributionAttribution);
+  const normalizedAttribution = normalizeCommunityAcquisitionAttribution(args.distributionAttribution);
   const cancelUrl = args.cancelUrl;
   const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
   const checkoutConfig = (await ctx.runQuery(
@@ -1301,12 +1319,7 @@ export async function startCommunityJoinCheckoutCore(
       ...(ownerUserId ? { ownerUserId } : {}),
       ...(buyerSecret ? { buyerSecretHash: await sha256Hex(buyerSecret) } : {}),
       ...(args.visitorHash ? { buyerVisitorHash: args.visitorHash } : {}),
-      ...(normalizedAttribution?.anonymousId
-        ? { attributionAnonymousId: normalizedAttribution.anonymousId }
-        : {}),
-      ...(normalizedAttribution?.clickId
-        ? { attributionClickId: normalizedAttribution.clickId }
-        : {}),
+      ...acquisitionAttributionRowPatch(normalizedAttribution),
       expiresAt,
       nowMs,
     },

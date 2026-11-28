@@ -1,3 +1,9 @@
+import { v } from 'convex/values';
+import {
+  normalizeDistributionAttributionContext,
+  type DistributionAttributionContext,
+} from '../shared/distributionAttribution';
+
 export const DISTRIBUTION_ATTRIBUTION_MAX_ATTEMPTS = 5;
 export const DISTRIBUTION_ATTRIBUTION_LEASE_MS = 60_000;
 export const DISTRIBUTION_ATTRIBUTION_SOURCE_SYSTEM = 'polynet';
@@ -12,6 +18,108 @@ export type DistributionAttributionTracking = {
   anonymousId?: string;
   clickId?: string;
 };
+
+export type CommunityAcquisitionAttribution = DistributionAttributionContext;
+
+export const communityAcquisitionAttributionValidator = v.object({
+  anonymousId: v.optional(v.string()),
+  clickId: v.optional(v.string()),
+  utmSource: v.optional(v.string()),
+  utmMedium: v.optional(v.string()),
+  utmCampaign: v.optional(v.string()),
+  utmContent: v.optional(v.string()),
+  referrerHost: v.optional(v.string()),
+  referralCode: v.optional(v.string()),
+});
+
+export function normalizeCommunityAcquisitionAttribution(
+  input:
+    | {
+        anonymousId?: unknown;
+        clickId?: unknown;
+        utmSource?: unknown;
+        utmMedium?: unknown;
+        utmCampaign?: unknown;
+        utmContent?: unknown;
+        referrerHost?: unknown;
+        referralCode?: unknown;
+      }
+    | null
+    | undefined,
+): CommunityAcquisitionAttribution | null {
+  return normalizeDistributionAttributionContext(input);
+}
+
+export function acquisitionAttributionRowPatch(
+  attribution: CommunityAcquisitionAttribution | null | undefined,
+): {
+  attributionAnonymousId?: string;
+  attributionClickId?: string;
+  attributionUtmSource?: string;
+  attributionUtmMedium?: string;
+  attributionUtmCampaign?: string;
+  attributionUtmContent?: string;
+  attributionReferrerHost?: string;
+  attributionReferralCode?: string;
+} {
+  if (!attribution) return {};
+  return {
+    ...(attribution.anonymousId ? { attributionAnonymousId: attribution.anonymousId } : {}),
+    ...(attribution.clickId ? { attributionClickId: attribution.clickId } : {}),
+    ...(attribution.utmSource ? { attributionUtmSource: attribution.utmSource } : {}),
+    ...(attribution.utmMedium ? { attributionUtmMedium: attribution.utmMedium } : {}),
+    ...(attribution.utmCampaign ? { attributionUtmCampaign: attribution.utmCampaign } : {}),
+    ...(attribution.utmContent ? { attributionUtmContent: attribution.utmContent } : {}),
+    ...(attribution.referrerHost ? { attributionReferrerHost: attribution.referrerHost } : {}),
+    ...(attribution.referralCode ? { attributionReferralCode: attribution.referralCode } : {}),
+  };
+}
+
+export function extractCommunityAcquisitionAttributionFromRow(
+  row:
+    | {
+        attributionAnonymousId?: string;
+        attributionClickId?: string;
+        attributionUtmSource?: string;
+        attributionUtmMedium?: string;
+        attributionUtmCampaign?: string;
+        attributionUtmContent?: string;
+        attributionReferrerHost?: string;
+        attributionReferralCode?: string;
+      }
+    | null
+    | undefined,
+): CommunityAcquisitionAttribution | null {
+  if (!row) return null;
+  return normalizeCommunityAcquisitionAttribution({
+    anonymousId: row.attributionAnonymousId,
+    clickId: row.attributionClickId,
+    utmSource: row.attributionUtmSource,
+    utmMedium: row.attributionUtmMedium,
+    utmCampaign: row.attributionUtmCampaign,
+    utmContent: row.attributionUtmContent,
+    referrerHost: row.attributionReferrerHost,
+    referralCode: row.attributionReferralCode,
+  });
+}
+
+export function hasAnyAttributionOnRow(
+  row:
+    | {
+        attributionAnonymousId?: string;
+        attributionClickId?: string;
+        attributionUtmSource?: string;
+        attributionUtmMedium?: string;
+        attributionUtmCampaign?: string;
+        attributionUtmContent?: string;
+        attributionReferrerHost?: string;
+        attributionReferralCode?: string;
+      }
+    | null
+    | undefined,
+): boolean {
+  return Boolean(extractCommunityAcquisitionAttributionFromRow(row));
+}
 
 export type DistributionAttributionReceipt = {
   sourceEventId: string;

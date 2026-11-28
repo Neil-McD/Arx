@@ -15,7 +15,7 @@ import type { MemberRevenueSummary, VerifiedSaveResult } from "./memberRevenueLe
 const DAY_MS = 24 * 60 * 60_000;
 export const MIN_LIFT_SAMPLE_SIZE = 3;
 
-export type RetentionAnalyticsSource = "distribution_engineer" | "direct";
+export type RetentionAnalyticsSource = string;
 
 export type RetentionCheckpointDescriptor = JourneyStageCheckpoint & {
   stageName: string;
@@ -26,6 +26,7 @@ export type RetentionMemberInput = {
   joinedAtMs: number;
   isActive: boolean;
   source: RetentionAnalyticsSource;
+  sourceLabel?: string;
   postsCount: number;
   firstPostAtMs: number | null;
   lessonsDoneCount: number;
@@ -330,46 +331,66 @@ export function computeCommunityRetentionAnalytics(args: {
   );
 
   // 3. LTV & Retention by Acquisition Source (evaluated on selected window cohort)
-  const sourceLabels: Record<RetentionAnalyticsSource, string> = {
+  const defaultSourceLabels: Record<string, string> = {
     distribution_engineer: "Distribution Engineer",
     direct: "Direct & organic",
   };
-  const bySource: RetentionSourceRow[] = (
-    ["distribution_engineer", "direct"] as const
-  ).map((source) => {
-    const rows = cohort.filter((entry) => entry.member.source === source);
-    let activatedCount = 0;
-    let retainedCount = 0;
-    let paidCount = 0;
-    let ltvSum = 0;
-    let monthsSum = 0;
-
-    for (const entry of rows) {
-      if (entry.activated) activatedCount += 1;
-      if (entry.member.isActive) retainedCount += 1;
-      monthsSum += entry.member.revenue.months_retained;
-      if (!mixedCurrency && entry.member.revenue.realized_ltv_base_units > 0) {
-        paidCount += 1;
-        ltvSum += entry.member.revenue.realized_ltv_base_units;
-      }
+  const groupedSources = new Map<string, { label: string; rows: typeof cohort }>();
+  for (const entry of cohort) {
+    const key = String(entry.member.source || "direct").trim() || "direct";
+    const label =
+      String(entry.member.sourceLabel ?? "").trim() ||
+      defaultSourceLabels[key] ||
+      key;
+    const bucket = groupedSources.get(key);
+    if (bucket) {
+      bucket.rows.push(entry);
+    } else {
+      groupedSources.set(key, { label, rows: [entry] });
     }
+  }
+  const bySource: RetentionSourceRow[] = Array.from(groupedSources.entries())
+    .map(([source, { label, rows }]) => {
+      let activatedCount = 0;
+      let retainedCount = 0;
+      let paidCount = 0;
+      let ltvSum = 0;
+      let monthsSum = 0;
 
-    return {
-      source,
-      label: sourceLabels[source],
-      members: rows.length,
-      activated_members: activatedCount,
-      activation_rate: rows.length > 0 ? activatedCount / rows.length : null,
-      retained_members: retainedCount,
-      retention_rate: rows.length > 0 ? retainedCount / rows.length : null,
-      paid_members: paidCount,
-      avg_realized_ltv_base_units:
-        hasPaidPlans && !mixedCurrency && paidCount > 0 ? Math.round(ltvSum / paidCount) : null,
-      total_realized_ltv_base_units:
-        hasPaidPlans && !mixedCurrency && paidCount > 0 ? ltvSum : null,
-      avg_months_retained: rows.length > 0 ? roundOneDecimal(monthsSum / rows.length) : null,
-    };
-  });
+      for (const entry of rows) {
+        if (entry.activated) activatedCount += 1;
+        if (entry.member.isActive) retainedCount += 1;
+        monthsSum += entry.member.revenue.months_retained;
+        if (!mixedCurrency && entry.member.revenue.realized_ltv_base_units > 0) {
+          paidCount += 1;
+          ltvSum += entry.member.revenue.realized_ltv_base_units;
+        }
+      }
+
+      return {
+        source,
+        label,
+        members: rows.length,
+        activated_members: activatedCount,
+        activation_rate: rows.length > 0 ? activatedCount / rows.length : null,
+        retained_members: retainedCount,
+        retention_rate: rows.length > 0 ? retainedCount / rows.length : null,
+        paid_members: paidCount,
+        avg_realized_ltv_base_units:
+          hasPaidPlans && !mixedCurrency && paidCount > 0 ? Math.round(ltvSum / paidCount) : null,
+        total_realized_ltv_base_units:
+          hasPaidPlans && !mixedCurrency && paidCount > 0 ? ltvSum : null,
+        avg_months_retained: rows.length > 0 ? roundOneDecimal(monthsSum / rows.length) : null,
+      };
+    })
+    .sort((a, b) => {
+      if (b.members !== a.members) return b.members - a.members;
+      if (a.source === "direct" && b.source !== "direct") return 1;
+      if (b.source === "direct" && a.source !== "direct") return -1;
+      if (a.source === "distribution_engineer" && b.source !== "distribution_engineer") return -1;
+      if (b.source === "distribution_engineer" && a.source !== "distribution_engineer") return 1;
+      return a.label.localeCompare(b.label);
+    });
 
   // 4. Chief of Staff Verified Saved Revenue (30d & 90d across all sampled members)
   let savedMrr30 = 0;

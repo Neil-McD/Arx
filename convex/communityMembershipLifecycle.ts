@@ -19,7 +19,13 @@ import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 import { enqueueCommunityMemberIdentify } from "./distributionAttribution";
-import { normalizeDistributionAttributionTracking } from "./distributionAttributionCore";
+import {
+  acquisitionAttributionRowPatch,
+  hasAnyAttributionOnRow,
+  normalizeCommunityAcquisitionAttribution,
+  normalizeDistributionAttributionTracking,
+  type CommunityAcquisitionAttribution,
+} from "./distributionAttributionCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -37,37 +43,32 @@ export async function activateCommunityMembershipCore(args: {
   activationReason: string;
   nowMs: number;
   skipMemberCountSync?: boolean;
-  distributionAttribution?: { anonymousId?: string; clickId?: string } | null;
+  distributionAttribution?: CommunityAcquisitionAttribution | null;
 }): Promise<{
   membership: CommunityMembershipLike;
   accessGranted: boolean;
   activationMarker: string | null;
 }> {
-  const incomingAttribution = normalizeDistributionAttributionTracking(args.distributionAttribution);
+  const incomingAttribution = normalizeCommunityAcquisitionAttribution(args.distributionAttribution);
   const existing = await getUniqueCommunityMembershipByPair({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
   });
-  const existingHasAttribution = Boolean(
-    existing?.attributionAnonymousId || existing?.attributionClickId,
-  );
+  const existingHasAttribution = hasAnyAttributionOnRow(existing);
   const attributionPatch =
     !existingHasAttribution && incomingAttribution
       ? {
-          ...(incomingAttribution.anonymousId
-            ? { attributionAnonymousId: incomingAttribution.anonymousId }
-            : {}),
-          ...(incomingAttribution.clickId ? { attributionClickId: incomingAttribution.clickId } : {}),
+          ...acquisitionAttributionRowPatch(incomingAttribution),
           attributedAt: args.nowMs,
         }
       : {};
-  const effectiveAttribution = existingHasAttribution
+  const effectiveDeAttribution = existingHasAttribution
     ? normalizeDistributionAttributionTracking({
         anonymousId: existing?.attributionAnonymousId,
         clickId: existing?.attributionClickId,
       })
-    : incomingAttribution;
+    : normalizeDistributionAttributionTracking(incomingAttribution);
 
   if (existing && communityMembershipRowIsActive(existing)) {
     const role = args.role ?? (normalizeCommunityRoleForOutput(existing.role) || "member");
@@ -182,13 +183,13 @@ export async function activateCommunityMembershipCore(args: {
   // One door: the community's connected apps re-read this person's access.
   await memberAccessChanged(args.ctx, args.communityId, args.userId);
   // Best-effort per-community Distribution Engineer identify delivery (never blocks join/checkout).
-  if (role === "member" && effectiveAttribution) {
+  if (role === "member" && effectiveDeAttribution) {
     try {
       await enqueueCommunityMemberIdentify({
         ctx: args.ctx,
         communityId: args.communityId,
         userId: args.userId,
-        tracking: effectiveAttribution,
+        tracking: effectiveDeAttribution,
         nowMs: args.nowMs,
       });
     } catch {

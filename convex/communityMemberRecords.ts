@@ -32,6 +32,7 @@ import {
   isAtRiskCoachReason,
   monthlyMrrForPricePoint,
 } from "../shared/memberRevenueLedger";
+import { resolveAcquisitionSource } from "../shared/distributionAttribution";
 
 // Paging: the table loads a page at a time; the summary (view counts) reads
 // only cheap rows for small communities and uses a pre-computed paginated
@@ -973,10 +974,22 @@ export const getCommunityMemberRecord = query({
       userAttributionRows.find(
         (row: any) => !row.communityId && (row.clickId || row.anonymousId),
       ) ?? null;
+    const membershipResolvedSource = membership
+      ? resolveAcquisitionSource({
+          anonymousId: membership.attributionAnonymousId,
+          clickId: membership.attributionClickId,
+          utmSource: membership.attributionUtmSource,
+          utmMedium: membership.attributionUtmMedium,
+          utmCampaign: membership.attributionUtmCampaign,
+          utmContent: membership.attributionUtmContent,
+          referrerHost: membership.attributionReferrerHost,
+          referralCode: membership.attributionReferralCode,
+        })
+      : null;
     const attribution =
       membership && (membership.attributionClickId || membership.attributionAnonymousId)
         ? {
-            source_label: "Distribution Engineer",
+            source_label: membershipResolvedSource?.memberRecordLabel ?? "Distribution Engineer",
             click_id: membership.attributionClickId ?? null,
             attributed_at: iso(
               membership.attributedAt ?? membership.activatedAt ?? membership.createdAt,
@@ -989,13 +1002,21 @@ export const getCommunityMemberRecord = query({
               click_id: communityAttributionRow.clickId ?? null,
               attributed_at: iso(communityAttributionRow.createdAt),
             }
-          : legacyGlobalAttributionRow
+          : membership && membershipResolvedSource?.memberRecordLabel
             ? {
-                source_label: "Distribution Engineer",
-                click_id: legacyGlobalAttributionRow.clickId ?? null,
-                attributed_at: iso(legacyGlobalAttributionRow.createdAt),
+                source_label: membershipResolvedSource.memberRecordLabel,
+                click_id: null,
+                attributed_at: iso(
+                  membership.attributedAt ?? membership.activatedAt ?? membership.createdAt,
+                ),
               }
-            : null;
+            : legacyGlobalAttributionRow
+              ? {
+                  source_label: "Distribution Engineer",
+                  click_id: legacyGlobalAttributionRow.clickId ?? null,
+                  attributed_at: iso(legacyGlobalAttributionRow.createdAt),
+                }
+              : null;
 
     const facts: MemberRecordFact[] = [];
     for (const fact of [...communityFacts, ...globalFacts]) {

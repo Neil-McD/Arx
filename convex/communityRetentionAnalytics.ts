@@ -34,6 +34,7 @@ import {
   type RetentionCheckpointDescriptor,
   type RetentionMemberInput,
 } from "../shared/retentionAnalytics";
+import { resolveAcquisitionSource } from "../shared/distributionAttribution";
 
 const DAY_MS = 24 * 60 * 60_000;
 const MAX_RETENTION_MEMBERS = 200;
@@ -459,15 +460,24 @@ export const getCommunityRetentionAnalytics = query({
           membershipRevokedReason: membership.revokedReason,
         });
 
-        const isDeAttributed =
-          Boolean(membership.attributionClickId || membership.attributionAnonymousId) ||
-          deDeliveryUsers.has(userKey);
+        const resolvedSource = resolveAcquisitionSource({
+          anonymousId: membership.attributionAnonymousId,
+          clickId: membership.attributionClickId,
+          hasDeDelivery: deDeliveryUsers.has(userKey),
+          utmSource: membership.attributionUtmSource,
+          utmMedium: membership.attributionUtmMedium,
+          utmCampaign: membership.attributionUtmCampaign,
+          utmContent: membership.attributionUtmContent,
+          referrerHost: membership.attributionReferrerHost,
+          referralCode: membership.attributionReferralCode,
+        });
 
         return {
           userId: userKey,
           joinedAtMs: Number(membership.activatedAt ?? membership.createdAt ?? nowMs),
           isActive: communityMembershipRowIsActive(membership),
-          source: isDeAttributed ? "distribution_engineer" : "direct",
+          source: resolvedSource.source,
+          sourceLabel: resolvedSource.label,
           postsCount: posts.postsCount,
           firstPostAtMs: posts.firstPostAtMs,
           lessonsDoneCount,

@@ -67,6 +67,24 @@ export default async function handler(req, res) {
                 ...(typeof body.distributionAttribution.clickId === "string"
                   ? { clickId: body.distributionAttribution.clickId }
                   : {}),
+                ...(typeof body.distributionAttribution.utmSource === "string"
+                  ? { utmSource: body.distributionAttribution.utmSource }
+                  : {}),
+                ...(typeof body.distributionAttribution.utmMedium === "string"
+                  ? { utmMedium: body.distributionAttribution.utmMedium }
+                  : {}),
+                ...(typeof body.distributionAttribution.utmCampaign === "string"
+                  ? { utmCampaign: body.distributionAttribution.utmCampaign }
+                  : {}),
+                ...(typeof body.distributionAttribution.utmContent === "string"
+                  ? { utmContent: body.distributionAttribution.utmContent }
+                  : {}),
+                ...(typeof body.distributionAttribution.referrerHost === "string"
+                  ? { referrerHost: body.distributionAttribution.referrerHost }
+                  : {}),
+                ...(typeof body.distributionAttribution.referralCode === "string"
+                  ? { referralCode: body.distributionAttribution.referralCode }
+                  : {}),
               },
             }
           : {}),

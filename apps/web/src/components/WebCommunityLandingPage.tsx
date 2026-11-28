@@ -23,7 +23,10 @@ import {
   buildOnboardingUrlForCommunityReturn,
   sanitizeOAuthAuthorizeReturnPath,
 } from "../../../../shared/webAppRouteState";
-import { captureDistributionAttributionFromLocation } from "../../../../shared/distributionAttribution";
+import {
+  buildPolynetOutboundAppUrl,
+  captureDistributionAttributionFromLocation,
+} from "../../../../shared/distributionAttribution";
 import "./WebCommunityLandingPage.css";
 
 type Props = {
@@ -649,7 +652,7 @@ export function WebCommunityLandingPage(props: Props) {
                   </div>
                 ) : null}
                 {data!.app ? (
-                  <a className="cl-tile is-app" href={data!.app.url} target="_blank" rel="noreferrer">
+                  <a className="cl-tile is-app" href={buildPolynetOutboundAppUrl(data!.app.url, slug)} target="_blank" rel="noreferrer">
                     <span className="cl-app-mark" aria-hidden="true">{initials(data!.app.name)}</span>
                     <span className="cl-app-text"><span>{data!.app.name} <span className="cl-dim">· the community's app</span></span><span className="cl-dim">Members sign in with the same account.</span></span>
                     <span className="cl-dim">{data!.app.host}</span>

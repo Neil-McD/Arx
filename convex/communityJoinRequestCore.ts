@@ -1,3 +1,10 @@
+import {
+  acquisitionAttributionRowPatch,
+  hasAnyAttributionOnRow,
+  normalizeCommunityAcquisitionAttribution,
+  type CommunityAcquisitionAttribution,
+} from "./distributionAttributionCore";
+
 export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -13,6 +20,12 @@ export type CommunityJoinRequestLike = {
   reapplyAt?: number;
   attributionAnonymousId?: string;
   attributionClickId?: string;
+  attributionUtmSource?: string;
+  attributionUtmMedium?: string;
+  attributionUtmCampaign?: string;
+  attributionUtmContent?: string;
+  attributionReferrerHost?: string;
+  attributionReferralCode?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -152,14 +165,13 @@ export async function ensurePendingCommunityJoinRequest(args: {
   communityId: any;
   userId: any;
   nowMs: number;
-  attribution?: { anonymousId?: string; clickId?: string } | null;
+  attribution?: CommunityAcquisitionAttribution | null;
 }): Promise<CommunityJoinRequestLike> {
   const pair = await loadCompatibleCommunityJoinRequestPair(args);
   const existing = pair.current;
-  const attributionPatch = {
-    ...(args.attribution?.anonymousId ? { attributionAnonymousId: args.attribution.anonymousId } : {}),
-    ...(args.attribution?.clickId ? { attributionClickId: args.attribution.clickId } : {}),
-  };
+  const attributionPatch = acquisitionAttributionRowPatch(
+    normalizeCommunityAcquisitionAttribution(args.attribution),
+  );
   if (!existing) {
     await deletePairRowsExcept({ ctx: args.ctx, rows: pair.rows });
     const id = await args.ctx.db.insert("communityJoinRequests", {
@@ -185,9 +197,7 @@ export async function ensurePendingCommunityJoinRequest(args: {
   if (status === "pending" || !communityJoinRequestCanReapply(existing, args.nowMs)) {
     return existing;
   }
-  const shouldKeepExistingAttribution = Boolean(
-    existing.attributionAnonymousId || existing.attributionClickId,
-  );
+  const shouldKeepExistingAttribution = hasAnyAttributionOnRow(existing);
   await args.ctx.db.patch(existing._id, {
     status: "pending",
     deniedAt: undefined,

@@ -615,8 +615,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityRetentionAnalytics` (bounded manager-only Retention & LTV Analytics: activation rate, median TTFV, milestone-to-retention lift, acquisition source LTV comparison, and Chief of Staff verified saved MRR),
   `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (per-community
   Distribution Engineer workspace connections encrypted at rest in Settings → Your app,
-  community-scoped join/approval/checkout attribution stamping + Stripe membership/pod
-  checkout metadata handoff, and cron-backed delivery recovery),
+  community-scoped join/approval/checkout/OAuth acquisition attribution stamping across
+  DE, UTM campaigns, referrals, and external referrers, Stripe membership/pod checkout
+  metadata handoff, outbound connected-app link tagging, and cron-backed delivery recovery),
   `criticalAudit`, `errorLogging`, `probe` (health check).
 - **Tables:** `operatorRoles`, `operatorGrantUsageCycles`, `platformDiagnosticEvents`,
   `criticalAuditEvents`, `communityAnalyticsEvents`, `communityDailyAnalytics`,

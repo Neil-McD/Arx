@@ -23,6 +23,7 @@ import { incrementCommunityDailyAnalytics } from "./communityAnalyticsRollups";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { joinPublicCommunityInternal } from "./communityPublic";
 import { webhookUrlIsAllowed } from "./connectedApps";
+import { communityAcquisitionAttributionValidator } from "./distributionAttributionCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -202,12 +203,7 @@ export const joinCommunityFromLanding = mutation({
   args: {
     communitySlug: v.string(),
     authSubject: v.optional(v.string()),
-    distributionAttribution: v.optional(
-      v.object({
-        anonymousId: v.optional(v.string()),
-        clickId: v.optional(v.string()),
-      }),
-    ),
+    distributionAttribution: v.optional(communityAcquisitionAttributionValidator),
   },
   handler: async (ctx, args) => {
     const userId = await requiredUserId(ctx, args.authSubject);
@@ -244,12 +240,7 @@ export const startCommunityLandingCheckout = action({
     plan: v.optional(v.string()),
     appId: v.optional(v.string()),
     authSubject: v.string(),
-    distributionAttribution: v.optional(
-      v.object({
-        anonymousId: v.optional(v.string()),
-        clickId: v.optional(v.string()),
-      }),
-    ),
+    distributionAttribution: v.optional(communityAcquisitionAttributionValidator),
   },
   handler: async (ctx, args): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> => {
     const slug = cleanSlug(args.communitySlug);

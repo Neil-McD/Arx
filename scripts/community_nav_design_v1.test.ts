@@ -202,7 +202,9 @@ test("connected apps render as Launch buttons in the footer directly above Invit
   }));
   const labels = labelsInOrder(html);
   expect(labels.slice(-4)).toEqual(["Analytics", "Launch Acme Studio", "Launch Ops", "Invite people"]);
-  expect(html).toContain('href="https://acme.example"');
+  expect(html).toContain(
+    'href="https://acme.example/?utm_source=polynet&amp;utm_medium=community&amp;utm_campaign=dawn-patrol&amp;polynet_community=dawn-patrol"',
+  );
   expect(html).toContain('title="Launch Acme Studio"');
   expect(html).not.toContain("Launch Launch Ops");
 
