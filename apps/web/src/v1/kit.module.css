@@ -1209,9 +1209,9 @@
 .app .hbrief em{font-style:normal}
 .app .hbrief>span button{color:var(--ink2);font-weight:500;cursor:pointer}.app .hbrief>span button:hover{color:var(--ink)}
 .app .hbrief-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:10px;font-size:12.5px;color:var(--ink3)}
-.app .hbrief-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
-.app .hbrief-actions button{color:var(--ink2);font-weight:500;padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--s1);cursor:pointer;transition:color .15s var(--ease),background .15s var(--ease),border-color .15s var(--ease)}
-.app .hbrief-actions button:hover{color:var(--ink);border-color:var(--line2);background:var(--s2)}
+.app .hbrief-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
+.app .hbrief-actions button{color:var(--ink2);font-weight:500;padding:2px 0;border:0;background:none;cursor:pointer;transition:color .15s var(--ease)}
+.app .hbrief-actions button:hover{color:var(--ink)}
 .app .hbrief-actions button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .app .hnone{margin:16px 0 0;font-size:15px;color:var(--ink2)}
 .app.on-t-on .hbrief,.app.on-t-on .hnone{display:none}
