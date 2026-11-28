@@ -329,19 +329,104 @@ test("external app sales carry attribution & DE lead handoff (including pre-sign
   expect(analytics.saved_revenue.saved_members_30d).toBe(0);
   expect(analytics.saved_revenue.saved_mrr_30d_base_units).toBe(0);
 
-  // 4. Malformed optional attribution/revenue fields are safely ignored and NEVER break granting access.
+  // 4. Malformed & non-primitive optional attribution/revenue fields are safely ignored and NEVER break granting access.
   const safeUser = await newUser(t, "safe_buyer");
   const resBadOptional = await report(t, ids.app.secret, {
     email: "safe_buyer@example.com",
     active: true,
     tier: "setter",
-    attribution: { de_aid: "not-a-uuid", referrer_host: "javascript:alert(1)" },
-    revenue: { amount_base_units: -500, currency: "INVALID", billing_interval: "weekly" },
+    attribution: { de_aid: { toString: null }, referrer_host: "javascript:alert(1)" },
+    revenue: {
+      amount_base_units: { toString: null },
+      currency: "USD",
+      currency_decimals: { valueOf: null },
+      billing_interval: { toString: null },
+    },
   });
   expect(resBadOptional.status).toBe(200);
   expect(await resBadOptional.json()).toEqual({ outcome: "in" });
   expect(await canEnter(t, ids.communityId, safeUser)).toBe(true);
   } finally {
     vi.unstubAllEnvs();
+  }
+});
+
+test("external app revenue preserves historical plan prices across upgrades and excludes canceled gaps on resubscribe", async () => {
+  const jan1 = Date.UTC(2026, 0, 1, 12, 0, 0);
+  const jan20 = Date.UTC(2026, 0, 20, 12, 0, 0);
+  const apr1 = Date.UTC(2026, 3, 1, 12, 0, 0);
+  const jun1 = Date.UTC(2026, 5, 1, 12, 0, 0);
+  const dateNowSpy = vi.spyOn(Date, "now");
+  try {
+    const t = convexTest(schema, modules);
+    dateNowSpy.mockReturnValue(jan1);
+    const ids = await setup(t);
+    const asOwner = t.withIdentity({ subject: "owner-subject" });
+
+    // A: $10/mo in Jan, Feb, Mar -> upgrades to $20/mo on Apr 1 -> realized LTV must be $50 (not $80).
+    const upgrader = await newUser(t, "upgrader");
+    await report(t, ids.app.secret, {
+      email: "upgrader@example.com",
+      active: true,
+      tier: "setter",
+      revenue: { amount_base_units: 1000, currency: "USD", billing_interval: "monthly" },
+    });
+    dateNowSpy.mockReturnValue(apr1);
+    await report(t, ids.app.secret, {
+      email: "upgrader@example.com",
+      active: true,
+      tier: "cris",
+      revenue: { amount_base_units: 2000, currency: "USD", billing_interval: "monthly" },
+    });
+    const upMem = await membership(t, upgrader);
+    const upRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner-subject",
+      communityId: ids.communityId,
+      membershipId: upMem._id,
+    });
+    expect(upRecord?.revenue).toMatchObject({
+      active_mrr_base_units: 2000,
+      realized_ltv_base_units: 5000,
+      billing_cycles_paid: 4,
+      currency: "USD",
+      includes_external_app_sales: true,
+    });
+
+    // B: $10/mo on Jan 1 -> cancels Jan 20 -> resubscribes Jun 1 -> realized LTV must be $20 (2 cycles, not $60).
+    dateNowSpy.mockReturnValue(jan1);
+    const returner = await newUser(t, "returner");
+    await report(t, ids.app.secret, {
+      email: "returner@example.com",
+      active: true,
+      tier: "setter",
+      revenue: { amount_base_units: 1000, currency: "USD", billing_interval: "monthly" },
+    });
+    dateNowSpy.mockReturnValue(jan20);
+    await report(t, ids.app.secret, {
+      email: "returner@example.com",
+      active: false,
+    });
+    dateNowSpy.mockReturnValue(jun1);
+    await report(t, ids.app.secret, {
+      email: "returner@example.com",
+      active: true,
+      tier: "setter",
+      revenue: { amount_base_units: 1000, currency: "USD", billing_interval: "monthly" },
+    });
+    const retMem = await membership(t, returner);
+    const retRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, {
+      authSubject: "owner-subject",
+      communityId: ids.communityId,
+      membershipId: retMem._id,
+    });
+    expect(retRecord?.revenue).toMatchObject({
+      active_mrr_base_units: 1000,
+      realized_ltv_base_units: 2000,
+      billing_cycles_paid: 2,
+      currency: "USD",
+      includes_external_app_sales: true,
+    });
+  } finally {
+    dateNowSpy.mockRestore();
   }
 });

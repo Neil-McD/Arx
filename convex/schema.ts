@@ -1652,6 +1652,18 @@ export default defineSchema({
     billingInterval: v.optional(v.union(v.literal("monthly"), v.literal("annual"), v.literal("one_time"))),
     startedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
+    revenueHistory: v.optional(
+      v.array(
+        v.object({
+          amountBaseUnits: v.number(),
+          currency: v.string(),
+          currencyDecimals: v.optional(v.number()),
+          billingInterval: v.union(v.literal("monthly"), v.literal("annual"), v.literal("one_time")),
+          startedAt: v.number(),
+          endedAt: v.number(),
+        }),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

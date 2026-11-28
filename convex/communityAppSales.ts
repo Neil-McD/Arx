@@ -198,22 +198,98 @@ export const recordAppSaleInternal = internalMutation({
       .withIndex("by_app_email", (q: any) => q.eq("appId", args.appId).eq("email", email)).first();
     const shouldWriteAttribution = Boolean(normalizedAttribution && (!existing || !hasAnyAttributionOnRow(existing)));
     const attributionPatch = shouldWriteAttribution ? acquisitionAttributionRowPatch(normalizedAttribution) : {};
-    const revenuePatch = args.active
-      ? normalizedRevenue
-        ? {
+
+    const MAX_REVENUE_HISTORY = 40;
+    const DAY_MS = 24 * 60 * 60_000;
+    const existingHistory = Array.isArray(existing?.revenueHistory) ? existing.revenueHistory : [];
+    const existingHasRevenue = Boolean(
+      existing &&
+        typeof existing.amountBaseUnits === "number" &&
+        existing.amountBaseUnits > 0 &&
+        typeof existing.currency === "string" &&
+        existing.currency.trim(),
+    );
+    const makeClosedSegment = (endMs: number) => ({
+      amountBaseUnits: existing!.amountBaseUnits!,
+      currency: existing!.currency!,
+      ...(typeof existing!.currencyDecimals === "number" ? { currencyDecimals: existing!.currencyDecimals } : {}),
+      billingInterval: (existing!.billingInterval ?? "monthly") as "monthly" | "annual" | "one_time",
+      startedAt:
+        typeof existing!.startedAt === "number" && existing!.startedAt > 0
+          ? existing!.startedAt
+          : existing!.createdAt,
+      endedAt: Math.max(
+        typeof existing!.startedAt === "number" && existing!.startedAt > 0
+          ? existing!.startedAt
+          : existing!.createdAt,
+        endMs,
+      ),
+    });
+
+    let revenuePatch: Record<string, unknown> = {};
+    if (args.active) {
+      const wasCanceled = Boolean(existing && !existing.active);
+      if (wasCanceled && existingHasRevenue) {
+        // Preserve the completed prior subscription interval and start a fresh one on resubscribe
+        // so canceled gap months are never counted as paid cycles.
+        const archived = [
+          ...existingHistory,
+          makeClosedSegment(existing!.endedAt ?? existing!.updatedAt ?? nowMs),
+        ].slice(-MAX_REVENUE_HISTORY);
+        revenuePatch = {
+          revenueHistory: archived,
+          ...(normalizedRevenue
+            ? {
+                amountBaseUnits: normalizedRevenue.amountBaseUnits,
+                currency: normalizedRevenue.currency,
+                currencyDecimals: normalizedRevenue.currencyDecimals,
+                billingInterval: normalizedRevenue.billingInterval,
+              }
+            : {}),
+          startedAt: nowMs,
+          endedAt: undefined,
+        };
+      } else if (normalizedRevenue) {
+        const existingStart =
+          typeof existing?.startedAt === "number" && existing.startedAt > 0
+            ? existing.startedAt
+            : existing?.createdAt ?? nowMs;
+        const planChanged =
+          existingHasRevenue &&
+          (existing!.amountBaseUnits !== normalizedRevenue.amountBaseUnits ||
+            existing!.currency !== normalizedRevenue.currency ||
+            (existing!.billingInterval ?? "monthly") !== normalizedRevenue.billingInterval);
+        if (planChanged && nowMs - existingStart >= DAY_MS) {
+          // Close the prior price/interval segment before starting the new plan so upgrades/downgrades
+          // never retroactively reprice earlier billing periods.
+          const archived = [...existingHistory, makeClosedSegment(nowMs)].slice(-MAX_REVENUE_HISTORY);
+          revenuePatch = {
+            revenueHistory: archived,
+            amountBaseUnits: normalizedRevenue.amountBaseUnits,
+            currency: normalizedRevenue.currency,
+            currencyDecimals: normalizedRevenue.currencyDecimals,
+            billingInterval: normalizedRevenue.billingInterval,
+            startedAt: nowMs,
+            endedAt: undefined,
+          };
+        } else {
+          revenuePatch = {
             amountBaseUnits: normalizedRevenue.amountBaseUnits,
             currency: normalizedRevenue.currency,
             currencyDecimals: normalizedRevenue.currencyDecimals,
             billingInterval: normalizedRevenue.billingInterval,
             startedAt: existing?.startedAt ?? nowMs,
             endedAt: undefined,
-          }
-        : existing?.endedAt !== undefined
-          ? { endedAt: undefined }
-          : {}
-      : existing
-        ? { endedAt: existing.endedAt ?? nowMs }
-        : {};
+          };
+        }
+      } else if (wasCanceled) {
+        revenuePatch = { startedAt: nowMs, endedAt: undefined };
+      } else if (existing?.endedAt !== undefined) {
+        revenuePatch = { endedAt: undefined };
+      }
+    } else if (existing) {
+      revenuePatch = { endedAt: existing.endedAt ?? nowMs };
+    }
     const fields = {
       active: args.active,
       tierKey,

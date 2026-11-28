@@ -917,6 +917,7 @@ export const getCommunityMemberRecord = query({
             startedAt: row.startedAt,
             endedAt: row.endedAt,
             updatedAt: row.updatedAt,
+            revenueHistory: row.revenueHistory ?? null,
           })),
           nowMs,
         })

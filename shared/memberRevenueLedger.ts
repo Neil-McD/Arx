@@ -92,6 +92,32 @@ export function countCalendarBillingPeriods(
   return cycles;
 }
 
+// Counts calendar billing periods for a closed segment whose end is exclusive of
+// a replacement/cancellation boundary (so Jan 1 -> Apr 1 upgrade counts 3 cycles
+// at the old price and Apr 1 starts cycle 1 at the new price).
+function countClosedCalendarBillingPeriods(
+  startMs: number,
+  endedAtMs: number,
+  billingPeriod: string,
+): number {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endedAtMs) || startMs <= 0) return 0;
+  if (endedAtMs <= startMs) return 1;
+  const period = String(billingPeriod ?? "").trim().toLowerCase();
+  const annual = period === "annual" || period === "yearly";
+  let cycles = 1;
+  const maxCycles = annual ? 50 : 600;
+  const toleranceMs = 12 * 60 * 60_000;
+  while (cycles < maxCycles) {
+    const nextBoundary = addCalendarCyclesUtc(startMs, cycles, annual);
+    if (nextBoundary + toleranceMs < endedAtMs) {
+      cycles += 1;
+    } else {
+      break;
+    }
+  }
+  return cycles;
+}
+
 export type PodPaymentRevenueLike = {
   status: string;
   amountBaseUnits: number;
@@ -99,6 +125,15 @@ export type PodPaymentRevenueLike = {
   createdAt: number;
   grantedAt?: number | null;
   refundDue?: boolean;
+};
+
+export type ExternalAppGrantRevenueSegmentLike = {
+  amountBaseUnits: number;
+  currency: string;
+  currencyDecimals?: number | null;
+  billingInterval?: "monthly" | "annual" | "one_time" | string | null;
+  startedAt: number;
+  endedAt: number;
 };
 
 export type ExternalAppGrantRevenueLike = {
@@ -111,6 +146,7 @@ export type ExternalAppGrantRevenueLike = {
   startedAt?: number | null;
   endedAt?: number | null;
   updatedAt?: number | null;
+  revenueHistory?: readonly ExternalAppGrantRevenueSegmentLike[] | null;
 };
 
 export type MemberRevenueSummary = {
@@ -332,17 +368,26 @@ export function computeMemberRevenueSummary(args: {
 
   let includesExternalAppSales = false;
   if (!membershipRevenueRevoked) {
-    for (const grant of args.externalAppGrants ?? []) {
-      const amount = Math.floor(Number(grant.amountBaseUnits ?? 0));
-      if (!Number.isFinite(amount) || amount <= 0) continue;
-      const grantCurrency = String(grant.currency ?? "").trim().toUpperCase();
-      if (!/^[A-Z]{3}$/.test(grantCurrency)) continue;
-      const decimals = Math.max(0, Math.min(4, Math.floor(Number(grant.currencyDecimals ?? 2))));
-      const interval = String(grant.billingInterval ?? "monthly").trim().toLowerCase();
+    const addExternalSegment = (seg: {
+      amountBaseUnits?: number | null;
+      currency?: string | null;
+      currencyDecimals?: number | null;
+      billingInterval?: string | null;
+      startMs: number;
+      endBound: number;
+      isActive: boolean;
+      closedByBoundary: boolean;
+    }) => {
+      const amount = Math.floor(Number(seg.amountBaseUnits ?? 0));
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      const grantCurrency = String(seg.currency ?? "").trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(grantCurrency)) return;
+      const decimals = Math.max(0, Math.min(4, Math.floor(Number(seg.currencyDecimals ?? 2))));
+      const interval = String(seg.billingInterval ?? "monthly").trim().toLowerCase();
       const sameCurrency = trackCurrency(grantCurrency, decimals);
       includesExternalAppSales = true;
 
-      if (grant.active && !isOut && interval !== "one_time") {
+      if (seg.isActive && !isOut && interval !== "one_time") {
         if (sameCurrency) {
           activeMrrBaseUnits += monthlyMrrForPricePoint({
             amountBaseUnits: amount,
@@ -354,27 +399,55 @@ export function computeMemberRevenueSummary(args: {
       }
 
       let cyclesPaid = 1;
-      if (interval !== "one_time") {
-        const startMs =
-          typeof grant.startedAt === "number" && Number.isFinite(grant.startedAt) && grant.startedAt > 0
-            ? grant.startedAt
-            : Number(grant.createdAt ?? 0);
-        const endBound = grant.active
-          ? args.nowMs
-          : Math.min(
-              typeof grant.endedAt === "number" && Number.isFinite(grant.endedAt) && grant.endedAt > 0
-                ? grant.endedAt
-                : Number(grant.updatedAt ?? args.nowMs),
-              args.nowMs,
-            );
-        if (startMs > 0 && endBound > startMs) {
-          cyclesPaid = Math.max(1, countCalendarBillingPeriods(startMs, endBound, interval));
-        }
+      if (interval !== "one_time" && seg.startMs > 0 && seg.endBound > seg.startMs) {
+        cyclesPaid = Math.max(
+          1,
+          seg.closedByBoundary
+            ? countClosedCalendarBillingPeriods(seg.startMs, seg.endBound, interval)
+            : countCalendarBillingPeriods(seg.startMs, seg.endBound, interval),
+        );
       }
       billingCyclesPaid += cyclesPaid;
       if (sameCurrency) {
         realizedLtvBaseUnits += cyclesPaid * amount;
       }
+    };
+
+    for (const grant of args.externalAppGrants ?? []) {
+      for (const hist of grant.revenueHistory ?? []) {
+        addExternalSegment({
+          amountBaseUnits: hist.amountBaseUnits,
+          currency: hist.currency,
+          currencyDecimals: hist.currencyDecimals,
+          billingInterval: hist.billingInterval,
+          startMs: Number(hist.startedAt ?? 0),
+          endBound: Math.min(Number(hist.endedAt ?? args.nowMs), args.nowMs),
+          isActive: false,
+          closedByBoundary: true,
+        });
+      }
+      const startMs =
+        typeof grant.startedAt === "number" && Number.isFinite(grant.startedAt) && grant.startedAt > 0
+          ? grant.startedAt
+          : Number(grant.createdAt ?? 0);
+      const endBound = grant.active
+        ? args.nowMs
+        : Math.min(
+            typeof grant.endedAt === "number" && Number.isFinite(grant.endedAt) && grant.endedAt > 0
+              ? grant.endedAt
+              : Number(grant.updatedAt ?? args.nowMs),
+            args.nowMs,
+          );
+      addExternalSegment({
+        amountBaseUnits: grant.amountBaseUnits,
+        currency: grant.currency,
+        currencyDecimals: grant.currencyDecimals,
+        billingInterval: grant.billingInterval,
+        startMs,
+        endBound,
+        isActive: grant.active,
+        closedByBoundary: !grant.active,
+      });
     }
   }
 

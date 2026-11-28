@@ -401,6 +401,7 @@ export const getCommunityRetentionAnalytics = query({
           startedAt: grant.startedAt ?? null,
           endedAt: grant.endedAt ?? null,
           updatedAt: grant.updatedAt ?? null,
+          revenueHistory: grant.revenueHistory ?? null,
         }));
 
         const revenue = computeMemberRevenueSummary({

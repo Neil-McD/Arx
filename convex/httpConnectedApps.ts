@@ -55,11 +55,14 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
       if (!email || email.length > 320 || !email.includes("@") || typeof body?.active !== "boolean") return json(400, { error: "email_and_active_required" });
 
       // Optional acquisition & DE attribution (malformed optional fields are ignored so billing never breaks).
-      const rawAttr = body?.attribution && typeof body.attribution === "object" && !Array.isArray(body.attribution)
-        ? body.attribution
-        : null;
-      const attribution = rawAttr
-        ? normalizeCommunityAcquisitionAttribution({
+      let attribution: ReturnType<typeof normalizeCommunityAcquisitionAttribution> = null;
+      try {
+        const rawAttr =
+          body?.attribution && typeof body.attribution === "object" && !Array.isArray(body.attribution)
+            ? body.attribution
+            : null;
+        if (rawAttr) {
+          attribution = normalizeCommunityAcquisitionAttribution({
             anonymousId: rawAttr.de_aid ?? rawAttr.anonymous_id ?? rawAttr.anonymousId,
             clickId: rawAttr.de_cid ?? rawAttr.click_id ?? rawAttr.clickId,
             utmSource: rawAttr.utm_source ?? rawAttr.utmSource,
@@ -68,13 +71,13 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
             utmContent: rawAttr.utm_content ?? rawAttr.utmContent,
             referrerHost: rawAttr.referrer_host ?? rawAttr.referrer ?? rawAttr.referrerHost,
             referralCode: rawAttr.referral_code ?? rawAttr.ref ?? rawAttr.referralCode,
-          })
-        : null;
+          });
+        }
+      } catch {
+        attribution = null;
+      }
 
       // Optional founder-reported outside-app revenue for Analytics & Member Records (0% Polynet fee).
-      const rawRev = body?.revenue && typeof body.revenue === "object" && !Array.isArray(body.revenue)
-        ? body.revenue
-        : null;
       let revenue:
         | {
             amountBaseUnits: number;
@@ -83,39 +86,58 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
             billingInterval: "monthly" | "annual" | "one_time";
           }
         | undefined;
-      if (rawRev) {
-        const rawAmount = Number(rawRev.amount_base_units ?? rawRev.amountBaseUnits);
-        const rawCurrency = typeof rawRev.currency === "string" ? rawRev.currency.trim().toUpperCase() : "";
-        const rawDecimals = rawRev.currency_decimals ?? rawRev.currencyDecimals;
-        const rawInterval = String(rawRev.billing_interval ?? rawRev.billingInterval ?? "monthly").trim().toLowerCase();
-        const billingInterval: "monthly" | "annual" | "one_time" | null =
-          rawInterval === "monthly"
-            ? "monthly"
-            : rawInterval === "annual" || rawInterval === "yearly"
-              ? "annual"
-              : rawInterval === "one_time"
-                ? "one_time"
-                : null;
-        if (
-          Number.isSafeInteger(rawAmount) &&
-          rawAmount >= 1 &&
-          rawAmount <= 100_000_000 &&
-          /^[A-Z]{3}$/.test(rawCurrency) &&
-          billingInterval
-        ) {
-          const parsedDecimals =
-            rawDecimals === undefined || rawDecimals === null
-              ? undefined
-              : Number.isSafeInteger(Number(rawDecimals)) && Number(rawDecimals) >= 0 && Number(rawDecimals) <= 4
-                ? Number(rawDecimals)
-                : undefined;
-          revenue = {
-            amountBaseUnits: rawAmount,
-            currency: rawCurrency,
-            ...(parsedDecimals !== undefined ? { currencyDecimals: parsedDecimals } : {}),
-            billingInterval,
-          };
+      try {
+        const rawRev =
+          body?.revenue && typeof body.revenue === "object" && !Array.isArray(body.revenue)
+            ? body.revenue
+            : null;
+        if (rawRev) {
+          const rawAmountVal = rawRev.amount_base_units ?? rawRev.amountBaseUnits;
+          const rawCurrencyVal = rawRev.currency;
+          const rawDecimalsVal = rawRev.currency_decimals ?? rawRev.currencyDecimals;
+          const rawIntervalVal = rawRev.billing_interval ?? rawRev.billingInterval;
+          const rawAmount = typeof rawAmountVal === "number" ? rawAmountVal : NaN;
+          const rawCurrency = typeof rawCurrencyVal === "string" ? rawCurrencyVal.trim().toUpperCase() : "";
+          const rawInterval =
+            rawIntervalVal === undefined || rawIntervalVal === null
+              ? "monthly"
+              : typeof rawIntervalVal === "string"
+                ? rawIntervalVal.trim().toLowerCase()
+                : "";
+          const billingInterval: "monthly" | "annual" | "one_time" | null =
+            rawInterval === "monthly"
+              ? "monthly"
+              : rawInterval === "annual" || rawInterval === "yearly"
+                ? "annual"
+                : rawInterval === "one_time"
+                  ? "one_time"
+                  : null;
+          if (
+            Number.isSafeInteger(rawAmount) &&
+            rawAmount >= 1 &&
+            rawAmount <= 100_000_000 &&
+            /^[A-Z]{3}$/.test(rawCurrency) &&
+            billingInterval
+          ) {
+            const parsedDecimals =
+              rawDecimalsVal === undefined || rawDecimalsVal === null
+                ? undefined
+                : typeof rawDecimalsVal === "number" &&
+                    Number.isSafeInteger(rawDecimalsVal) &&
+                    rawDecimalsVal >= 0 &&
+                    rawDecimalsVal <= 4
+                  ? rawDecimalsVal
+                  : undefined;
+            revenue = {
+              amountBaseUnits: rawAmount,
+              currency: rawCurrency,
+              ...(parsedDecimals !== undefined ? { currencyDecimals: parsedDecimals } : {}),
+              billingInterval,
+            };
+          }
         }
+      } catch {
+        revenue = undefined;
       }
 
       try {
