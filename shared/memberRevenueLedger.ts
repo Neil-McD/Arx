@@ -101,6 +101,18 @@ export type PodPaymentRevenueLike = {
   refundDue?: boolean;
 };
 
+export type ExternalAppGrantRevenueLike = {
+  active: boolean;
+  amountBaseUnits?: number | null;
+  currency?: string | null;
+  currencyDecimals?: number | null;
+  billingInterval?: "monthly" | "annual" | "one_time" | string | null;
+  createdAt: number;
+  startedAt?: number | null;
+  endedAt?: number | null;
+  updatedAt?: number | null;
+};
+
 export type MemberRevenueSummary = {
   active_mrr_base_units: number;
   realized_ltv_base_units: number;
@@ -110,6 +122,7 @@ export type MemberRevenueSummary = {
   currency: string | null;
   currency_decimals: number;
   mixed_currency: boolean;
+  includes_external_app_sales?: boolean;
 };
 
 export type StageMrrSummary = {
@@ -156,6 +169,7 @@ export function computeMemberRevenueSummary(args: {
   subscriptions: readonly SubscriptionRevenueLike[];
   subscriptionAuditEvents?: readonly SubscriptionAuditRevenueLike[];
   podPayments?: readonly PodPaymentRevenueLike[];
+  externalAppGrants?: readonly ExternalAppGrantRevenueLike[];
   nowMs: number;
 }): MemberRevenueSummary {
   const membership = args.membership;
@@ -316,6 +330,54 @@ export function computeMemberRevenueSummary(args: {
     }
   }
 
+  let includesExternalAppSales = false;
+  if (!membershipRevenueRevoked) {
+    for (const grant of args.externalAppGrants ?? []) {
+      const amount = Math.floor(Number(grant.amountBaseUnits ?? 0));
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const grantCurrency = String(grant.currency ?? "").trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(grantCurrency)) continue;
+      const decimals = Math.max(0, Math.min(4, Math.floor(Number(grant.currencyDecimals ?? 2))));
+      const interval = String(grant.billingInterval ?? "monthly").trim().toLowerCase();
+      const sameCurrency = trackCurrency(grantCurrency, decimals);
+      includesExternalAppSales = true;
+
+      if (grant.active && !isOut && interval !== "one_time") {
+        if (sameCurrency) {
+          activeMrrBaseUnits += monthlyMrrForPricePoint({
+            amountBaseUnits: amount,
+            currency: grantCurrency,
+            currencyDecimals: decimals,
+            billingPeriod: interval,
+          });
+        }
+      }
+
+      let cyclesPaid = 1;
+      if (interval !== "one_time") {
+        const startMs =
+          typeof grant.startedAt === "number" && Number.isFinite(grant.startedAt) && grant.startedAt > 0
+            ? grant.startedAt
+            : Number(grant.createdAt ?? 0);
+        const endBound = grant.active
+          ? args.nowMs
+          : Math.min(
+              typeof grant.endedAt === "number" && Number.isFinite(grant.endedAt) && grant.endedAt > 0
+                ? grant.endedAt
+                : Number(grant.updatedAt ?? args.nowMs),
+              args.nowMs,
+            );
+        if (startMs > 0 && endBound > startMs) {
+          cyclesPaid = Math.max(1, countCalendarBillingPeriods(startMs, endBound, interval));
+        }
+      }
+      billingCyclesPaid += cyclesPaid;
+      if (sameCurrency) {
+        realizedLtvBaseUnits += cyclesPaid * amount;
+      }
+    }
+  }
+
   if (mixedCurrency) {
     realizedLtvBaseUnits = 0;
     activeMrrBaseUnits = 0;
@@ -330,6 +392,7 @@ export function computeMemberRevenueSummary(args: {
     currency: mixedCurrency ? null : currency,
     currency_decimals: currencyDecimals,
     mixed_currency: mixedCurrency,
+    ...(includesExternalAppSales ? { includes_external_app_sales: true } : {}),
   };
 }
 

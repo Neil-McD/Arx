@@ -56,6 +56,7 @@ export function buildCommunityPlanCheckoutUrl(args: {
 
 export function buildConnectedAppSetupPrompt(args: {
   communityName: string;
+  communitySlug?: string | null;
   appName: string;
   appId: string;
   apiOrigin: string;
@@ -69,37 +70,60 @@ export function buildConnectedAppSetupPrompt(args: {
   hasAppLink?: boolean;
 }): string {
   const plans = args.tiers.length
-    ? args.tiers.map((tier) => `- ${tier.name}: tier key \`${tier.key}\`${tier.key === "member" ? " (the base membership: leave \`tier\` out)" : ""}; grants ${["community", ...tier.grants].map((grant) => `\`${grant}\``).join(", ")}`).join("\n")
-    : "- (No plans named yet: everyone holds the base membership `member` and the grant `community`.)";
+    ? args.tiers
+        .map((tier) => {
+          const checkoutLink = args.communityUrl
+            ? ` -> Polynet upgrade checkout link: ${buildCommunityPlanCheckoutUrl({
+                communityUrl: args.communityUrl,
+                tierKey: tier.key,
+                appId: args.appId,
+              })}`
+            : "";
+          return `- ${tier.name}: tier key \`${tier.key}\`${tier.key === "member" ? " (the base membership: leave \`tier\` out)" : ""}; grants ${["community", ...tier.grants].map((grant) => `\`${grant}\``).join(", ")}${checkoutLink}`;
+        })
+        .join("\n")
+    : `- (No plans named yet: everyone holds the base membership \`member\` and the grant \`community\`.${args.communityUrl ? ` Polynet join/checkout link: ${buildCommunityPlanCheckoutUrl({ communityUrl: args.communityUrl, appId: args.appId })}` : ""})`;
   const milestonesSection = formatPromptMilestonesSection({
     appName: args.appName,
     apiOrigin: args.apiOrigin,
     milestones: args.milestones,
     identityMode: "existing",
   });
+  const communitySlugHint = args.communitySlug?.trim() || "<your-community-slug>";
   // The guide without its front matter.
   const guide = args.guide.replace(/^---[\s\S]*?\n---\n+/, "").trim();
-  return `Connect this app to its Polynet community ("${args.communityName}").
+  return `Connect this app ("${args.appName}") to its Polynet community ("${args.communityName}") using the **Native to your app** path (keep your own sign-in and outside Stripe).
 
-Polynet runs the community and its plans; this app keeps its own sign-in and checkout. Implement the integration described in the guide below, in this codebase, following its conventions:
+Billing & fee rule:
+- Customers this app acquires and bills completely on its own stay on this app's own Stripe (**0% Polynet fee**).
+- Customers who originate from Polynet (arriving with \`polynet_community=${communitySlugHint}\` from your community's outbound app link, or already holding a free community membership in Polynet) route their Upgrade buttons to Polynet's direct plan checkout link below (**2.9% Polynet fee**, returning straight back to this app after payment).
 
-1. Report this app's own sales to Polynet after every subscription change (no Polynet fee on these).
-2. Gate features on Polynet grants as well as this app's own billing (someone may have bought through Polynet).
-${args.hasWebhook ? "3. Add the webhook endpoint for access.changed, verifying the Standard Webhooks signature." : "3. (Optional) If you add a webhook address in Polynet later, add the access.changed endpoint."}
-4. Link to the community from this app (guide section 4). Look at this app's screens first, then suggest where the link would help buyers most (after purchase, main navigation, onboarding, account or billing page, help menu, welcome email), with a one-line reason each. Ask me which to add before adding any; use this app's own components and design.
-5. Report member milestones and daily app activity to the Member Board so onboarding and Chief of Staff reflect real product progress:
+Implement these parts in this codebase following its conventions:
+
+1. **Detect Polynet-originated visitors & route their upgrades to Polynet checkout:**
+   - When a visitor lands with \`?polynet_community=${communitySlugHint}\` (automatically appended by Polynet on outbound app links), store that origin in a first-party cookie/session (e.g. 90 days) without breaking normal app navigation.
+   - When a Polynet-originated user (or a signed-in user who has free/base access in Polynet and is upgrading) clicks Upgrade, send them to the matching Polynet direct plan checkout link listed under Plans below (forwarding any \`de_aid\`, \`de_cid\`, \`utm_*\`, and \`ref\` tags from their browser session so attribution never drops).
+2. **Report this app's own outside-Stripe sales (with optional attribution & revenue) to Polynet:**
+   - After every outside-Stripe subscription change (created, renewed, upgraded, canceled), POST to \`${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/sales\` with \`email\`, \`active\`, \`tier\`, \`external_ref\`, plus optional:
+     - \`attribution\`: \`{ "de_aid": "...", "de_cid": "...", "utm_source": "...", "utm_medium": "...", "utm_campaign": "...", "utm_content": "...", "referrer_host": "...", "referral_code": "..." }\` (capture first-touch on signup/checkout so Polynet Analytics and Distribution Engineer stay accurate),
+     - \`revenue\`: \`{ "amount_base_units": 4900, "currency": "USD", "billing_interval": "monthly" }\` (\`"monthly" | "annual" | "one_time"\`; populates Member Records and LTV by source in Polynet Analytics with 0% Polynet fee).
+3. **Gate features on Polynet grants as well as this app's own billing:**
+   - Someone may have bought through Polynet checkout or been comped there; check \`GET ${args.apiOrigin.replace(/\/+$/, "")}/apps/v1/access?email=<verified_email>\` and union with your own billing (fail closed for Polynet-sourced grants if unreachable).
+4. ${args.hasWebhook ? "**Add the webhook endpoint for `access.changed`**, verifying the Standard Webhooks signature." : "(Optional) If you add a webhook address in Polynet later, add the `access.changed` endpoint verifying the Standard Webhooks signature."}
+5. **Link to the community from this app (guide section 4):** Look at this app's screens first, then suggest where the link would help buyers most (after purchase, main navigation, onboarding, account or billing page, help menu, welcome email), with a one-line reason each. Ask me which to add before adding any; use this app's own components and design.
+6. **Report member milestones and daily app activity to the Member Board so onboarding and Chief of Staff reflect real product progress:**
    ${milestonesSection}
 
 Values for this community:
 - POLYNET_API_ORIGIN = ${args.apiOrigin}
 - App: ${args.appName} (${args.appId})
 - Community link: ${args.communityUrl ?? "(shown under Your app in Polynet)"}
-${args.hasAppLink ? "- Polynet already links members to this app from the community's left column.\n" : "- Polynet doesn't link to this app yet: I'll set its address under Your app.\n"}- POLYNET_APP_SECRET: I will set this myself in the server environment. Read it from process.env; never hard-code, log or commit it, and never expose it to browser code.
+${args.hasAppLink ? "- Polynet already links members to this app from the community's left column (tagged with `polynet_community`).\n" : "- Polynet doesn't link to this app yet: I'll set its address under Your app.\n"}- POLYNET_APP_SECRET: I will set this myself in the server environment. Read it from process.env; never hard-code, log or commit it, and never expose it to browser code.
 ${args.hasWebhook ? "- POLYNET_WEBHOOK_SECRET: same, for the webhook signature.\n" : ""}
-Plans (map this app's plans to these tier keys; gate on the grants):
+Plans (map this app's plans to these tier keys; gate on the grants; use the Polynet checkout link for Polynet-originated upgrades):
 ${plans}
 
-Before writing code, find where this app records subscription changes and where it checks what a user can access, and tell me your plan. Add tests for the sales report (including that it never breaks billing) and the access check (including the "Polynet unreachable" case). Add the environment variable names to the example env file.
+Before writing code, find where this app records subscription changes, renders Upgrade buttons, and checks what a user can access, and tell me your plan. Add tests for the sales report (including attribution/revenue passthrough and never breaking billing), Polynet-originated upgrade routing, and the access check (including the "Polynet unreachable" case). Add the environment variable names to the example env file.
 
 --- The guide ---
 
@@ -150,6 +174,7 @@ What to build:
 3. A clean pricing / access section matching the plans above, where each plan button links to its exact CTA URL.
 4. A short FAQ section answering common objections and ending with a final CTA to ${buildCommunityPlanCheckoutUrl({ communityUrl: args.communityUrl, appId: args.appId })}.
 5. Responsive layout (desktop + mobile), fast load time, clean semantic HTML/CSS, and ready-to-deploy config for Vercel or Cloudflare Pages.
+6. Attribution pass-through: add a tiny inline script that reads incoming \`de_aid\`, \`de_cid\`, \`utm_source\`, \`utm_medium\`, \`utm_campaign\`, \`utm_content\`, and \`ref\` query parameters (and any \`de_aid\`/\`de_cid\` saved by the Distribution Engineer pixel) and appends them onto every Polynet CTA link on the page so attribution never drops at checkout.
 
 Before writing code, ask me 3 quick questions (brand vibe/colors, target audience & main promise, and any real testimonials or numbers I want included) — or tell me you can start immediately with crisp defaults if I say "just build it".
 `;
@@ -192,7 +217,7 @@ export function buildUnifiedGateAppPrompt(args: {
     ? args.redirectUrls.map((url) => `- ${url}`).join("\n")
     : "- (Add your exact callback URL — e.g. `https://your-app.com/api/auth/polynet/callback` or `http://localhost:3000/api/auth/polynet/callback` — under Settings -> Your app -> Sign-in callbacks.)";
 
-  return `Use Polynet as the single unified gate (Sign in with Polynet + checkout + plan grants) for "${args.appName}" connected to the "${args.communityName}" community.
+  return `Use Polynet as the single unified gate (**Native to Polynet**: Sign in with Polynet + checkout + plan grants; 2.9% fee on all transactions) for "${args.appName}" connected to the "${args.communityName}" community.
 
 Do NOT build a separate password auth system or a separate Stripe checkout. Polynet handles sign-in, subscriptions, upgrades, refunds, and member grants; this app only needs a thin server session and server-side grant checks.
 
@@ -209,11 +234,12 @@ ${callbacks}
 Plans & direct checkout links (each link pre-selects that plan and returns the buyer straight back to this app after checkout):
 ${plans}
 
-Implement these 4 parts in this codebase following its conventions:
+Implement these 6 parts in this codebase following its conventions:
 
 1. **Sign in with Polynet (OAuth 2.1 + PKCE S256):**
    - Start route (e.g. \`GET /api/auth/polynet/start\`): generate cryptographic random \`state\` and PKCE \`code_verifier\` (43–128 chars), store both in an HttpOnly, Secure (in prod), SameSite=Lax short-lived cookie, compute \`code_challenge = base64url(SHA-256(code_verifier))\`, and redirect the browser to:
      \`${authorizeUrl}?client_id=${args.appId}&redirect_uri=<EXACT_REGISTERED_CALLBACK>&response_type=code&code_challenge=<CHALLENGE>&code_challenge_method=S256&state=<STATE>\`
+     (Preserve any captured \`de_aid\`, \`de_cid\`, \`utm_source\`, \`utm_medium\`, \`utm_campaign\`, \`utm_content\`, and \`ref\` query params on this redirect URL too so Polynet carries the visitor's original arrival source across sign-in and join.)
    - Callback route: verify \`state\` matches the cookie in constant time, handle \`?error=access_denied\` gracefully, then call server-to-server:
      \`\`\`http
      POST ${tokenUrl}
@@ -240,6 +266,9 @@ Implement these 4 parts in this codebase following its conventions:
 
 5. **Report product milestones & daily activity to the Member Board:**
    ${milestonesSection}
+
+6. **Preserve marketing & Distribution Engineer attribution into Polynet:**
+   - Capture incoming \`de_aid\`, \`de_cid\`, \`utm_source\`, \`utm_medium\`, \`utm_campaign\`, \`utm_content\`, and \`ref\` query parameters (plus any \`de_aid\`/\`de_cid\` cookie or localStorage value written by the Distribution Engineer pixel) in a short-lived first-party cookie/storage, and append them onto outbound links to \`${authorizeUrl}\` and the direct Polynet plan checkout URLs above so attribution never drops between this app and Polynet.
 
 Before writing code, inspect this repo's framework and routing structure, propose your exact file plan, and ask me if any details need adjusting. Add tests for PKCE state verification, token exchange error handling, and fail-closed grant checks, and add the env variable names to \`.env.example\`.
 `;

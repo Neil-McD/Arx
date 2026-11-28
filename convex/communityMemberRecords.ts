@@ -712,6 +712,7 @@ export const getCommunityMemberRecord = query({
       journeyCard,
       coachDrafts,
       podPaymentRows,
+      appGrantRows,
       communityAttributionRow,
       userAttributionRows,
       participation,
@@ -775,6 +776,14 @@ export const getCommunityMemberRecord = query({
             .query("communityPodPayments")
             .withIndex("by_user", (q) => q.eq("userId", subjectId))
             .take(20)
+        : Promise.resolve([] as any[]),
+      membership
+        ? ctx.db
+            .query("communityAppGrants")
+            .withIndex("by_community_user", (q) =>
+              q.eq("communityId", args.communityId).eq("userId", subjectId),
+            )
+            .take(10)
         : Promise.resolve([] as any[]),
       membership
         ? ctx.db
@@ -897,6 +906,17 @@ export const getCommunityMemberRecord = query({
             createdAt: row.createdAt,
             grantedAt: row.grantedAt,
             refundDue: row.refundDue,
+          })),
+          externalAppGrants: appGrantRows.map((row: any) => ({
+            active: Boolean(row.active),
+            amountBaseUnits: row.amountBaseUnits,
+            currency: row.currency,
+            currencyDecimals: row.currencyDecimals,
+            billingInterval: row.billingInterval,
+            createdAt: row.createdAt,
+            startedAt: row.startedAt,
+            endedAt: row.endedAt,
+            updatedAt: row.updatedAt,
           })),
           nowMs,
         })
