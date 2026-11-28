@@ -99,72 +99,76 @@ function RetentionAnalyticsSection(props: { retention: CommunityRetentionAnalyti
         <Figs figures={retentionFigures} />
       </div>
 
-      {hasAnyMembers && milestoneLift.length > 0 ? (
-        <div className="analytics-v1-block">
-          <span className={cx("lab")} style={{ display: "block", marginBottom: 10 }}>
-            Milestone retention lift
-          </span>
-          <div className="analytics-v1-table">
-            {milestoneLift.map((row) => (
-              <div key={row.key} className="analytics-v1-row">
-                <div className="analytics-v1-row-main">
-                  <span>{row.label}</span>
-                  <em>{row.stage_name}{row.kind === "custom" ? " · app or custom" : ""}</em>
-                </div>
-                <div className="analytics-v1-row-metrics">
-                  <span>
-                    <b>{ratePercent(row.completed_retention_rate)}</b> retained ({formatCount(row.completed_count)} done)
-                    {showPaidColumns && row.completed_avg_ltv_base_units != null
-                      ? ` · ${formatRetentionMoney(row.completed_avg_ltv_base_units)} avg LTV`
-                      : ""}
-                  </span>
-                  <em>
-                    vs. {ratePercent(row.not_completed_retention_rate)} without ({formatCount(row.not_completed_count)})
-                    {showPaidColumns && row.not_completed_avg_ltv_base_units != null
-                      ? ` · ${formatRetentionMoney(row.not_completed_avg_ltv_base_units)} avg LTV`
-                      : ""}
-                  </em>
-                </div>
-                {row.retention_lift_multiple != null ? (
-                  <span className={`analytics-v1-lift${row.retention_lift_multiple >= 1.2 ? " is-pos" : ""}`}>
-                    {row.retention_lift_multiple}× retention
-                  </span>
-                ) : null}
+      {(hasAnyMembers && milestoneLift.length > 0) || hasAnyCohort ? (
+        <div className="analytics-v1-grid">
+          {hasAnyMembers && milestoneLift.length > 0 ? (
+            <div className="analytics-v1-block">
+              <span className={cx("lab")} style={{ display: "block", marginBottom: 10 }}>
+                Milestone retention lift
+              </span>
+              <div className="analytics-v1-table">
+                {milestoneLift.map((row) => (
+                  <div key={row.key} className="analytics-v1-row">
+                    <div className="analytics-v1-row-main">
+                      <span>{row.label}</span>
+                      <em>{row.stage_name}{row.kind === "custom" ? " · app or custom" : ""}</em>
+                    </div>
+                    <div className="analytics-v1-row-metrics">
+                      <span>
+                        <b>{ratePercent(row.completed_retention_rate)}</b> retained ({formatCount(row.completed_count)} done)
+                        {showPaidColumns && row.completed_avg_ltv_base_units != null
+                          ? ` · ${formatRetentionMoney(row.completed_avg_ltv_base_units)} avg LTV`
+                          : ""}
+                      </span>
+                      <em>
+                        vs. {ratePercent(row.not_completed_retention_rate)} without ({formatCount(row.not_completed_count)})
+                        {showPaidColumns && row.not_completed_avg_ltv_base_units != null
+                          ? ` · ${formatRetentionMoney(row.not_completed_avg_ltv_base_units)} avg LTV`
+                          : ""}
+                      </em>
+                    </div>
+                    {row.retention_lift_multiple != null ? (
+                      <span className={`analytics-v1-lift${row.retention_lift_multiple >= 1.2 ? " is-pos" : ""}`}>
+                        {row.retention_lift_multiple}× retention
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+            </div>
+          ) : null}
 
-      {hasAnyCohort ? (
-        <div className="analytics-v1-block">
-          <span className={cx("lab")} style={{ display: "block", marginBottom: 10 }}>
-            By acquisition source
-          </span>
-          <div className="analytics-v1-table">
-            {bySource.map((row) => (
-              <div key={row.source} className="analytics-v1-row">
-                <div className="analytics-v1-row-main">
-                  <span>{row.label}</span>
-                  <em>{formatCount(row.members)} {row.members === 1 ? "member" : "members"}</em>
-                </div>
-                <div className="analytics-v1-row-metrics">
-                  <span>
-                    <b>{ratePercent(row.activation_rate)}</b> activated · <b>{ratePercent(row.retention_rate)}</b> retained
-                  </span>
-                  {showPaidColumns ? (
-                    <em>
-                      {row.paid_members > 0
-                        ? `${formatRetentionMoney(row.avg_realized_ltv_base_units)} avg LTV · ${formatCount(row.paid_members)} paid${row.avg_months_retained != null ? ` · ${row.avg_months_retained} mo avg` : ""}`
-                        : "No paid members in range"}
-                    </em>
-                  ) : row.avg_months_retained != null ? (
-                    <em>{row.avg_months_retained} mo average tenure</em>
-                  ) : null}
-                </div>
+          {hasAnyCohort ? (
+            <div className="analytics-v1-block">
+              <span className={cx("lab")} style={{ display: "block", marginBottom: 10 }}>
+                By acquisition source
+              </span>
+              <div className="analytics-v1-table">
+                {bySource.map((row) => (
+                  <div key={row.source} className="analytics-v1-row">
+                    <div className="analytics-v1-row-main">
+                      <span>{row.label}</span>
+                      <em>{formatCount(row.members)} {row.members === 1 ? "member" : "members"}</em>
+                    </div>
+                    <div className="analytics-v1-row-metrics">
+                      <span>
+                        <b>{ratePercent(row.activation_rate)}</b> activated · <b>{ratePercent(row.retention_rate)}</b> retained
+                      </span>
+                      {showPaidColumns ? (
+                        <em>
+                          {row.paid_members > 0
+                            ? `${formatRetentionMoney(row.avg_realized_ltv_base_units)} avg LTV · ${formatCount(row.paid_members)} paid${row.avg_months_retained != null ? ` · ${row.avg_months_retained} mo avg` : ""}`
+                            : "No paid members in range"}
+                        </em>
+                      ) : row.avg_months_retained != null ? (
+                        <em>{row.avg_months_retained} mo average tenure</em>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

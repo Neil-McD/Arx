@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
@@ -286,9 +286,15 @@ test("automated Day-0 onboarding runs ONLY on Chief of Staff, never on Free or G
   );
   expect(card?.agentOutcomeNote).toContain("Day-0 welcome");
 
-  const board = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
-    communityId: ids.communityId,
-  });
+  const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW + 60_000);
+  let board;
+  try {
+    board = await asOwner.query(api.communityMemberJourney.getCommunityMemberJourneyBoard, {
+      communityId: ids.communityId,
+    });
+  } finally {
+    dateNowSpy.mockRestore();
+  }
   const mayaCard = board.cards.find((entry) => entry.name === "Maya");
   expect(mayaCard?.status).toBe("on_track");
 
