@@ -293,6 +293,7 @@ function WebCommunityAgentDock(props, ref) {
   >({});
   const [, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const kitDockRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Home on the kit uses the mock's one-line field instead of the textarea.
   const kitInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -303,6 +304,26 @@ function WebCommunityAgentDock(props, ref) {
     if (!box) return;
     fitComposerHeight(box);
   }, [input]);
+  // Track the floating Home dock's live height (including multi-line drafts,
+  // image previews, and GuideAsks approval cards) so the bottom of the latest
+  // reply always clears the dock at maximum scroll.
+  useEffect(() => {
+    const dockEl = kitDockRef.current;
+    const scrollEl = scrollRef.current;
+    if (!dockEl || !scrollEl) return;
+    const sync = () => {
+      const h = Math.ceil(dockEl.getBoundingClientRect().height);
+      if (h > 0) scrollEl.style.setProperty("--kit-home-dock-height", `${h}px`);
+    };
+    sync();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(sync);
+    observer.observe(dockEl);
+    return () => {
+      observer.disconnect();
+      scrollEl.style.removeProperty("--kit-home-dock-height");
+    };
+  }, [props.isVisible, props.pageMode, props.community?.id, Boolean(props.home)]);
   // Home is a page whose main thing is its box, so opening it puts the cursor
   // there (Neil, Nov 14). Not on touch screens, where that raises the
   // keyboard, and never over something the person is already typing in.
@@ -1278,7 +1299,7 @@ function WebCommunityAgentDock(props, ref) {
             />
           </Scroll>
           {/* No agent here: Home has no guide box (docs/specs/community-agent-gateway-v0.md). */}
-          {agentOn ? <Dock>
+          {agentOn ? <Dock ref={kitDockRef}>
             {communityId ? <GuideAsks session={props.session} communityId={communityId} questions={guideQuestions} /> : null}
             {kitTalking || guideQuestions.length > 0 ? null : (
               <Chips chips={kitHomeIsHost ? HOST_HOME_SUGGESTIONS : MEMBER_HOME_SUGGESTIONS} onChip={sendSuggestion} />
