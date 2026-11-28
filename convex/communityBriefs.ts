@@ -19,7 +19,7 @@ import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from ".
 import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput, requireCommunityChatAccess } from "./communityCore";
 import { readCachedUserDisplayName as displayName } from "./profileCore";
-import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, removeBrief, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
+import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
 import { docReader, evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { communityAgentIsOn } from "./communityApps";
 import { communityHasProactiveAgentTier } from "./founderInferenceCore";
@@ -272,10 +272,13 @@ export const writeCommunityBriefInternal = internalMutation({
         communityId: args.communityId, summary: args.summary, refs: args.refs,
         runId: args.runId, windowEnd: args.windowEnd, updatedAt: args.nowMs,
       });
+      await ctx.db.patch(run._id, { changed: ["brief"] });
     } else {
-      await removeBrief(ctx, scope);
+      // Nothing new worth rewriting over: preserve any existing valid brief so
+      // quiet chatter or test posts never wipe a good brief off the panel.
+      const existing = await briefFor(ctx, scope);
+      await ctx.db.patch(run._id, { changed: [existing ? "kept brief" : "no brief"] });
     }
-    await ctx.db.patch(run._id, { changed: [args.summary ? "brief" : "no brief"] });
     return { ok: true as const };
   },
 });
@@ -335,7 +338,7 @@ export const runCommunityBriefInternal = internalAction({
 });
 
 // A place's brief, as its readers get it (brief.md in the folder; the panels
-// too): nothing when the guide is off, the brief is over three days old, or
+// too): nothing when the guide is off, the brief is over 14 days old, or
 // any post it drew on is no longer there, live, in the place. The
 // caller has already checked the reader may enter the place.
 export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoomId?: unknown; nowMs: number }): Promise<BriefView | null> {

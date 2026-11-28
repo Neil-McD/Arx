@@ -178,12 +178,12 @@ for that row only; a daily sweep re-schedules any row whose job was lost.
 A brief is a view, never a source (`shared/communityBriefs.ts`): it is a
 summary of one to three sentences in the guide's own words, never a list of
 who posted what; it names the posts it drew on, and only posts the guide was
-shown, and once any of them is removed it stops showing; when the recent
-posts are only noise the guide says so and the place has no brief; it is written
-fresh from the place's recent threads, never from the brief before it; it
-holds nothing that goes stale by itself (dates, counts, what's coming up are
-drawn live beside it) and no links; it stops showing three days after its last
-rewrite. A worker's write that goes through ends its run: a brief, or a
+shown, and once any of them is removed it stops showing; when recent posts
+are only noise the guide leaves any existing valid brief untouched instead of
+clearing it; it is written fresh from the place's recent threads (14-day
+window), never from the brief before it; it holds nothing that goes stale by
+itself (dates, counts, what's coming up are drawn live beside it) and no links;
+it stays visible for up to 14 days after its last rewrite. A worker's write that goes through ends its run: a brief, or a
 review with nothing refused, is one model request.
 
 A quiet scope costs nothing. AI off means no work rows run.
@@ -243,7 +243,7 @@ Two rules across lenses:
 | Memories | `communityNotes` with a scope key (`community:<id>`, `pod:<roomId>`), revisions, removals and `memory.md` (`communityMemoryIndex`), all through one door (`communityNotesStore`, held by a test). Old `communityPodNotes` rows are moved by a backfill | Drop the old tables (cleanup slice C) |
 | Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | Sources and undo on a note: built. The nights list and "Learned lately": deferred |
 | Personal memory | `shared/personalMemory.ts`, `convex/memberMemory.ts`: capped at 1,375 characters, written in a private talk with `member.memory.remember`, loaded into every talk with that member, never shown elsewhere | The You page |
-| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads (picked by what matters), the card, handbook and `memory.md`; a summary of one to three sentences that names the posts it drew on (or no brief when the posts are only noise); no links; nothing that goes stale. Read back through one reader (`readPlaceBrief`) as `brief.md`, `pods/<pod>/brief.md` and the first part of Home's and a pod's right panel: nothing once a post it drew on is gone, after three days, or with AI off. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | The panels; the morning email reads the stored brief and the founder brief's model call goes |
+| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads in the last 14 days (picked by what matters), the card, handbook and `memory.md`; a summary of one to three sentences that names the posts it drew on (or keeps any existing valid brief when new posts are only noise); no links; nothing that goes stale. Read back through one reader (`readPlaceBrief`) as `brief.md`, `pods/<pod>/brief.md` and the first part of Home's, Knowledge's and a pod's right panel: nothing once a post it drew on is gone, after 14 days, or with AI off. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | The panels; the morning email reads the stored brief and the founder brief's model call goes |
 
 ## 7. What the leading agents do, and what we take
 

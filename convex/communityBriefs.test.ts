@@ -202,7 +202,7 @@ test("a run that ends in words without a valid brief leaves the activity for the
   expect(after.dueAt).toBeGreaterThan(row.dueAt);
 });
 
-test("posts that are only noise: the guide says there's nothing worth a brief, and the place has none", async () => {
+test("posts that are only noise: the guide keeps any existing valid brief instead of wiping it", async () => {
   stubProvider();
   const t = convexTest(schema, modules);
   const w = await world(t);
@@ -213,8 +213,10 @@ test("posts that are only noise: the guide says there's nothing worth a brief, a
   const row = await due(t, w);
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "written" });
   expect(bodies).toHaveLength(1);
-  // The brief before it goes too: it was about a place that has moved on.
-  expect(await t.run((ctx: any) => ctx.db.query("communityBriefs").collect())).toHaveLength(0);
+  // Light chatter or test posts must never erase the last good brief.
+  const remaining: any[] = await t.run((ctx: any) => ctx.db.query("communityBriefs").collect());
+  expect(remaining).toHaveLength(1);
+  expect(remaining[0].summary).toBe("An older brief.");
   expect(await briefWork(t, w.communityId)).toMatchObject({ pending: 0 });
 });
 

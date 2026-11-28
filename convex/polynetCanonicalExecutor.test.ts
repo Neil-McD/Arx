@@ -3551,8 +3551,10 @@ test("brief.md: the community's for everyone in it; a pod's inside only; a remov
   expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
   await t.run((ctx: any) => ctx.db.patch(made.chalk, { status: "live" }));
 
-  // Not rewritten for over three days: no brief.
+  // Still visible after 4 quiet days; expires after 14 days without a rewrite.
   await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs - 4 * 24 * 60 * 60_000 }));
+  expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("Saturday's meet");
+  await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs - 15 * 24 * 60 * 60_000 }));
   expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
   await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs }));
   expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("Saturday's meet");
