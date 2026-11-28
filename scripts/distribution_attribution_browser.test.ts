@@ -142,6 +142,37 @@ describe('Polynet distribution & acquisition attribution context', () => {
     expect(readPersistedDistributionAttributionForCommunity('other-club')).toBeNull();
   });
 
+  it('never leaks Community A scoped global attribution into an unscoped /oauth/authorize visit for Community B', () => {
+    const storage = stubBrowser({
+      pathname: '/c/alpha',
+      search: `?de_aid=${AID}&de_cid=${CID}&utm_source=youtube&utm_campaign=alpha-vid`,
+    });
+    captureDistributionAttributionFromLocation('alpha');
+
+    // Later, the same browser arrives at /oauth/authorize from Beta's external app.
+    stubBrowser({
+      pathname: '/oauth/authorize',
+      search: '?client_id=app_beta',
+      referrer: 'https://beta-app.example/pricing',
+      storage,
+    });
+    captureDistributionAttributionFromLocation();
+    const betaBound = bindGlobalAttributionToCommunity('beta');
+
+    // Beta receives ONLY Beta's referrer; Alpha's DE IDs and campaign tags never bleed onto Beta.
+    expect(betaBound).toEqual({ referrerHost: 'beta-app.example' });
+    expect(readPersistedDistributionAttributionForCommunity('beta')).toEqual({
+      referrerHost: 'beta-app.example',
+    });
+    // Alpha retains its own stored community attribution intact.
+    expect(readPersistedDistributionAttributionForCommunity('alpha')).toEqual({
+      anonymousId: AID,
+      clickId: CID,
+      utmSource: 'youtube',
+      utmCampaign: 'alpha-vid',
+    });
+  });
+
   it('never lets a bare referrer revisit overwrite explicit campaign or DE attribution', () => {
     const storage = stubBrowser({
       pathname: '/c/alpha-club',

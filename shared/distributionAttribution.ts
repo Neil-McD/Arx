@@ -410,8 +410,11 @@ export function captureDistributionAttributionFromLocation(
       saved = writePersistedCommunityAttribution(slug, incoming, nowMs);
     }
     const existingGlobal = readGlobalRecord(nowMs);
-    const shouldMergeGlobal =
-      existingGlobal && (!slug || !existingGlobal.communitySlug || existingGlobal.communitySlug === slug);
+    // Never merge a record already scoped to another community into an unscoped
+    // arrival (e.g. /oauth/authorize for a different community's app).
+    const shouldMergeGlobal = Boolean(
+      existingGlobal && (!existingGlobal.communitySlug || existingGlobal.communitySlug === slug),
+    );
     const globalNext = shouldMergeGlobal
       ? mergeAttributionRecords(toPublicContext(existingGlobal), incoming)
       : incoming;
