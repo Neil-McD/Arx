@@ -839,6 +839,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             )}
             {optionsMenu}
           </div>
+          <div className={`${cx("sep")} community-dm-kit-sep`} />
           <div ref={messagesRef} className={`${cx("dm")} community-dm-kit-thread`} aria-live="polite" onScroll={(event) => {
             const target = event.currentTarget;
             const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;

@@ -2384,6 +2384,7 @@
 }
 
 :root[data-design="v1"] .community-dm-panel.is-kit .community-dm-kit-rail {
+  position: relative;
   padding: 0;
   gap: 0;
 }
@@ -2393,48 +2394,59 @@
   align-items: center;
   gap: 12px;
   flex: none;
-  padding: 16px 24px 14px;
-  border-bottom: 1px solid var(--surface-raised-edge, var(--line));
+  padding: 20px 24px 16px;
 }
 
 :root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-head {
   padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
 }
 
+:root[data-design="v1"] .community-dm-kit-sep {
+  flex: none;
+  margin: 0 24px;
+}
+
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-sep {
+  margin: 0 16px;
+}
+
 :root[data-design="v1"] .community-dm-kit-thread {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 24px 20px;
+  padding: 16px 24px calc(var(--community-dm-composer-float-height, 136px) + 12px);
 }
 
 :root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-thread {
-  padding: 14px 16px 18px;
+  padding: 14px 16px calc(var(--community-dm-composer-float-height, 124px) + 12px);
 }
 
 :root[data-design="v1"] .community-dm-kit-composer {
-  position: relative;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 24px 20px;
-  background: var(--surface-raised, var(--panel));
-}
-
-:root[data-design="v1"] .community-dm-kit-composer::before {
-  content: "";
   position: absolute;
   left: 0;
   right: 0;
-  top: -18px;
-  height: 18px;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 36px 24px 20px;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent, var(--surface-raised, var(--panel)));
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--surface-raised, var(--panel)) 68%, transparent) 38%,
+    var(--surface-raised, var(--panel)) 66%,
+    var(--surface-raised, var(--panel)) 100%
+  );
+}
+
+:root[data-design="v1"] .community-dm-kit-composer > * {
+  pointer-events: auto;
 }
 
 :root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel.is-kit .community-dm-kit-composer {
-  padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 32px 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 :root[data-design="v1"] .community-dm-kit-thread .community-dm-panel-message {
